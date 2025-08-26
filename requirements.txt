@@ -1,0 +1,25 @@
+# Core Flask
+Flask[async]==2.3.3
+Flask-SQLAlchemy==3.0.5
+Flask-Login==0.6.3
+Flask-Migrate==4.0.5
+Flask-WTF==1.1.1
+Flask-Cors==4.0.0
+psycopg2-binary==2.9.7
+gunicorn==22.0.0
+redis>=5.0.0          # you can use latest 5.x or 6.x; pin if you need reproducibility
+celery==5.3.4
+langchain==0.0.335
+langchain-openai==0.0.2
+openai>=0.27.0        # specify a real package name and minimal version
+Pillow==10.1.0
+python-dotenv==1.0.0
+click==8.1.7
+bcrypt==4.1.2
+PyJWT>=2.8.0          # replace the broken `jwt` package with maintained PyJWT
+WTForms==3.1.0
+marshmallow==3.20.1
+marshmallow-dataclass==8.6.0
+Flask-JWT-Extended==4.4.4  # recommended over unmaintained Flask-JWT
+aiofiles==23.2.1
+asgiref==3.7.2

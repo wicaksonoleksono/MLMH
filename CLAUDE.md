@@ -1,0 +1,1 @@
+- I always use Facctory pattern please always go to the factory to see how it work. mechanically , + PLEASE NO HARD OCIDNG> CHerck .env

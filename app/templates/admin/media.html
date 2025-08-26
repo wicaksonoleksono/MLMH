@@ -1,0 +1,169 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="bg-white rounded-3xl shadow-sm border border-gray-200 p-6">
+        <div class="flex justify-between items-center">
+            <h2 class="text-xl font-semibold text-gray-900">Pengaturan Media</h2>
+        </div>
+        
+        <!-- Type Filter -->
+        <div class="mt-4 flex flex-wrap gap-2">
+            <a href="{{ url_for('admin.media') }}" 
+               class="px-3 py-1 rounded-xl text-xs font-medium {% if not current_type %}bg-primary text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                Semua
+            </a>
+            <a href="{{ url_for('admin.media', type='camera') }}" 
+               class="px-3 py-1 rounded-xl text-xs font-medium {% if current_type == 'camera' %}bg-primary text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                Kamera
+            </a>
+            <a href="{{ url_for('admin.media', type='audio') }}" 
+               class="px-3 py-1 rounded-xl text-xs font-medium {% if current_type == 'audio' %}bg-primary text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                Audio
+            </a>
+            <a href="{{ url_for('admin.media', type='document') }}" 
+               class="px-3 py-1 rounded-xl text-xs font-medium {% if current_type == 'document' %}bg-primary text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                Dokumen
+            </a>
+        </div>
+    </div>
+    
+    <!-- Media Settings List -->
+    <div class="bg-white rounded-3xl shadow-sm border border-gray-200 p-6">
+        <div class="space-y-6">
+            {% for setting in settings %}
+            <div class="border border-gray-200 rounded-2xl p-4" x-data="{ editing: false }">
+                <div x-show="!editing" class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <span class="font-medium text-gray-900">{{ setting.setting_name }}</span>
+                            <span class="px-2 py-1 bg-blue-100 rounded-lg text-xs text-blue-600">{{ setting.media_type }}</span>
+                        </div>
+                        <button @click="editing = true"
+                                class="text-primary hover:text-blue-600 text-sm font-medium">
+                            Edit
+                        </button>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                            <div class="text-gray-500">Ukuran Maks</div>
+                            <div class="font-medium">{{ setting.max_file_size_mb }} MB</div>
+                        </div>
+                        
+                        <div>
+                            <div class="text-gray-500">Format</div>
+                            <div class="font-medium">{{ setting.allowed_formats }}</div>
+                        </div>
+                        
+                        <div>
+                            <div class="text-gray-500">Timeout</div>
+                            <div class="font-medium">{{ setting.processing_timeout_seconds }}s</div>
+                        </div>
+                        
+                        <div>
+                            <div class="text-gray-500">Retensi</div>
+                            <div class="font-medium">{{ setting.retention_days }} hari</div>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                            <div class="text-gray-500">Path Penyimpanan</div>
+                            <div class="font-mono bg-gray-50 rounded-lg px-2 py-1 text-xs">{{ setting.storage_path }}</div>
+                        </div>
+                        
+                        <div class="flex items-center space-x-4">
+                            <div class="flex items-center">
+                                <span class="text-gray-500 mr-2">Auto Process:</span>
+                                <span class="px-2 py-1 rounded-lg text-xs {% if setting.auto_process %}bg-green-100 text-green-600{% else %}bg-red-100 text-red-600{% endif %}">
+                                    {% if setting.auto_process %}Aktif{% else %}Nonaktif{% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {% if setting.camera_settings %}
+                    <div>
+                        <div class="text-gray-500 text-sm mb-1">Pengaturan Kamera</div>
+                        <div class="bg-gray-50 rounded-xl p-3">
+                            <pre class="text-xs text-gray-600">{{ setting.camera_settings | tojson(indent=2) }}</pre>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <form x-show="editing" x-transition method="POST" action="{{ url_for('admin.update_media_setting') }}" class="space-y-4">
+                    <input type="hidden" name="setting_id" value="{{ setting.id }}">
+                    
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Ukuran Maks (MB)</label>
+                            <input type="number" name="max_file_size_mb" value="{{ setting.max_file_size_mb }}" min="1"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Format yang Diizinkan</label>
+                            <input type="text" name="allowed_formats" value="{{ setting.allowed_formats }}"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Timeout (detik)</label>
+                            <input type="number" name="processing_timeout_seconds" value="{{ setting.processing_timeout_seconds }}" min="1"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Retensi (hari)</label>
+                            <input type="number" name="retention_days" value="{{ setting.retention_days }}" min="1"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Path Penyimpanan</label>
+                        <input type="text" name="storage_path" value="{{ setting.storage_path }}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                    </div>
+                    
+                    <div class="flex items-center">
+                        <input type="checkbox" name="auto_process" {% if setting.auto_process %}checked{% endif %}
+                               class="rounded text-primary">
+                        <label class="ml-2 text-sm text-gray-700">Auto Process</label>
+                    </div>
+                    
+                    {% if setting.media_type == 'camera' %}
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Pengaturan Kamera (JSON)</label>
+                        <textarea name="camera_settings" rows="4"
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm font-mono">{{ setting.camera_settings | tojson(indent=2) if setting.camera_settings else '{}' }}</textarea>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="flex justify-end space-x-2">
+                        <button type="button" @click="editing = false"
+                                class="px-4 py-2 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            Batal
+                        </button>
+                        <button type="submit"
+                                class="px-4 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:bg-blue-600">
+                            Simpan
+                        </button>
+                    </div>
+                </form>
+            </div>
+            {% endfor %}
+            
+            {% if not settings %}
+            <div class="text-center py-8 text-gray-500">
+                <div class="text-2xl mb-2">🎥</div>
+                <div>Belum ada pengaturan media</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

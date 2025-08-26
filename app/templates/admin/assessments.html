@@ -1,0 +1,225 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="space-y-6" x-data="{ showCreateForm: false, selectedType: 'PHQ' }">
+    <!-- Header -->
+    <div class="bg-white rounded-3xl shadow-sm border border-gray-200 p-6">
+        <div class="flex justify-between items-center">
+            <h2 class="text-xl font-semibold text-gray-900">Konfigurasi Asesmen</h2>
+            <button @click="showCreateForm = !showCreateForm"
+                    class="bg-primary text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-600 transition-colors">
+                Tambah Konfigurasi
+            </button>
+        </div>
+        
+        <!-- Type Filter -->
+        <div class="mt-4 flex flex-wrap gap-2">
+            <a href="{{ url_for('admin.assessments') }}" 
+               class="px-3 py-1 rounded-xl text-xs font-medium {% if not current_type %}bg-primary text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                Semua
+            </a>
+            <a href="{{ url_for('admin.assessments', type='PHQ') }}" 
+               class="px-3 py-1 rounded-xl text-xs font-medium {% if current_type == 'PHQ' %}bg-primary text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                PHQ
+            </a>
+            <a href="{{ url_for('admin.assessments', type='OpenQuestion') }}" 
+               class="px-3 py-1 rounded-xl text-xs font-medium {% if current_type == 'OpenQuestion' %}bg-primary text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                Pertanyaan Terbuka
+            </a>
+            <a href="{{ url_for('admin.assessments', type='Camera') }}" 
+               class="px-3 py-1 rounded-xl text-xs font-medium {% if current_type == 'Camera' %}bg-primary text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                Kamera
+            </a>
+        </div>
+    </div>
+    
+    <!-- Create Form -->
+    <div x-show="showCreateForm" x-transition class="bg-white rounded-3xl shadow-sm border border-gray-200 p-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Tambah Konfigurasi Asesmen</h3>
+        
+        <form method="POST" action="{{ url_for('admin.create_assessment_config') }}" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nama Konfigurasi</label>
+                    <input type="text" name="config_name" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Jenis Asesmen</label>
+                    <select name="assessment_type" x-model="selectedType" required
+                            class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                        <option value="PHQ">PHQ (Patient Health Questionnaire)</option>
+                        <option value="OpenQuestion">Pertanyaan Terbuka</option>
+                        <option value="Camera">Kamera</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Deskripsi</label>
+                <textarea name="description" rows="3"
+                          class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm"></textarea>
+            </div>
+            
+            <!-- PHQ Specific Settings -->
+            <div x-show="selectedType === 'PHQ'" x-transition class="space-y-4 border-t pt-4">
+                <h4 class="font-medium text-gray-900">Pengaturan PHQ</h4>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Metode Scoring</label>
+                    <select name="scoring_method"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                        <option value="standard">Standard</option>
+                        <option value="weighted">Weighted</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- OpenQuestion Specific Settings -->
+            <div x-show="selectedType === 'OpenQuestion'" x-transition class="space-y-4 border-t pt-4">
+                <h4 class="font-medium text-gray-900">Pengaturan Pertanyaan Terbuka</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Kata Kunci Akhir Percakapan</label>
+                        <input type="text" name="ending_keywords" placeholder="selesai, berhenti, cukup"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                        <div class="text-xs text-gray-500 mt-1">Pisahkan dengan koma</div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Durasi Maksimal (menit)</label>
+                        <input type="number" name="max_duration" value="30" min="5" max="120"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Camera Specific Settings -->
+            <div x-show="selectedType === 'Camera'" x-transition class="space-y-4 border-t pt-4">
+                <h4 class="font-medium text-gray-900">Pengaturan Kamera</h4>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Resolusi</label>
+                        <select name="resolution"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                            <option value="1280x720">HD (1280x720)</option>
+                            <option value="1920x1080" selected>Full HD (1920x1080)</option>
+                            <option value="2560x1440">2K (2560x1440)</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Format</label>
+                        <select name="format"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                            <option value="JPEG" selected>JPEG</option>
+                            <option value="PNG">PNG</option>
+                            <option value="WEBP">WebP</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Kualitas (%)</label>
+                        <input type="number" name="quality" value="85" min="10" max="100"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                    </div>
+                </div>
+                
+                <div class="flex space-x-6">
+                    <label class="flex items-center">
+                        <input type="checkbox" name="analysis_enabled" class="rounded text-primary">
+                        <span class="ml-2 text-sm text-gray-700">Aktifkan Analisis</span>
+                    </label>
+                    
+                    <label class="flex items-center">
+                        <input type="checkbox" name="auto_crop_face" class="rounded text-primary">
+                        <span class="ml-2 text-sm text-gray-700">Auto Crop Wajah</span>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="flex justify-end space-x-2">
+                <button type="button" @click="showCreateForm = false"
+                        class="px-4 py-2 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    Batal
+                </button>
+                <button type="submit"
+                        class="px-4 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:bg-blue-600">
+                    Simpan
+                </button>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Configurations List -->
+    <div class="bg-white rounded-3xl shadow-sm border border-gray-200 p-6">
+        <div class="space-y-4">
+            {% for config in configs %}
+            <div class="border border-gray-200 rounded-2xl p-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex-1">
+                        <div class="flex items-center space-x-2">
+                            <span class="font-medium text-gray-900">{{ config.config_name }}</span>
+                            <span class="px-2 py-1 bg-blue-100 rounded-lg text-xs text-blue-600">{{ config.assessment_type }}</span>
+                            {% if config.is_default %}
+                            <span class="px-2 py-1 bg-green-100 rounded-lg text-xs text-green-600">Default</span>
+                            {% endif %}
+                            <span class="text-xs text-gray-500">v{{ config.version }}</span>
+                        </div>
+                        <div class="text-sm text-gray-600 mt-1">{{ config.description or 'Tidak ada deskripsi' }}</div>
+                        <div class="text-xs text-gray-500 mt-1">Dibuat oleh: {{ config.created_by_admin }}</div>
+                    </div>
+                    
+                    <div class="flex space-x-2">
+                        <button class="text-primary hover:text-blue-600 text-sm font-medium">
+                            Edit
+                        </button>
+                        <button class="text-red-600 hover:text-red-800 text-sm font-medium">
+                            Hapus
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Configuration Details -->
+                <div class="mt-3 bg-gray-50 rounded-xl p-3">
+                    <pre class="text-xs text-gray-600 overflow-x-auto">{{ config.config_data | tojson(indent=2) }}</pre>
+                </div>
+            </div>
+            {% endfor %}
+            
+            {% if not configs %}
+            <div class="text-center py-8 text-gray-500">
+                <div class="text-2xl mb-2">📋</div>
+                <div>Belum ada konfigurasi asesmen</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Question Pools -->
+    {% if question_pools %}
+    <div class="bg-white rounded-3xl shadow-sm border border-gray-200 p-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Pool Pertanyaan</h3>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for pool in question_pools %}
+            <div class="border border-gray-200 rounded-2xl p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="font-medium text-gray-900">{{ pool.pool_name }}</span>
+                    {% if pool.is_default %}
+                    <span class="px-2 py-1 bg-green-100 rounded-lg text-xs text-green-600">Default</span>
+                    {% endif %}
+                </div>
+                <div class="text-sm text-gray-600">
+                    {{ pool.question_type }} - {{ pool.language }}
+                </div>
+                <div class="text-sm text-gray-500 mt-1">
+                    {{ pool.question_count }} pertanyaan
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

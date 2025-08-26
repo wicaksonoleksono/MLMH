@@ -1,0 +1,157 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="space-y-6" x-data="{ showCreateForm: false }">
+    <!-- Header -->
+    <div class="bg-white rounded-3xl shadow-sm border border-gray-200 p-6">
+        <div class="flex justify-between items-center">
+            <h2 class="text-xl font-semibold text-gray-900">Pengaturan Sistem</h2>
+            <button @click="showCreateForm = !showCreateForm"
+                    class="bg-primary text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-600 transition-colors">
+                Tambah Pengaturan
+            </button>
+        </div>
+        
+        <!-- Category Filter -->
+        <div class="mt-4 flex flex-wrap gap-2">
+            <a href="{{ url_for('admin.settings') }}" 
+               class="px-3 py-1 rounded-xl text-xs font-medium {% if not current_category %}bg-primary text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                Semua
+            </a>
+            <a href="{{ url_for('admin.settings', category='system') }}" 
+               class="px-3 py-1 rounded-xl text-xs font-medium {% if current_category == 'system' %}bg-primary text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                Sistem
+            </a>
+            <a href="{{ url_for('admin.settings', category='database') }}" 
+               class="px-3 py-1 rounded-xl text-xs font-medium {% if current_category == 'database' %}bg-primary text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                Database
+            </a>
+            <a href="{{ url_for('admin.settings', category='security') }}" 
+               class="px-3 py-1 rounded-xl text-xs font-medium {% if current_category == 'security' %}bg-primary text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                Keamanan
+            </a>
+        </div>
+    </div>
+    
+    <!-- Create Form -->
+    <div x-show="showCreateForm" x-transition class="bg-white rounded-3xl shadow-sm border border-gray-200 p-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Tambah Pengaturan Baru</h3>
+        
+        <form method="POST" action="{{ url_for('admin.create_setting') }}" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Key</label>
+                    <input type="text" name="key" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Kategori</label>
+                    <select name="category" required
+                            class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                        <option value="system">Sistem</option>
+                        <option value="database">Database</option>
+                        <option value="security">Keamanan</option>
+                        <option value="ui">Antarmuka</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Tipe Data</label>
+                    <select name="data_type" required
+                            class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                        <option value="string">String</option>
+                        <option value="integer">Integer</option>
+                        <option value="boolean">Boolean</option>
+                        <option value="json">JSON</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nilai</label>
+                    <input type="text" name="value" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                </div>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Deskripsi</label>
+                <textarea name="description" rows="3"
+                          class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm"></textarea>
+            </div>
+            
+            <div class="flex justify-end space-x-2">
+                <button type="button" @click="showCreateForm = false"
+                        class="px-4 py-2 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    Batal
+                </button>
+                <button type="submit"
+                        class="px-4 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:bg-blue-600">
+                    Simpan
+                </button>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Settings List -->
+    <div class="bg-white rounded-3xl shadow-sm border border-gray-200 p-6">
+        <div class="space-y-4">
+            {% for setting in settings %}
+            <div class="border border-gray-200 rounded-2xl p-4" x-data="{ editing: false }">
+                <div x-show="!editing" class="flex items-center justify-between">
+                    <div class="flex-1">
+                        <div class="flex items-center space-x-2">
+                            <span class="font-medium text-gray-900">{{ setting.key }}</span>
+                            <span class="px-2 py-1 bg-gray-100 rounded-lg text-xs text-gray-600">{{ setting.category }}</span>
+                            <span class="px-2 py-1 bg-blue-100 rounded-lg text-xs text-blue-600">{{ setting.data_type }}</span>
+                            {% if setting.requires_restart %}
+                            <span class="px-2 py-1 bg-orange-100 rounded-lg text-xs text-orange-600">Restart Required</span>
+                            {% endif %}
+                        </div>
+                        <div class="text-sm text-gray-600 mt-1">{{ setting.description or 'Tidak ada deskripsi' }}</div>
+                        <div class="text-sm font-mono bg-gray-50 rounded-lg px-2 py-1 mt-2 inline-block">{{ setting.value }}</div>
+                    </div>
+                    
+                    {% if setting.is_editable %}
+                    <button @click="editing = true"
+                            class="ml-4 text-primary hover:text-blue-600 text-sm font-medium">
+                        Edit
+                    </button>
+                    {% endif %}
+                </div>
+                
+                {% if setting.is_editable %}
+                <form x-show="editing" x-transition method="POST" action="{{ url_for('admin.update_setting') }}">
+                    <input type="hidden" name="key" value="{{ setting.key }}">
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Nilai Baru</label>
+                            <input type="text" name="value" value="{{ setting.value }}"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                        </div>
+                        <div class="flex justify-end space-x-2">
+                            <button type="button" @click="editing = false"
+                                    class="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+                                Batal
+                            </button>
+                            <button type="submit"
+                                    class="px-3 py-1 bg-primary text-white rounded-lg text-sm hover:bg-blue-600">
+                                Simpan
+                            </button>
+                        </div>
+                    </div>
+                </form>
+                {% endif %}
+            </div>
+            {% endfor %}
+            
+            {% if not settings %}
+            <div class="text-center py-8 text-gray-500">
+                <div class="text-2xl mb-2">⚙️</div>
+                <div>Belum ada pengaturan</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,330 @@
+{% extends "base.html" %}
+
+{% block title %}Penilaian Kesehatan Mental - Masuk{% endblock %}
+
+{% block content %}
+<div class="h-full flex items-center justify-center bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-md w-full space-y-6" x-data="authManager()">
+        <div>
+            <h2 class="mt-4 text-center text-2xl font-bold tracking-tight text-gray-900">
+                Penilaian Kesehatan Mental
+            </h2>
+            <p class="mt-2 text-center text-sm text-gray-600">
+                <span x-text="mode === 'login' ? 'Masuk ke akun Anda untuk melanjutkan' : 'Buat akun Anda untuk memulai'"></span>
+            </p>
+        </div>
+
+        <!-- Mode Toggle -->
+        <div class="flex rounded-xl bg-gray-100 p-1">
+            <button 
+                @click="mode = 'login'"
+                :class="mode === 'login' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500'"
+                class="flex-1 py-2 px-3 rounded-lg transition-all duration-200 text-sm font-medium">
+                Masuk
+            </button>
+            <button 
+                @click="mode = 'register'"
+                :class="mode === 'register' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500'"
+                class="flex-1 py-2 px-3 rounded-lg transition-all duration-200 text-sm font-medium">
+                Daftar
+            </button>
+        </div>
+
+        <!-- Login Form -->
+        <form x-show="mode === 'login'" @submit.prevent="handleLogin()" class="mt-6 space-y-4" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
+            <div class="rounded-2xl shadow-lg bg-white p-6 space-y-4">
+                <div>
+                    <label for="login-username" class="block text-sm font-medium text-gray-700 mb-1">Nama Pengguna</label>
+                    <input 
+                        id="login-username"
+                        x-model="loginData.uname"
+                        type="text" 
+                        required
+                        class="appearance-none relative block w-full px-3 py-2 border border-gray-200 placeholder-gray-500 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 text-sm"
+                        placeholder="Masukkan nama pengguna Anda">
+                </div>
+                
+                <div>
+                    <label for="login-password" class="block text-sm font-medium text-gray-700 mb-1">Kata Sandi</label>
+                    <input 
+                        id="login-password"
+                        x-model="loginData.password"
+                        type="password" 
+                        required
+                        class="appearance-none relative block w-full px-3 py-2 border border-gray-200 placeholder-gray-500 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 text-sm"
+                        placeholder="Masukkan kata sandi Anda">
+                </div>
+
+                <button 
+                    type="submit"
+                    :disabled="loading"
+                    class="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-xl text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span x-show="!loading">Masuk</span>
+                    <span x-show="loading" class="flex items-center">
+                        <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Sedang masuk...
+                    </span>
+                </button>
+            </div>
+        </form>
+
+        <!-- Register Form -->
+        <form x-show="mode === 'register'" @submit.prevent="handleRegister()" class="mt-6 space-y-4" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
+            <div class="rounded-2xl shadow-lg bg-white p-6 space-y-4">
+                <!-- Basic Info Row -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="col-span-2">
+                        <label for="register-username" class="block text-sm font-medium text-gray-700 mb-1">Nama Pengguna</label>
+                        <input 
+                            id="register-username"
+                            x-model="registerData.uname"
+                            type="text" 
+                            required
+                            class="appearance-none relative block w-full px-3 py-2 border border-gray-200 placeholder-gray-500 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 text-sm"
+                            placeholder="Pilih nama pengguna">
+                        <p class="mt-1 text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-lg">
+                            ⚠️ Peringatan: Jangan gunakan nama asli untuk nama pengguna
+                        </p>
+                    </div>
+                    <div>
+                        <label for="register-email" class="block text-sm font-medium text-gray-700 mb-1">Email <span class="text-gray-400 text-xs">(opsional)</span></label>
+                        <input 
+                            id="register-email"
+                            x-model="registerData.email"
+                            type="email"
+                            class="appearance-none relative block w-full px-3 py-2 border border-gray-200 placeholder-gray-500 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 text-sm"
+                            placeholder="email@anda.com">
+                    </div>
+                    <div>
+                        <label for="register-phone" class="block text-sm font-medium text-gray-700 mb-1">Telepon <span class="text-gray-400 text-xs">(opsional)</span></label>
+                        <input 
+                            id="register-phone"
+                            x-model="registerData.phone"
+                            type="tel"
+                            class="appearance-none relative block w-full px-3 py-2 border border-gray-200 placeholder-gray-500 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 text-sm"
+                            placeholder="0812-3456-7890">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label for="register-age" class="block text-sm font-medium text-gray-700 mb-1">Umur <span class="text-gray-400 text-xs">(opsional)</span></label>
+                        <input 
+                            id="register-age"
+                            x-model="registerData.age"
+                            type="number"
+                            min="13"
+                            max="120"
+                            class="appearance-none relative block w-full px-3 py-2 border border-gray-200 placeholder-gray-500 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 text-sm"
+                            placeholder="25">
+                    </div>
+                    <div>
+                        <label for="register-gender" class="block text-sm font-medium text-gray-700 mb-1">Jenis Kelamin <span class="text-gray-400 text-xs">(opsional)</span></label>
+                        <select 
+                            id="register-gender"
+                            x-model="registerData.gender"
+                            class="appearance-none relative block w-full px-3 py-2 border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 text-sm bg-white">
+                            <option value="">Pilih</option>
+                            <option value="Laki-laki">Laki-laki</option>
+                            <option value="Perempuan">Perempuan</option>
+                            <option value="Lainnya">Lainnya</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Education & Culture Row -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label for="register-education" class="block text-sm font-medium text-gray-700 mb-1">Tingkat Pendidikan <span class="text-gray-400 text-xs">(opsional)</span></label>
+                        <select 
+                            id="register-education"
+                            x-model="registerData.educational_level"
+                            class="appearance-none relative block w-full px-3 py-2 border border-gray-200 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 text-sm bg-white">
+                            <option value="">Pilih pendidikan</option>
+                            <option value="SD">SD</option>
+                            <option value="SMP">SMP</option>
+                            <option value="SMA/SMK">SMA/SMK</option>
+                            <option value="Diploma">Diploma</option>
+                            <option value="Sarjana">Sarjana</option>
+                            <option value="Magister">Magister</option>
+                            <option value="Doktor">Doktor</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="register-culture" class="block text-sm font-medium text-gray-700 mb-1">Latar Belakang Budaya <span class="text-gray-400 text-xs">(opsional)</span></label>
+                        <input 
+                            id="register-culture"
+                            x-model="registerData.cultural_background"
+                            type="text"
+                            class="appearance-none relative block w-full px-3 py-2 border border-gray-200 placeholder-gray-500 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 text-sm"
+                            placeholder="Jawa, Batak, Minang, dll">
+                    </div>
+                </div>
+
+                <!-- Medical Info Row -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label for="register-medical" class="block text-sm font-medium text-gray-700 mb-1">Kondisi Medis <span class="text-gray-400 text-xs">(opsional)</span></label>
+                        <textarea 
+                            id="register-medical"
+                            x-model="registerData.medical_conditions"
+                            rows="2"
+                            class="appearance-none relative block w-full px-3 py-2 border border-gray-200 placeholder-gray-500 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 text-sm resize-none"
+                            placeholder="Kondisi kesehatan"></textarea>
+                    </div>
+                    <div>
+                        <label for="register-medications" class="block text-sm font-medium text-gray-700 mb-1">Obat-obatan <span class="text-gray-400 text-xs">(opsional)</span></label>
+                        <textarea 
+                            id="register-medications"
+                            x-model="registerData.medications"
+                            rows="2"
+                            class="appearance-none relative block w-full px-3 py-2 border border-gray-200 placeholder-gray-500 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 text-sm resize-none"
+                            placeholder="Obat yang dikonsumsi"></textarea>
+                    </div>
+                </div>
+
+                <!-- Emergency Contact -->
+                <div>
+                    <label for="register-emergency" class="block text-sm font-medium text-gray-700 mb-1">Kontak Darurat <span class="text-gray-400 text-xs">(opsional)</span></label>
+                    <input 
+                        id="register-emergency"
+                        x-model="registerData.emergency_contact"
+                        type="text"
+                        class="appearance-none relative block w-full px-3 py-2 border border-gray-200 placeholder-gray-500 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 text-sm"
+                        placeholder="Nama dan nomor telepon kontak darurat">
+                </div>
+                
+                <!-- Password Row -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label for="register-password" class="block text-sm font-medium text-gray-700 mb-1">Kata Sandi</label>
+                        <input 
+                            id="register-password"
+                            x-model="registerData.password"
+                            type="password" 
+                            required
+                            class="appearance-none relative block w-full px-3 py-2 border border-gray-200 placeholder-gray-500 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 text-sm"
+                            placeholder="Buat kata sandi yang aman">
+                    </div>
+                    <div>
+                        <label for="register-password-confirm" class="block text-sm font-medium text-gray-700 mb-1">Konfirmasi Kata Sandi</label>
+                        <input 
+                            id="register-password-confirm"
+                            x-model="registerData.passwordConfirm"
+                            type="password" 
+                            required
+                            class="appearance-none relative block w-full px-3 py-2 border border-gray-200 placeholder-gray-500 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 text-sm"
+                            :class="registerData.password && registerData.passwordConfirm && registerData.password !== registerData.passwordConfirm ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-200 focus:ring-indigo-500 focus:border-transparent'"
+                            placeholder="Ulangi kata sandi">
+                    </div>
+                </div>
+                
+                <!-- Password Match Warning -->
+                <div x-show="registerData.password && registerData.passwordConfirm && registerData.password !== registerData.passwordConfirm" 
+                     x-transition:enter="transition ease-out duration-200"
+                     x-transition:enter-start="opacity-0"
+                     x-transition:enter-end="opacity-1"
+                     class="text-xs text-red-600 bg-red-50 px-2 py-1 rounded-lg">
+                    ⚠️ Kata sandi tidak cocok
+                </div>
+
+                <button 
+                    type="submit"
+                    :disabled="loading"
+                    class="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-xl text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span x-show="!loading">Buat Akun</span>
+                    <span x-show="loading" class="flex items-center">
+                        <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Sedang membuat...
+                    </span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function authManager() {
+    return {
+        mode: 'login',
+        loading: false,
+        loginData: {
+            uname: '',
+            password: ''
+        },
+        registerData: {
+            uname: '',
+            password: '',
+            passwordConfirm: '',
+            email: '',
+            phone: '',
+            age: '',
+            gender: '',
+            educational_level: '',
+            cultural_background: '',
+            medical_conditions: '',
+            medications: '',
+            emergency_contact: ''
+        },
+
+        async handleLogin() {
+            this.loading = true;
+            try {
+                const result = await apiCall('/user/login', 'POST', this.loginData);
+                if (result && result.status === 'OLKORECT') {
+                    alert('Login berhasil! Mengalihkan...');
+                    setTimeout(() => window.location.href = '/', 1000);
+                } else {
+                    alert(result.error || 'Login gagal');
+                }
+            } catch (error) {
+                alert('Kesalahan login: ' + error.message);
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async handleRegister() {
+            // Validate password confirmation
+            if (this.registerData.password !== this.registerData.passwordConfirm) {
+                alert('Kata sandi tidak cocok. Silakan periksa kembali.');
+                return;
+            }
+            
+            if (this.registerData.password.length < 6) {
+                alert('Kata sandi harus minimal 6 karakter.');
+                return;
+            }
+
+            this.loading = true;
+            try {
+                // Don't send passwordConfirm to backend
+                const { passwordConfirm, ...dataToSend } = this.registerData;
+                
+                const result = await apiCall('/user/register', 'POST', dataToSend);
+                if (result && result.status === 'OLKORECT') {
+                    alert('Akun berhasil dibuat! Silakan masuk.');
+                    this.mode = 'login';
+                    this.loginData.uname = this.registerData.uname;
+                    this.loginData.password = '';
+                } else {
+                    alert(result.error || 'Pendaftaran gagal');
+                }
+            } catch (error) {
+                alert('Kesalahan pendaftaran: ' + error.message);
+            } finally {
+                this.loading = false;
+            }
+        }
+    };
+}
+</script>
+{% endblock %}

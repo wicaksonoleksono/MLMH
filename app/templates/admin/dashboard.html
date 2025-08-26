@@ -1,0 +1,96 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="bg-white rounded-3xl shadow-sm border border-gray-200 p-6">
+        <h2 class="text-xl font-semibold text-gray-900 mb-4">Dashboard Admin</h2>
+        
+        <!-- System Stats Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <!-- User Stats -->
+            <div class="bg-blue-50 rounded-2xl p-4 border border-blue-200">
+                <h3 class="text-sm font-medium text-blue-800 mb-2">Pengguna</h3>
+                <div class="space-y-1">
+                    <div class="text-2xl font-bold text-blue-900">{{ stats.users.total }}</div>
+                    <div class="text-sm text-blue-700">Total Pengguna</div>
+                    <div class="text-xs text-blue-600">
+                        {{ stats.users.admins }} Admin, {{ stats.users.regular }} User
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Assessment Stats -->
+            <div class="bg-green-50 rounded-2xl p-4 border border-green-200">
+                <h3 class="text-sm font-medium text-green-800 mb-2">Asesmen</h3>
+                <div class="space-y-1">
+                    <div class="text-2xl font-bold text-green-900">{{ stats.assessments.total_sessions }}</div>
+                    <div class="text-sm text-green-700">Total Sesi</div>
+                    <div class="text-xs text-green-600">
+                        {{ stats.assessments.completed_sessions }} selesai ({{ stats.assessments.completion_rate }}%)
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Settings Stats -->
+            <div class="bg-purple-50 rounded-2xl p-4 border border-purple-200">
+                <h3 class="text-sm font-medium text-purple-800 mb-2">Konfigurasi</h3>
+                <div class="space-y-1">
+                    <div class="text-2xl font-bold text-purple-900">{{ stats.settings.total_settings }}</div>
+                    <div class="text-sm text-purple-700">Pengaturan Sistem</div>
+                    <div class="text-xs text-purple-600">
+                        {{ stats.settings.assessment_configs }} Asesmen, {{ stats.settings.media_settings }} Media
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Quick Actions -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <a href="{{ url_for('admin.settings') }}" 
+               class="bg-white rounded-2xl border border-gray-200 p-4 text-center hover:bg-gray-50 transition-colors">
+                <div class="text-2xl mb-2">⚙️</div>
+                <div class="text-sm font-medium text-gray-900">Pengaturan</div>
+            </a>
+            
+            <a href="{{ url_for('admin.assessments') }}" 
+               class="bg-white rounded-2xl border border-gray-200 p-4 text-center hover:bg-gray-50 transition-colors">
+                <div class="text-2xl mb-2">📋</div>
+                <div class="text-sm font-medium text-gray-900">Asesmen</div>
+            </a>
+            
+            <a href="{{ url_for('admin.media') }}" 
+               class="bg-white rounded-2xl border border-gray-200 p-4 text-center hover:bg-gray-50 transition-colors">
+                <div class="text-2xl mb-2">🎥</div>
+                <div class="text-sm font-medium text-gray-900">Media</div>
+            </a>
+            
+            <a href="{{ url_for('admin.logs') }}" 
+               class="bg-white rounded-2xl border border-gray-200 p-4 text-center hover:bg-gray-50 transition-colors">
+                <div class="text-2xl mb-2">📊</div>
+                <div class="text-sm font-medium text-gray-900">Log</div>
+            </a>
+        </div>
+    </div>
+    
+    <!-- Recent Activity -->
+    {% if recent_logs %}
+    <div class="bg-white rounded-3xl shadow-sm border border-gray-200 p-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Aktivitas Terbaru</h3>
+        
+        <div class="space-y-3">
+            {% for log in recent_logs %}
+            <div class="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
+                <div class="flex-1">
+                    <div class="text-sm font-medium text-gray-900">{{ log.admin_user }}</div>
+                    <div class="text-xs text-gray-600">{{ log.action }} - {{ log.target_type }}</div>
+                </div>
+                <div class="text-xs text-gray-500">
+                    {{ log.created_at.strftime('%d/%m %H:%M') }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -62,6 +62,8 @@ def create_all_tables():
     from .model.shared.users import User
     from .model.shared.enums import UserType, AssessmentStatus
     from .model.admin.phq import PHQCategory, PHQQuestion, PHQScale, PHQSettings
+    from .model.admin.camera import CameraSettings
+    from .model.admin.llm import LLMSettings
     from .model.assessment.sessions import AssessmentSession, PHQResponse, OpenQuestionResponse, CameraCapture, SessionExport
     engine = get_engine()
     Base.metadata.create_all(bind=engine)

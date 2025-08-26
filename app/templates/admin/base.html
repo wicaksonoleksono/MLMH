@@ -170,13 +170,21 @@
 
         try {
           const response = await fetch(url, options);
-          const result = await response.json();
-
+          const responseText = await response.text();
+          console.log('Raw response:', responseText);
+          
           if (response.status === 401) {
             clearAuthToken();
           }
 
-          return result;
+          // Try to parse as JSON
+          try {
+            return JSON.parse(responseText);
+          } catch (parseError) {
+            console.error('JSON parse error:', parseError);
+            console.error('Response text:', responseText);
+            return { status: "SNAFU", error: "Invalid JSON response: " + responseText };
+          }
         } catch (error) {
           console.error("API Error:", error);
           return { status: "SNAFU", error: error.message };
@@ -190,7 +198,7 @@
             { name: "Dasbor", href: "/" },
             { name: "Asesmen PHQ", href: "/admin/phq" },
             { name: "Pengaturan Kamera", href: "/admin/camera" },
-            { name: "Asesmen LLM", href: "/admin/llm" },
+            { name: "Pengaturan LLM", href: "/admin/llm" },
           ],
 
           isActive(href) {

@@ -19,7 +19,8 @@ class Config:
     OPENAI_MODEL: str = os.getenv('OPENAI_MODEL', 'gpt-3.5-turbo')
     SQLALCHEMY_TRACK_MODIFICATIONS: bool = False
     SQLALCHEMY_ECHO: bool = DEBUG
-    
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+
     SQLALCHEMY_DATABASE_URI = (
         os.getenv('SQLALCHEMY_DATABASE_URI') or
         f"postgresql://{os.getenv('DB_USERNAME') or os.getenv('POSTGRES_USER')}:"

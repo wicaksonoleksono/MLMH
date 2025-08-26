@@ -1,157 +1,33 @@
 {% extends "admin/settings/phq/base.html" %}
 
 {% block phq_content %}
-    {% include "admin/settings/phq/config.html" %}
-    {% include "admin/settings/phq/scale.html" %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {% include "admin/settings/phq/config.html" %}
+        {% include "admin/settings/phq/scale.html" %}
+    </div>
+    
+    <!-- Instruksi Pengisian - Full Width -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div class="flex items-center space-x-2 mb-4">
+            <div class="w-8 h-8 bg-blue-500 rounded flex items-center justify-center">
+                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+            </div>
+            <h2 class="text-lg font-bold text-gray-800">Instruksi Pengisian</h2>
+        </div>
+        
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Instruksi untuk Responden</label>
+            <textarea 
+                x-model="config.instructions"
+                rows="6"
+                class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-vertical text-sm"
+                placeholder="Masukkan instruksi pengisian assessment PHQ untuk responden..."
+            ></textarea>
+            <p class="text-xs text-gray-500 mt-1">Instruksi ini akan ditampilkan kepada responden sebelum memulai assessment</p>
+        </div>
+    </div>
+    
     {% include "admin/settings/phq/categories.html" %}
-{% endblock %}
-
-{% block scripts %}
-<script>
-function phqSettings() {
-    return {
-        loading: false,
-        
-        config: {
-            randomize: 'false',
-            questionsPerCategory: 1
-        },
-        
-        scale: {
-            minValue: 0,
-            maxValue: 3,
-            labels: ['Tidak sama sekali', 'Beberapa hari', 'Lebih dari setengah hari', 'Hampir setiap hari']
-        },
-        
-        categories: [
-            { number: 1, name: "Anhedonia", questions: ["Kurang tertarik atau bergairah dalam melakukan apapun"] },
-            { number: 2, name: "Depressed Mood", questions: ["Merasa murung, muram, atau putus asa"] },
-            { number: 3, name: "Sleep Disturbance", questions: ["Sulit tidur atau mudah terbangun, atau terlalu banyak tidur"] },
-            { number: 4, name: "Fatigue", questions: ["Merasa lelah atau kurang bertenaga"] },
-            { number: 5, name: "Appetite Changes", questions: ["Kurang nafsu makan atau terlalu banyak makan"] },
-            { number: 6, name: "Worthlessness", questions: ["Kurang percaya diri — atau merasa bahwa Anda adalah orang yang gagal atau telah mengecewakan diri sendiri atau keluarga"] },
-            { number: 7, name: "Concentration", questions: ["Sulit berkonsentrasi pada sesuatu, misalnya membaca koran atau menonton televisi"] },
-            { number: 8, name: "Psychomotor", questions: ["Bergerak atau berbicara sangat lambat sehingga orang lain memperhatikannya. Atau sebaliknya — merasa resah atau gelisah sehingga Anda lebih sering bergerak dari biasanya"] },
-            { number: 9, name: "Suicidal Ideation", questions: ["Merasa lebih baik mati atau ingin melukai diri sendiri dengan cara apapun"] }
-        ],
-
-        async init() {
-            await this.loadData();
-        },
-
-        updateScale() {
-            const min = parseInt(this.scale.minValue);
-            const max = parseInt(this.scale.maxValue);
-            const newLabels = [];
-            
-            for (let i = min; i <= max; i++) {
-                newLabels[i] = this.scale.labels[i] || `Label ${i}`;
-            }
-            
-            this.scale.labels = newLabels;
-        },
-
-        addCategory() {
-            this.categories.push({
-                number: this.categories.length + 1,
-                name: '',
-                questions: ['']
-            });
-        },
-
-        removeCategory(index) {
-            this.categories.splice(index, 1);
-        },
-
-        addQuestion(categoryIndex) {
-            this.categories[categoryIndex].questions.push('');
-        },
-
-        removeQuestion(categoryIndex, questionIndex) {
-            this.categories[categoryIndex].questions.splice(questionIndex, 1);
-        },
-
-        async loadData() {
-            this.loading = true;
-            try {
-                // Load existing PHQ settings
-                const result = await apiCall('/admin/phq/settings');
-                if (result.status === 'OLKORECT' && result.data.length > 0) {
-                    const settings = result.data[0];
-                    this.config.randomize = settings.randomize_questions ? 'true' : 'false';
-                    this.config.questionsPerCategory = settings.questions_per_category;
-                }
-            } catch (error) {
-                console.error('Error loading data:', error);
-            } finally {
-                this.loading = false;
-            }
-        },
-
-        async saveAll() {
-            this.loading = true;
-            try {
-                // Save scale
-                const scaleData = {
-                    scale_name: 'PHQ-9 Default',
-                    min_value: parseInt(this.scale.minValue),
-                    max_value: parseInt(this.scale.maxValue),
-                    scale_labels: this.scale.labels.reduce((obj, label, index) => {
-                        obj[index] = label;
-                        return obj;
-                    }, {}),
-                    is_default: true
-                };
-                
-                const scaleResult = await apiCall('/admin/phq/scales', 'POST', scaleData);
-                
-                // Save categories and questions
-                for (const category of this.categories) {
-                    const categoryData = {
-                        name: category.name,
-                        name_id: category.name.toUpperCase().replace(/\s+/g, '_'),
-                        description_id: category.questions[0] || '',
-                        order_index: category.number
-                    };
-                    
-                    const catResult = await apiCall('/admin/phq/categories', 'POST', categoryData);
-                    
-                    if (catResult.status === 'OLKORECT') {
-                        // Save questions for this category
-                        for (let i = 0; i < category.questions.length; i++) {
-                            const questionData = {
-                                category_id: catResult.data.id,
-                                question_text_en: category.questions[i],
-                                question_text_id: category.questions[i],
-                                order_index: i
-                            };
-                            
-                            await apiCall('/admin/phq/questions', 'POST', questionData);
-                        }
-                    }
-                }
-                
-                // Save settings
-                if (scaleResult.status === 'OLKORECT') {
-                    const settingsData = {
-                        setting_name: 'PHQ-9 Default',
-                        questions_per_category: parseInt(this.config.questionsPerCategory),
-                        scale_id: scaleResult.data.id,
-                        randomize_questions: this.config.randomize === 'true',
-                        is_default: true
-                    };
-                    
-                    await apiCall('/admin/phq/settings', 'POST', settingsData);
-                }
-                
-                alert('Semua pengaturan PHQ berhasil disimpan!');
-            } catch (error) {
-                alert('Error saving data: ' + error.message);
-            } finally {
-                this.loading = false;
-            }
-        }
-    };
-}
-</script>
 {% endblock %}

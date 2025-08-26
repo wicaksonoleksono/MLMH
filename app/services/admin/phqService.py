@@ -30,21 +30,29 @@ class PHQService:
     @staticmethod
     def create_category(name: str, name_id: str, description_en: str = None,
                         description_id: str = None, order_index: int = 0) -> Dict[str, Any]:
-        """Create new PHQ category"""
+        """Create or update PHQ category"""
         with get_session() as db:
             existing = db.query(PHQCategory).filter(PHQCategory.name_id == name_id).first()
+            
             if existing:
-                raise ValueError(f"Category with name_id '{name_id}' already exists")
-
-            category = PHQCategory(
-                name=name,
-                name_id=name_id,
-                description_en=description_en,
-                description_id=description_id,
-                order_index=order_index
-            )
-
-            db.add(category)
+                # Update existing category
+                existing.name = name
+                existing.description_en = description_en
+                existing.description_id = description_id
+                existing.order_index = order_index
+                existing.is_active = True
+                category = existing
+            else:
+                # Create new category
+                category = PHQCategory(
+                    name=name,
+                    name_id=name_id,
+                    description_en=description_en,
+                    description_id=description_id,
+                    order_index=order_index
+                )
+                db.add(category)
+            
             db.commit()
 
             return {
@@ -115,7 +123,7 @@ class PHQService:
     @staticmethod
     def create_question(category_id: int, question_text_en: str, question_text_id: str,
                         order_index: int = 0) -> Dict[str, Any]:
-        """Create new PHQ question"""
+        """Create or update PHQ question"""
         with get_session() as db:
             # Verify category exists
             category = db.query(PHQCategory).filter(
@@ -125,14 +133,30 @@ class PHQService:
             if not category:
                 raise ValueError(f"Category with ID {category_id} not found")
 
-            question = PHQQuestion(
-                category_id=category_id,
-                question_text_en=question_text_en,
-                question_text_id=question_text_id,
-                order_index=order_index
-            )
+            # Check if question already exists for this category and order
+            existing = db.query(PHQQuestion).filter(
+                and_(
+                    PHQQuestion.category_id == category_id,
+                    PHQQuestion.order_index == order_index,
+                    PHQQuestion.is_active == True
+                )
+            ).first()
 
-            db.add(question)
+            if existing:
+                # Update existing question
+                existing.question_text_en = question_text_en
+                existing.question_text_id = question_text_id
+                question = existing
+            else:
+                # Create new question
+                question = PHQQuestion(
+                    category_id=category_id,
+                    question_text_en=question_text_en,
+                    question_text_id=question_text_id,
+                    order_index=order_index
+                )
+                db.add(question)
+
             db.commit()
 
             return {
@@ -196,21 +220,33 @@ class PHQService:
     @staticmethod
     def create_scale(scale_name: str, min_value: int, max_value: int,
                      scale_labels: Dict[str, str], is_default: bool = False) -> Dict[str, Any]:
-        """Create new PHQ scale"""
+        """Create or update PHQ scale"""
         with get_session() as db:
+            existing = db.query(PHQScale).filter(PHQScale.scale_name == scale_name).first()
+            
             if is_default:
                 # Remove default from other scales
                 db.query(PHQScale).filter(PHQScale.is_default == True).update({'is_default': False})
+            
+            if existing:
+                # Update existing scale
+                existing.min_value = min_value
+                existing.max_value = max_value
+                existing.scale_labels = scale_labels
+                existing.is_default = is_default
+                existing.is_active = True
+                scale = existing
+            else:
+                # Create new scale
+                scale = PHQScale(
+                    scale_name=scale_name,
+                    min_value=min_value,
+                    max_value=max_value,
+                    scale_labels=scale_labels,
+                    is_default=is_default
+                )
+                db.add(scale)
 
-            scale = PHQScale(
-                scale_name=scale_name,
-                min_value=min_value,
-                max_value=max_value,
-                scale_labels=scale_labels,
-                is_default=is_default
-            )
-
-            db.add(scale)
             db.commit()
 
             return {
@@ -274,37 +310,53 @@ class PHQService:
                 'scale_id': setting.scale_id,
                 'scale_name': setting.scale.scale_name,
                 'randomize_questions': setting.randomize_questions,
+                'instructions': setting.instructions,
                 'is_default': setting.is_default
             } for setting in settings]
 
     @staticmethod
     def create_settings(setting_name: str, questions_per_category: int, scale_id: int,
-                        randomize_questions: bool = False, is_default: bool = False) -> Dict[str, Any]:
-        """Create new PHQ settings"""
+                        randomize_questions: bool = False, instructions: str = None, 
+                        is_default: bool = False) -> Dict[str, Any]:
+        """Create or update PHQ settings"""
         with get_session() as db:
             existing = db.query(PHQSettings).filter(PHQSettings.setting_name == setting_name).first()
-            if existing:
-                raise ValueError(f"Settings with name '{setting_name}' already exists")
-
+            
             if is_default:
                 # Remove default from other settings
                 db.query(PHQSettings).filter(PHQSettings.is_default == True).update({'is_default': False})
+            
+            if existing:
+                # Update existing settings
+                existing.questions_per_category = questions_per_category
+                existing.scale_id = scale_id
+                existing.randomize_questions = randomize_questions
+                existing.instructions = instructions
+                existing.is_default = is_default
+                existing.is_active = True
+                settings = existing
+            else:
+                # Create new settings
+                settings = PHQSettings(
+                    setting_name=setting_name,
+                    questions_per_category=questions_per_category,
+                    scale_id=scale_id,
+                    randomize_questions=randomize_questions,
+                    instructions=instructions,
+                    is_default=is_default
+                )
+                db.add(settings)
 
-            settings = PHQSettings(
-                setting_name=setting_name,
-                questions_per_category=questions_per_category,
-                scale_id=scale_id,
-                randomize_questions=randomize_questions,
-                is_default=is_default
-            )
-
-            db.add(settings)
             db.commit()
 
             return {
                 'id': settings.id,
                 'setting_name': settings.setting_name,
-                'questions_per_category': settings.questions_per_category
+                'questions_per_category': settings.questions_per_category,
+                'scale_id': settings.scale_id,
+                'randomize_questions': settings.randomize_questions,
+                'instructions': settings.instructions,
+                'is_default': settings.is_default
             }
 
     @staticmethod

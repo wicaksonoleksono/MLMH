@@ -1,0 +1,316 @@
+{% extends "admin/base.html" %}
+{% block title %}Pengaturan LLM - Admin{% endblock %}
+{% block content %}
+<div class="min-h-screen bg-gray-50" x-data="llmSettings()">
+  <!-- Header -->
+  <div class="bg-white border-b border-gray-200 sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-6 py-4">
+      <div class="flex justify-between items-center">
+        <div>
+          <h1 class="text-3xl font-bold text-gray-900">
+            Pengaturan LLM & AI Model
+          </h1>
+          <p class="text-gray-600 mt-1">
+            Konfigurasi model AI dan aspek analisis depresi untuk assessment
+          </p>
+        </div>
+        <div class="flex space-x-3">
+          <button
+            @click="loadDefaults()"
+            class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+          >
+            Muat Default
+          </button>
+          <button
+            @click="clearAll()"
+            class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+          >
+            Hapus Semua
+          </button>
+          <button
+            @click="saveAll()"
+            class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Simpan Semua
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="max-w-7xl mx-auto px-6 py-6 space-y-6">
+    {% block llm_content %}{% endblock %}
+  </div>
+
+  {% include "components/modal.html" %}
+
+  <!-- Loading -->
+  <div
+    x-show="loading"
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+  >
+    <div class="bg-white rounded-lg p-8 shadow-xl">
+      <div class="text-center">
+        <div
+          class="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-blue-600 mx-auto mb-4"
+        ></div>
+        <p class="text-gray-600 text-lg">Menyimpan data...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function llmSettings() {
+    return {
+      loading: false,
+
+      settings: {
+        instructions: "",
+        openai_api_key: "",
+        chat_model: "gpt-4o",
+        analysis_model: "gpt-4o-mini", 
+        depression_aspects: [
+          "Anhedonia (kehilangan minat/kenikmatan)",
+          "Bias kognitif negatif & hopelessness", 
+          "Rumination (pikiran berputar tanpa solusi)",
+          "Psikomotor retardation",
+          "Gangguan tidur (insomnia, kualitas tidur jelek)",
+          "Iritabilitas & ledakan marah",
+          "Rasa bersalah berlebih / self-blame",
+          "Gangguan kognitif (concentration & executive function)",
+          "Penarikan diri sosial / isolasi",
+          "Alexithymia (sulit mengenali & mengungkap emosi)",
+          "Defisit regulasi emosi"
+        ]
+      },
+
+      availableModels: [],
+
+      // Modal state
+      showModal: false,
+      modalTitle: "",
+      modalMessage: "",
+      modalConfirm: () => {},
+
+      async init() {
+        await this.loadData();
+        await this.loadAvailableModels();
+      },
+
+      async loadAvailableModels() {
+        try {
+          const models = await apiCall("/admin/llm/models");
+          this.availableModels = Array.isArray(models) ? models : [];
+        } catch (error) {
+          console.error("Error loading available models:", error);
+          this.availableModels = [];
+        }
+      },
+
+      loadDefaults() {
+        this.showModal = true;
+        this.modalTitle = "Muat Data Default";
+        this.modalMessage = "Apakah Anda yakin ingin memuat pengaturan LLM default? Data yang ada akan diganti.";
+        this.modalConfirm = () => {
+          this.settings = {
+            instructions: "",
+            openai_api_key: "",
+            chat_model: "gpt-4o",
+            analysis_model: "gpt-4o-mini",
+            depression_aspects: [
+              {name: "Anhedonia", description: "kehilangan minat/kenikmatan"},
+              {name: "Bias kognitif negatif", description: "hopelessness & negative thinking patterns"},
+              {name: "Rumination", description: "pikiran berputar tanpa solusi"},
+              {name: "Psikomotor retardation", description: "perlambatan gerakan dan bicara"},
+              {name: "Gangguan tidur", description: "insomnia, kualitas tidur jelek"},
+              {name: "Iritabilitas", description: "ledakan marah & mudah tersinggung"},
+              {name: "Rasa bersalah berlebih", description: "self-blame & worthlessness"},
+              {name: "Gangguan kognitif", description: "concentration & executive function issues"},
+              {name: "Penarikan diri sosial", description: "isolasi & withdrawal"},
+              {name: "Alexithymia", description: "sulit mengenali & mengungkap emosi"},
+              {name: "Defisit regulasi emosi", description: "kesulitan mengatur emosi"}
+            ]
+          };
+          this.showModal = false;
+        };
+      },
+
+      async clearAll() {
+        this.showModal = true;
+        this.modalTitle = "Hapus Semua Data";
+        this.modalMessage = "Apakah Anda yakin ingin menghapus semua pengaturan LLM yang ada?";
+        this.modalConfirm = async () => {
+          this.loading = true;
+          try {
+            const settings = await apiCall("/admin/llm/settings");
+            
+            if (Array.isArray(settings)) {
+              for (const setting of settings) {
+                await apiCall(`/admin/llm/settings/${setting.id}`, "DELETE");
+              }
+            }
+
+            this.showModal = true;
+            this.modalTitle = 'Berhasil';
+            this.modalMessage = 'Semua pengaturan LLM berhasil dihapus!';
+            this.modalConfirm = () => { this.showModal = false; };
+          } catch (error) {
+            this.showModal = true;
+            this.modalTitle = 'Error';
+            this.modalMessage = 'Error clearing data: ' + error.message;
+            this.modalConfirm = () => { this.showModal = false; };
+          } finally {
+            this.loading = false;
+          }
+        };
+      },
+
+      async loadData() {
+        this.loading = true;
+        try {
+          console.log("Loading LLM settings...");
+          const settingsRes = await apiCall("/admin/llm/settings");
+          console.log("LLM settings response:", settingsRes);
+
+          if (Array.isArray(settingsRes) && settingsRes.length > 0) {
+            const setting = settingsRes[0];
+            console.log("Loading setting:", setting);
+            this.settings = {
+              id: setting.id,
+              instructions: setting.instructions || "",
+              openai_api_key: setting.openai_api_key || "",
+              chat_model: setting.chat_model,
+              analysis_model: setting.analysis_model,
+              depression_aspects: setting.depression_aspects?.aspects || this.settings.depression_aspects
+            };
+            console.log("Settings loaded:", this.settings);
+          } else {
+            console.log("No existing settings found, loading default config from backend");
+            try {
+              const defaultConfig = await apiCall("/admin/llm/config/default");
+              if (defaultConfig.openai_api_key) {
+                this.settings.openai_api_key = defaultConfig.openai_api_key;
+                console.log("Default API key loaded from backend config");
+              }
+            } catch (error) {
+              console.error("Error loading default config:", error);
+            }
+          }
+        } catch (error) {
+          console.error("Error loading data:", error);
+        } finally {
+          this.loading = false;
+        }
+      },
+
+
+      async saveAll() {
+        this.loading = true;
+        try {
+          const settingsData = {
+            instructions: this.settings.instructions,
+            openai_api_key: this.settings.openai_api_key,
+            chat_model: this.settings.chat_model,
+            analysis_model: this.settings.analysis_model,
+            depression_aspects: this.settings.depression_aspects
+          };
+
+          console.log("Saving LLM settings:", settingsData);
+          const result = await apiCall("/admin/llm/settings", "POST", settingsData);
+          console.log("LLM settings save result:", result);
+
+          if (result.status === "SNAFU") {
+            this.showModal = true;
+            this.modalTitle = 'Error';
+            this.modalMessage = 'Error saving settings: ' + (result.error || result.errorMsg || "Unknown error");
+            this.modalConfirm = () => { this.showModal = false; };
+            return;
+          }
+
+          this.showModal = true;
+          this.modalTitle = 'Berhasil';
+          this.modalMessage = 'Pengaturan LLM berhasil disimpan!';
+          this.modalConfirm = () => {
+            this.showModal = false;
+            window.location.reload();
+          };
+        } catch (error) {
+          console.error("Save error:", error);
+          this.showModal = true;
+          this.modalTitle = 'Error';
+          this.modalMessage = 'Error saving data: ' + error.message;
+          this.modalConfirm = () => {};
+        } finally {
+          this.loading = false;
+        }
+      },
+
+      addAspect() {
+        this.settings.depression_aspects.push({name: "", description: ""});
+      },
+
+      removeAspect(index) {
+        this.settings.depression_aspects.splice(index, 1);
+      },
+
+      updateAspectName(index, value) {
+        this.settings.depression_aspects[index].name = value;
+      },
+
+      updateAspectDescription(index, value) {
+        this.settings.depression_aspects[index].description = value;
+      },
+
+      async testModel(modelId, type) {
+        try {
+          const result = await apiCall(`/admin/llm/models/${encodeURIComponent(modelId)}/test`);
+          alert(`${type} model "${modelId}": ${result.available ? '✅ Available' : '❌ Not Available'}`);
+          return result.available || false;
+        } catch (error) {
+          console.error(`Error testing model ${modelId}:`, error);
+          alert(`Error testing ${type} model "${modelId}": ${error.message}`);
+          return false;
+        }
+      },
+
+      async refreshModels() {
+        await this.loadAvailableModels();
+        alert('Model list refreshed!');
+      },
+
+      async testApiKey() {
+        const apiKey = this.settings.openai_api_key;
+        if (!apiKey) {
+          alert('Please enter an API key first');
+          return;
+        }
+
+        try {
+          const result = await apiCall('/admin/llm/api-key/test', 'POST', {
+            api_key: apiKey
+          });
+          
+          if (result.valid) {
+            alert('✅ API Key is valid!');
+            this.availableModels = result.models || [];
+          } else {
+            alert('❌ Invalid API Key: ' + (result.error || 'Unknown error'));
+          }
+        } catch (error) {
+          console.error('Error testing API key:', error);
+          alert('Error testing API key: ' + error.message);
+        }
+      },
+
+      copyModelToChat(modelId) {
+        this.settings.chat_model = modelId;
+      },
+
+      copyModelToAnalysis(modelId) {
+        this.settings.analysis_model = modelId;
+      }
+    };
+  }
+</script>
+{% endblock %}

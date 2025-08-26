@@ -1,213 +1,451 @@
-{% extends "admin/base.html" %}
-
-{% block title %}Pengaturan PHQ - Admin{% endblock %}
-
-{% block content %}
+{% extends "admin/base.html" %} {% block title %}Pengaturan PHQ - Admin{%
+endblock %} {% block content %}
 <div class="min-h-screen bg-gray-50" x-data="phqSettings()">
-    <!-- Header -->
-    <div class="bg-white border-b border-gray-200 sticky top-0 z-40">
-        <div class="max-w-7xl mx-auto px-6 py-4">
-            <div class="flex justify-between items-center">
-                <div>
-                    <h1 class="text-3xl font-bold text-gray-900">
-                        Pengaturan PHQ Assessment
-                    </h1>
-                    <p class="text-gray-600 mt-1">Konfigurasi lengkap untuk penilaian kesehatan mental</p>
-                </div>
-                <div class="flex space-x-3">
-                    <button @click="loadDefaults()" 
-                            class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
-                        Muat Default
-                    </button>
-                    <button @click="saveAll()" 
-                            class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-                        Simpan Semua
-                    </button>
-                </div>
-            </div>
+  <!-- Header -->
+  <div class="bg-white border-b border-gray-200 sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-6 py-4">
+      <div class="flex justify-between items-center">
+        <div>
+          <h1 class="text-3xl font-bold text-gray-900">
+            Pengaturan PHQ Assessment
+          </h1>
+          <p class="text-gray-600 mt-1">
+            Konfigurasi lengkap untuk penilaian kesehatan mental
+          </p>
         </div>
-    </div>
-
-    <div class="max-w-5xl mx-auto px-6 py-6 space-y-6">
-        {% block phq_content %}{% endblock %}
-    </div>
-
-    {% include "components/modal.html" %}
-
-    <!-- Loading -->
-    <div x-show="loading" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-lg p-8 shadow-xl">
-            <div class="text-center">
-                <div class="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-blue-600 mx-auto mb-4"></div>
-                <p class="text-gray-600 text-lg">Menyimpan data...</p>
-            </div>
+        <div class="flex space-x-3">
+          <button
+            @click="loadDefaults()"
+            class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+          >
+            Muat Default
+          </button>
+          <button
+            @click="clearAll()"
+            class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+          >
+            Hapus Semua
+          </button>
+          <button
+            @click="saveAll()"
+            class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Simpan Semua
+          </button>
         </div>
+      </div>
     </div>
+  </div>
+
+  <div class="max-w-7xl mx-auto px-6 py-6 space-y-6">
+    {% block phq_content %}{% endblock %}
+  </div>
+
+  {% include "components/modal.html" %}
+
+  <!-- Loading -->
+  <div
+    x-show="loading"
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+  >
+    <div class="bg-white rounded-lg p-8 shadow-xl">
+      <div class="text-center">
+        <div
+          class="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-blue-600 mx-auto mb-4"
+        ></div>
+        <p class="text-gray-600 text-lg">Menyimpan data...</p>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
-function phqSettings() {
+  function phqSettings() {
     return {
-        loading: false,
-        
-        config: {
-            randomize: 'false'
-        },
-        
-        scale: {
-            minValue: 0,
-            maxValue: 3,
-            labels: {}
-        },
-        
-        categories: [],
-        
-        // Modal state
-        showModal: false,
-        modalTitle: '',
-        modalMessage: '',
-        modalConfirm: () => {},
+      loading: false,
 
-        async init() {
-            await this.loadData();
-        },
+      config: {
+        randomize: "false",
+      },
 
-        updateScale() {
-            const min = parseInt(this.scale.minValue);
-            const max = parseInt(this.scale.maxValue);
-            const newLabels = {};
-            
-            for (let i = min; i <= max; i++) {
-                newLabels[i] = this.scale.labels[i] || `Label ${i}`;
-            }
-            
-            this.scale.labels = newLabels;
+      scale: {
+        minValue: 1,
+        maxValue: 4,
+        labels: {
+          1: "Label 1",
+          2: "Label 2",
+          3: "Label 3",
+          4: "Label 4",
         },
+      },
 
-        addCategory() {
-            this.categories.push({
-                name: '',
-                questions: ['']
-            });
-        },
+      categories: [],
 
-        removeCategory(index) {
-            this.categories.splice(index, 1);
-        },
+      // Modal state
+      showModal: false,
+      modalTitle: "",
+      modalMessage: "",
+      modalConfirm: () => {},
 
-        addQuestion(categoryIndex) {
-            this.categories[categoryIndex].questions.push('');
-        },
+      async init() {
+        this.updateScale();
+        await this.loadData();
+      },
 
-        removeQuestion(categoryIndex, questionIndex) {
-            this.categories[categoryIndex].questions.splice(questionIndex, 1);
-        },
+      updateScale() {
+        this.scale.minValue = 1; // Always start from 1
+        const max = parseInt(this.scale.maxValue);
+        const newLabels = {};
 
-        loadDefaults() {
-            this.showModal = true;
-            this.modalTitle = 'Muat Data Default';
-            this.modalMessage = 'Apakah Anda yakin ingin memuat data default PHQ-9? Data yang ada akan diganti.';
-            this.modalConfirm = () => {
-                this.scale = {
-                    minValue: 0,
-                    maxValue: 3,
-                    labels: {
-                        0: 'Tidak sama sekali',
-                        1: 'Beberapa hari', 
-                        2: 'Lebih dari setengah hari',
-                        3: 'Hampir setiap hari'
-                    }
-                };
-                this.categories = [
-                    { name: "Anhedonia", questions: ["Kurang tertarik atau bergairah dalam melakukan apapun"] },
-                    { name: "Depressed Mood", questions: ["Merasa murung, muram, atau putus asa"] },
-                    { name: "Sleep Disturbance", questions: ["Sulit tidur atau mudah terbangun, atau terlalu banyak tidur"] },
-                    { name: "Fatigue", questions: ["Merasa lelah atau kurang bertenaga"] },
-                    { name: "Appetite Changes", questions: ["Kurang nafsu makan atau terlalu banyak makan"] },
-                    { name: "Worthlessness", questions: ["Kurang percaya diri — atau merasa bahwa Anda adalah orang yang gagal atau telah mengecewakan diri sendiri atau keluarga"] },
-                    { name: "Concentration", questions: ["Sulit berkonsentrasi pada sesuatu, misalnya membaca koran atau menonton televisi"] },
-                    { name: "Psychomotor", questions: ["Bergerak atau berbicara sangat lambat sehingga orang lain memperhatikannya. Atau sebaliknya — merasa resah atau gelisah sehingga Anda lebih sering bergerak dari biasanya"] },
-                    { name: "Suicidal Ideation", questions: ["Merasa lebih baik mati atau ingin melukai diri sendiri dengan cara apapun"] }
-                ];
-            };
-        },
-
-        async loadData() {
-            this.loading = true;
-            try {
-                const result = await apiCall('/admin/phq/settings');
-                if (result.status === 'OLKORECT' && result.data.length > 0) {
-                    const settings = result.data[0];
-                    this.config.randomize = settings.randomize_questions ? 'true' : 'false';
-                }
-            } catch (error) {
-                console.error('Error loading data:', error);
-            } finally {
-                this.loading = false;
-            }
-        },
-
-        async saveAll() {
-            this.loading = true;
-            try {
-                // Save scale
-                const scaleData = {
-                    scale_name: 'PHQ-9 Default',
-                    min_value: parseInt(this.scale.minValue),
-                    max_value: parseInt(this.scale.maxValue),
-                    scale_labels: this.scale.labels,
-                    is_default: true
-                };
-                
-                const scaleResult = await apiCall('/admin/phq/scales', 'POST', scaleData);
-                
-                // Save categories and questions
-                for (let i = 0; i < this.categories.length; i++) {
-                    const category = this.categories[i];
-                    const categoryData = {
-                        name: category.name,
-                        name_id: category.name.toUpperCase().replace(/\s+/g, '_'),
-                        description_id: category.questions[0] || '',
-                        order_index: i + 1
-                    };
-                    
-                    const catResult = await apiCall('/admin/phq/categories', 'POST', categoryData);
-                    
-                    if (catResult.status === 'OLKORECT') {
-                        for (let j = 0; j < category.questions.length; j++) {
-                            const questionData = {
-                                category_id: catResult.data.id,
-                                question_text_en: category.questions[j],
-                                question_text_id: category.questions[j],
-                                order_index: j
-                            };
-                            
-                            await apiCall('/admin/phq/questions', 'POST', questionData);
-                        }
-                    }
-                }
-                
-                // Save settings
-                if (scaleResult.status === 'OLKORECT') {
-                    const settingsData = {
-                        setting_name: 'PHQ-9 Default',
-                        questions_per_category: 1,
-                        scale_id: scaleResult.data.id,
-                        randomize_questions: this.config.randomize === 'true',
-                        is_default: true
-                    };
-                    
-                    await apiCall('/admin/phq/settings', 'POST', settingsData);
-                }
-                
-                alert('Semua pengaturan PHQ berhasil disimpan!');
-            } catch (error) {
-                alert('Error saving data: ' + error.message);
-            } finally {
-                this.loading = false;
-            }
+        for (let i = 1; i <= max; i++) {
+          newLabels[i] = this.scale.labels[i] || `Label ${i}`;
         }
+
+        this.scale.labels = newLabels;
+      },
+
+      addCategory() {
+        this.categories.push({
+          name: "",
+          questions: [""],
+        });
+      },
+
+      removeCategory(index) {
+        this.categories.splice(index, 1);
+      },
+
+      addQuestion(categoryIndex) {
+        this.categories[categoryIndex].questions.push("");
+      },
+
+      removeQuestion(categoryIndex, questionIndex) {
+        this.categories[categoryIndex].questions.splice(questionIndex, 1);
+      },
+
+      loadDefaults() {
+        this.showModal = true;
+        this.modalTitle = "Muat Data Default";
+        this.modalMessage =
+          "Apakah Anda yakin ingin memuat data default PHQ-9? Data yang ada akan diganti.";
+        this.modalConfirm = () => {
+          this.scale = {
+            minValue: 1,
+            maxValue: 4,
+            labels: {
+              1: "Tidak sama sekali",
+              2: "Beberapa hari",
+              3: "Lebih dari setengah hari",
+              4: "Hampir setiap hari",
+            },
+          };
+          this.categories = [
+            {
+              name: "Anhedonia",
+              questions: [
+                "Kurang tertarik atau bergairah dalam melakukan apapun",
+              ],
+            },
+            {
+              name: "Bad Mood",
+              questions: ["Merasa murung, muram, atau putus asa"],
+            },
+            {
+              name: "Sleep Disturbance",
+              questions: [
+                "Sulit tidur atau mudah terbangun, atau terlalu banyak tidur",
+              ],
+            },
+            {
+              name: "Fatigue",
+              questions: ["Merasa lelah atau kurang bertenaga"],
+            },
+            {
+              name: "Appetite Changes",
+              questions: ["Kurang nafsu makan atau terlalu banyak makan"],
+            },
+            {
+              name: "Worthlessness",
+              questions: [
+                "Kurang percaya diri — atau merasa bahwa Anda adalah orang yang gagal atau telah mengecewakan diri sendiri atau keluarga",
+              ],
+            },
+            {
+              name: "Concentration",
+              questions: [
+                "Sulit berkonsentrasi pada sesuatu, misalnya membaca koran atau menonton televisi",
+              ],
+            },
+            {
+              name: "Psychomoto Retardation r",
+              questions: [
+                "Bergerak atau berbicara sangat lambat sehingga orang lain memperhatikannya. Atau sebaliknya — merasa resah atau gelisah sehingga Anda lebih sering bergerak dari biasanya",
+              ],
+            },
+            {
+              name: "Suicidal Ideation",
+              questions: [
+                "Merasa lebih baik mati atau ingin melukai diri sendiri dengan cara apapun",
+              ],
+            },
+          ];
+        };
+      },
+
+      async clearAll() {
+        this.showModal = true;
+        this.modalTitle = "Hapus Semua Data";
+        this.modalMessage =
+          "Apakah Anda yakin ingin menghapus semua data PHQ yang ada?";
+        this.modalConfirm = async () => {
+          this.loading = true;
+          try {
+            // Get and delete all existing data
+            const [categories, scales, settings] = await Promise.all([
+              apiCall("/admin/phq/categories"),
+              apiCall("/admin/phq/scales"),
+              apiCall("/admin/phq/settings"),
+            ]);
+
+            // Delete categories (this will cascade delete questions)
+            if (Array.isArray(categories)) {
+              for (const cat of categories) {
+                await apiCall(`/admin/phq/categories/${cat.id}`, "DELETE");
+              }
+            }
+
+            // Delete scales
+            if (Array.isArray(scales)) {
+              for (const scale of scales) {
+                await apiCall(`/admin/phq/scales/${scale.id}`, "DELETE");
+              }
+            }
+
+            // Delete settings
+            if (Array.isArray(settings)) {
+              for (const setting of settings) {
+                await apiCall(`/admin/phq/settings/${setting.id}`, "DELETE");
+              }
+            }
+
+            this.showModal = true;
+            this.modalTitle = 'Berhasil';
+            this.modalMessage = 'Semua data PHQ berhasil dihapus!';
+            this.modalConfirm = () => {};
+          } catch (error) {
+            this.showModal = true;
+            this.modalTitle = 'Error';
+            this.modalMessage = 'Error clearing data: ' + error.message;
+            this.modalConfirm = () => {};
+          } finally {
+            this.loading = false;
+          }
+        };
+      },
+
+      async loadData() {
+        this.loading = true;
+        try {
+          // Load all PHQ data
+          const [categoriesRes, scalesRes, settingsRes] = await Promise.all([
+            apiCall("/admin/phq/categories"),
+            apiCall("/admin/phq/scales"),
+            apiCall("/admin/phq/settings"),
+          ]);
+
+          // Load categories and their questions
+          if (Array.isArray(categoriesRes) && categoriesRes.length > 0) {
+            this.categories = [];
+            for (const cat of categoriesRes) {
+              // Load questions for this category
+              const questionsRes = await apiCall(
+                `/admin/phq/questions?category_id=${cat.id}`
+              );
+              const questions = Array.isArray(questionsRes)
+                ? questionsRes.map((q) => q.question_text_id)
+                : [cat.description_id || ""];
+
+              this.categories.push({
+                id: cat.id,
+                name: cat.name,
+                questions: questions.length > 0 ? questions : [""],
+              });
+            }
+          }
+
+          // Load scale
+          if (Array.isArray(scalesRes) && scalesRes.length > 0) {
+            const scale = scalesRes[0];
+            this.scale = {
+              id: scale.id,
+              minValue: scale.min_value,
+              maxValue: scale.max_value,
+              labels: scale.scale_labels,
+            };
+          }
+
+          // Load settings
+          if (Array.isArray(settingsRes) && settingsRes.length > 0) {
+            const settings = settingsRes[0];
+            this.config.randomize = settings.randomize_questions
+              ? "true"
+              : "false";
+          }
+        } catch (error) {
+          console.error("Error loading data:", error);
+        } finally {
+          this.loading = false;
+        }
+      },
+
+      async saveAll() {
+        this.loading = true;
+        try {
+          // Save scale
+          const scaleData = {
+            scale_name: "PHQ-9 Default",
+            min_value: parseInt(this.scale.minValue),
+            max_value: parseInt(this.scale.maxValue),
+            scale_labels: this.scale.labels,
+            is_default: true,
+          };
+
+          console.log("Saving scale:", scaleData);
+          const scaleResult = await apiCall(
+            "/admin/phq/scales",
+            "POST",
+            scaleData
+          );
+          console.log("Scale result:", scaleResult);
+
+          if (scaleResult.status === "SNAFU") {
+            alert(
+              "Error saving scale: " +
+                (scaleResult.error || scaleResult.errorMsg || "Unknown error")
+            );
+            return;
+          }
+
+          // Save categories and questions
+          for (let i = 0; i < this.categories.length; i++) {
+            const category = this.categories[i];
+            const categoryData = {
+              name: category.name,
+              name_id: category.name.toUpperCase().replace(/\s+/g, "_"),
+              description_id: category.questions[0] || "",
+              order_index: i + 1,
+            };
+
+            console.log("Saving category:", categoryData);
+            const catResult = await apiCall(
+              "/admin/phq/categories",
+              "POST",
+              categoryData
+            );
+            console.log("Category result:", catResult);
+
+            if (catResult.status === "SNAFU") {
+              alert(
+                "Error saving category: " +
+                  (catResult.error || catResult.errorMsg || "Unknown error")
+              );
+              return;
+            }
+
+            // Always save questions regardless of catResult status
+            const categoryId =
+              catResult.id || (catResult.data && catResult.data.id);
+            if (categoryId && category.questions.length > 0) {
+              // Delete existing questions for this category first
+              const existingQuestions = await apiCall(
+                `/admin/phq/questions?category_id=${categoryId}`
+              );
+              if (Array.isArray(existingQuestions)) {
+                for (const existingQ of existingQuestions) {
+                  await apiCall(
+                    `/admin/phq/questions/${existingQ.id}`,
+                    "DELETE"
+                  );
+                }
+              }
+
+              // Save new questions
+              for (let j = 0; j < category.questions.length; j++) {
+                if (category.questions[j].trim()) {
+                  // Only save non-empty questions
+                  const questionData = {
+                    category_id: categoryId,
+                    question_text_en: category.questions[j],
+                    question_text_id: category.questions[j],
+                    order_index: j,
+                  };
+
+                  console.log("Saving question:", questionData);
+                  const qResult = await apiCall(
+                    "/admin/phq/questions",
+                    "POST",
+                    questionData
+                  );
+                  console.log("Question result:", qResult);
+
+                  if (qResult.status === "SNAFU") {
+                    alert(
+                      "Error saving question: " +
+                        (qResult.error || qResult.errorMsg || "Unknown error")
+                    );
+                    return;
+                  }
+                }
+              }
+            }
+          }
+
+          // Save settings
+          if (scaleResult.status === "OLKORECT") {
+            const settingsData = {
+              setting_name: "PHQ-9 Default",
+              questions_per_category: 1,
+              scale_id: scaleResult.data ? scaleResult.data.id : scaleResult.id,
+              randomize_questions: this.config.randomize === "true",
+              is_default: true,
+            };
+
+            console.log("Saving settings:", settingsData);
+            const settingsResult = await apiCall(
+              "/admin/phq/settings",
+              "POST",
+              settingsData
+            );
+            console.log("Settings result:", settingsResult);
+
+            if (settingsResult.status === "SNAFU") {
+              alert(
+                "Error saving settings: " +
+                  (settingsResult.error ||
+                    settingsResult.errorMsg ||
+                    "Unknown error")
+              );
+              return;
+            }
+          }
+
+          this.showModal = true;
+          this.modalTitle = 'Berhasil';
+          this.modalMessage = 'Semua pengaturan PHQ berhasil disimpan!';
+          this.modalConfirm = () => {
+            window.location.reload();
+          };
+        } catch (error) {
+          console.error("Save error:", error);
+          this.showModal = true;
+          this.modalTitle = 'Error';
+          this.modalMessage = 'Error saving data: ' + error.message;
+          this.modalConfirm = () => {};
+        } finally {
+          this.loading = false;
+        }
+      },
     };
-}
+  }
 </script>
 {% endblock %}

@@ -1,0 +1,313 @@
+<!-- Camera Configuration Component -->
+<div class="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl p-8 border border-purple-100">
+    <h3 class="text-2xl font-semibold text-gray-900 mb-4 flex items-center">
+        <div class="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center mr-4">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+            </svg>
+        </div>
+        Konfigurasi Kamera & Perekaman
+    </h3>
+    <p class="text-gray-600 mb-8">Konfigurasikan pengaturan kamera dan perekaman untuk pengambilan emosi selama penilaian kesehatan mental.</p>
+
+    <div class="space-y-8">
+
+        <!-- 🔬 SCIENTIFIC CAPTURE MODES -->
+        <div class="bg-white rounded-lg p-6 border border-purple-200">
+            <div class="flex items-center mb-4">
+                <div class="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mr-3">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
+                    </svg>
+                </div>
+                <h4 class="font-medium text-gray-900">Mode Pengambilan Ilmiah</h4>
+                <span class="ml-2 bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded">Untuk Penelitian</span>
+            </div>
+            <p class="text-gray-600 mb-6">Pilih bagaimana data emosi diambil untuk analisis penelitian kesehatan mental yang optimal</p>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <!-- Interval-Based Capture -->
+                <label class="relative">
+                    <input 
+                        type="radio" 
+                        name="recording_mode" 
+                        value="INTERVAL" 
+                        x-model="settings.recording_mode"
+                        class="peer sr-only"
+                    >
+                    <div class="p-6 border-2 border-gray-200 rounded-xl cursor-pointer transition-all peer-checked:border-green-500 peer-checked:bg-green-50">
+                        <div class="flex items-center mb-3">
+                            <div class="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center mr-3">
+                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                            </div>
+                            <span class="font-semibold">Mode Interval</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-2">📸 Gambar setiap X detik</p>
+                        <ul class="text-xs text-gray-500 list-disc list-inside space-y-1">
+                            <li><strong>Terbaik untuk:</strong> Keadaan emosional umum</li>
+                            <li><strong>Data:</strong> Pelacakan emosi dasar</li>
+                            <li><strong>Penyimpanan:</strong> Ukuran file yang dapat diprediksi</li>
+                            <li><strong>Analisis:</strong> Pola deret waktu</li>
+                        </ul>
+                    </div>
+                </label>
+
+                <!-- Event-Driven Capture -->
+                <label class="relative">
+                    <input 
+                        type="radio" 
+                        name="recording_mode" 
+                        value="EVENT_DRIVEN" 
+                        x-model="settings.recording_mode"
+                        class="peer sr-only"
+                    >
+                    <div class="p-6 border-2 border-gray-200 rounded-xl cursor-pointer transition-all peer-checked:border-purple-500 peer-checked:bg-purple-50">
+                        <div class="flex items-center mb-3">
+                            <div class="w-8 h-8 bg-purple-500 rounded-lg flex items-center justify-center mr-3">
+                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                </svg>
+                            </div>
+                            <span class="font-semibold">Berdasarkan Peristiwa</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-2">⚡ Gambar pada tindakan pengguna</p>
+                        <ul class="text-xs text-gray-500 list-disc list-inside space-y-1">
+                            <li><strong>Terbaik untuk:</strong> Momen pengambilan keputusan</li>
+                            <li><strong>Data:</strong> Korelasi tindakan yang tepat</li>
+                            <li><strong>Penyimpanan:</strong> Bervariasi berdasarkan aktivitas</li>
+                            <li><strong>Analisis:</strong> Pemicu perilaku</li>
+                        </ul>
+                    </div>
+                </label>
+            </div>
+        </div>
+
+        <!-- Interval Settings -->
+        <div x-show="settings.recording_mode === 'INTERVAL'" class="bg-white rounded-lg p-6 border border-green-200">
+            <h4 class="font-medium text-gray-900 mb-4 flex items-center">
+                <svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                Pengaturan Pengambilan Interval
+            </h4>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Interval Pengambilan</label>
+                <div class="flex items-center space-x-3">
+                    <input 
+                        type="range" 
+                        x-model="settings.interval_seconds"
+                        min="1" max="60" step="1"
+                        class="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                    >
+                    <div class="min-w-0">
+                        <span class="text-sm font-medium text-gray-900" x-text="settings.interval_seconds"></span>
+                        <span class="text-sm text-gray-500">detik</span>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">Seberapa sering mengambil gambar (1-60 detik)</p>
+            </div>
+        </div>
+
+        <!-- ⚡ Event-Driven Settings -->
+        <div x-show="settings.recording_mode === 'EVENT_DRIVEN'" class="bg-white rounded-lg p-6 border border-purple-200">
+            <div class="flex items-center mb-4">
+                <svg class="w-6 h-6 text-purple-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+                <h4 class="font-medium text-gray-900">Konfigurasi Pemicu Peristiwa</h4>
+                <span class="ml-2 bg-purple-100 text-purple-800 text-xs font-medium px-2.5 py-0.5 rounded">Pencatatan berbasis peristiwa</span>
+            </div>
+            
+            <div class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div class="flex items-start">
+                    <svg class="w-5 h-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <div>
+                        <h5 class="font-medium text-blue-900 mb-1">🎯 Penelitian Berdasarkan Peristiwa</h5>
+                        <p class="text-sm text-blue-800">Pilih tindakan pengguna mana yang harus memicu pengambilan emosi. Setiap pemicu menangkap momen yang tepat ketika pengguna membuat keputusan atau berinteraksi.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <!-- PHQ-9 Button Clicks -->
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <div class="flex items-start justify-between">
+                        <div class="flex-1">
+                            <div class="flex items-center mb-2">
+                                <span class="text-lg mr-2">🟦</span>
+                                <h5 class="font-medium text-gray-900">Klik Tombol PHQ-9</h5>
+                                <span class="ml-2 bg-green-100 text-green-800 text-xs font-medium px-2 py-0.5 rounded">Disarankan</span>
+                            </div>
+                            <p class="text-sm text-gray-600 mb-2">Menangkap emosi tepat ketika pengguna memilih opsi respons PHQ-9.</p>
+                            <div class="text-xs text-gray-500">
+                                <strong>Nilai Penelitian:</strong> Momen pengambilan keputusan, analisis keraguan
+                            </div>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer ml-4">
+                            <input type="checkbox" x-model="settings.capture_on_button_click" class="sr-only peer">
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Chat Message Send -->
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <div class="flex items-start justify-between">
+                        <div class="flex-1">
+                            <div class="flex items-center mb-2">
+                                <span class="text-lg mr-2">💬</span>
+                                <h5 class="font-medium text-gray-900">Pengiriman Pesan Chat</h5>
+                                <span class="ml-2 bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded">Komunikasi</span>
+                            </div>
+                            <p class="text-sm text-gray-600 mb-2">Menangkap emosi ketika pengguna mengirim pesan dalam chat.</p>
+                            <div class="text-xs text-gray-500">
+                                <strong>Nilai Penelitian:</strong> Keadaan emosional komunikasi, ekspresi sebelum berbagi
+                            </div>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer ml-4">
+                            <input type="checkbox" x-model="settings.capture_on_message_send" class="sr-only peer">
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Question Start -->
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <div class="flex items-start justify-between">
+                        <div class="flex-1">
+                            <div class="flex items-center mb-2">
+                                <span class="text-lg mr-2">🚀</span>
+                                <h5 class="font-medium text-gray-900">Mulai Pertanyaan</h5>
+                                <span class="ml-2 bg-yellow-100 text-yellow-800 text-xs font-medium px-2 py-0.5 rounded">Opsional</span>
+                            </div>
+                            <p class="text-sm text-gray-600 mb-2">Menangkap keadaan emosional awal ketika pertanyaan baru dimulai.</p>
+                            <div class="text-xs text-gray-500">
+                                <strong>Nilai Penelitian:</strong> Emosi dasar di awal pertanyaan, analisis kesan pertama
+                            </div>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer ml-4">
+                            <input type="checkbox" x-model="settings.capture_on_question_start" class="sr-only peer">
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Camera Resolution & Common Settings -->
+        <div class="bg-white rounded-lg p-6 border border-purple-200">
+            <h4 class="font-medium text-gray-900 mb-4">Pengaturan Kamera</h4>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Resolusi</label>
+                <select 
+                    x-model="settings.resolution"
+                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                >
+                    <option value="640x480">640x480 - Kualitas dasar</option>
+                    <option value="800x600">800x600 - Kualitas baik</option>
+                    <option value="1280x720">1280x720 - HD (disarankan)</option>
+                    <option value="1920x1080">1920x1080 - Full HD</option>
+                </select>
+                <p class="text-xs text-gray-500 mt-1">Resolusi lebih tinggi memberikan kualitas lebih baik tetapi menggunakan lebih banyak penyimpanan</p>
+            </div>
+        </div>
+
+        <!-- Camera Test -->
+        <div class="bg-white rounded-lg p-6 border border-purple-200">
+            <h4 class="font-medium text-gray-900 mb-4">Uji Pengaturan Kamera</h4>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Camera Preview -->
+                <div>
+                    <div class="relative bg-gray-900 rounded-lg overflow-hidden mb-4" style="aspect-ratio: 4/3;">
+                        <video id="videoPreview" 
+                               autoplay muted 
+                               class="w-full h-full object-cover hidden">
+                        </video>
+                        <canvas id="captureCanvas" class="hidden"></canvas>
+                        <div id="camera-placeholder" 
+                             class="absolute inset-0 flex items-center justify-center text-gray-400">
+                            <div class="text-center">
+                                <svg class="w-16 h-16 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                                </svg>
+                                <p class="text-sm">Pratinjau kamera akan muncul di sini</p>
+                                <button type="button" @click="startCameraTest()" 
+                                        class="mt-2 bg-purple-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-purple-600">
+                                    Mulai Uji Kamera
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Camera Controls -->
+                    <div id="camera-controls" class="flex gap-2 hidden">
+                        <button type="button" @click="testCapture()" 
+                                class="flex-1 bg-green-500 text-white py-2 px-4 rounded-lg hover:bg-green-600">
+                            📸 Ambil Foto Test
+                        </button>
+                        <button type="button" @click="stopCameraTest()" 
+                                class="flex-1 bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-600">
+                            Hentikan Pratinjau
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Test Results -->
+                <div>
+                    <h5 class="font-medium text-gray-900 mb-3">Hasil Tes</h5>
+                    <div class="space-y-3">
+                        <!-- Captured Image Preview -->
+                        <div id="captured-image-preview" class="bg-gray-100 rounded-lg p-4 hidden">
+                            <img id="captured-image" class="w-full rounded border" style="max-height: 150px; object-fit: contain;">
+                            <div id="capture-info" class="mt-2 text-xs text-gray-600"></div>
+                        </div>
+                        
+                        <!-- Camera Info -->
+                        <div class="bg-gray-50 rounded-lg p-4 text-sm">
+                            <div class="grid grid-cols-2 gap-2" id="camera-info-grid">
+                                <div><strong>Resolusi:</strong> <span x-text="settings.resolution"></span></div>
+                                <div><strong>Mode:</strong> <span x-text="settings.recording_mode"></span></div>
+                                <div x-show="settings.recording_mode === 'INTERVAL'"><strong>Interval:</strong> <span x-text="settings.interval_seconds + 's'"></span></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Error Display -->
+                        <div id="camera-error" class="bg-red-50 border border-red-200 rounded-lg p-3 hidden">
+                            <div id="error-message" class="text-sm text-red-700"></div>
+                        </div>
+                        
+                        <!-- Success Message -->
+                        <div id="camera-success" class="bg-green-50 border border-green-200 rounded-lg p-3 hidden">
+                            <div class="text-sm text-green-700">✅ Tes kamera berhasil! Pengaturan berfungsi dengan baik.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Storage Estimates -->
+        <div class="bg-white rounded-lg p-6 border border-purple-200">
+            <h4 class="font-medium text-gray-900 mb-4">Perkiraan Penyimpanan</h4>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-blue-50 rounded-lg p-4 text-center">
+                    <div class="text-2xl font-bold text-blue-600">~2MB</div>
+                    <div class="text-sm text-blue-700">assessment 5 menit</div>
+                </div>
+                <div class="bg-green-50 rounded-lg p-4 text-center">
+                    <div class="text-2xl font-bold text-green-600">~6MB</div>
+                    <div class="text-sm text-green-700">assessment 15 menit</div>
+                </div>
+                <div class="bg-purple-50 rounded-lg p-4 text-center">
+                    <div class="text-2xl font-bold text-purple-600">~12MB</div>
+                    <div class="text-sm text-purple-700">assessment 30 menit</div>
+                </div>
+            </div>
+            <p class="text-xs text-gray-500 mt-3">Perkiraan berdasarkan pengaturan saat ini. Ukuran sebenarnya dapat bervariasi.</p>
+        </div>
+    </div>
+</div>

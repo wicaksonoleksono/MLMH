@@ -15,7 +15,7 @@ def create_app():
         init_database(app.config['SQLALCHEMY_DATABASE_URI'])
         create_all_tables()
     login_manager.init_app(app)
-    login_manager.login_view = 'user.login'
+    login_manager.login_view = 'auth.login'
 
     @login_manager.user_loader
     def load_user(user_id):  # pylint: disable=unused-variable
@@ -29,7 +29,11 @@ def create_app():
     from .routes.main_routes import main_bp
     from .commands import register_commands
     from app.routes.admin.phq_routes import phq_bp
+    from app.routes.admin.camera_routes import camera_bp
+    from app.routes.admin.llm_routes import llm_bp
     app.register_blueprint(phq_bp)
+    app.register_blueprint(camera_bp)
+    app.register_blueprint(llm_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     register_commands(app)

@@ -58,6 +58,7 @@ class PHQSettings(BaseModel, StatusMixin):
     questions_per_category: Mapped[int] = mapped_column(Integer, default=1)
     scale_id: Mapped[int] = mapped_column(ForeignKey('phq_scales.id'), nullable=False)
     randomize_questions: Mapped[bool] = mapped_column(Boolean, default=False)
+    instructions: Mapped[Optional[str]] = mapped_column(Text)  # Instruksi pengisian untuk responden
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     
     # Relationships

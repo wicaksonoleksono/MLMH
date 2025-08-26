@@ -1,10 +1,10 @@
 # app/model/admin/__init__.py
-from .admin import SystemSetting, AssessmentConfig, MediaSetting, AdminLog, QuestionPool
+from .phq import PHQCategory, PHQQuestion, PHQScale, PHQSettings
 
 __all__ = [
-    'SystemSetting',
-    'AssessmentConfig',
-    'MediaSetting', 
-    'AdminLog',
-    'QuestionPool'
+    "PHQCategory",
+    "PHQQuestion",
+    "PHQScale",
+    "PHQSettings"
+
 ]

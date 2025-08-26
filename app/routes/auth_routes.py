@@ -4,15 +4,15 @@ from ..services.shared.usManService import UserManagerService
 from ..decorators import api_response, raw_response
 from ..utils.jwt_utils import JWTManager
 
-user_bp = Blueprint('user', __name__, url_prefix='/user')
+auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 
 
-@user_bp.route('/register', methods=['POST'])
+@auth_bp.route('/register', methods=['POST'])
 @api_response
 def register():
     """User registration."""
     data = request.get_json()
-    
+
     # Extract extended profile fields (only for regular users)
     user = UserManagerService.create_user(
         uname=data['uname'],
@@ -31,37 +31,36 @@ def register():
     return {"message": "Pendaftaran berhasil!", "user_id": user.id}
 
 
-@user_bp.route('/login', methods=['POST'])
+@auth_bp.route('/login', methods=['POST'])
 @api_response
 def login():
     """User login with JWT token."""
     data = request.get_json()
     user_data = UserManagerService.authenticate_user(data['uname'], data['password'])
-    
+
     if user_data:
-        # Generate JWT token
         token = JWTManager.generate_token(user_data)
-        
+
         # Create SimpleUser for Flask-Login session support (for templates)
         from ..utils.auth_models import SimpleUser
         simple_user = SimpleUser(user_data)
         login_user(simple_user)
-        
+
         return {
-            "message": "Login berhasil", 
+            "message": "Login berhasil",
             "token": token,
             "user": {
-                "id": user_data['id'], 
-                "uname": user_data['uname'], 
+                "id": user_data['id'],
+                "uname": user_data['uname'],
                 "type": user_data['user_type_name'],
                 "is_admin": user_data['is_admin']
             }
         }
-    
+
     return {"message": "Nama pengguna atau kata sandi salah"}, 401
 
 
-@user_bp.route('/logout', methods=['POST'])
+@auth_bp.route('/logout', methods=['POST'])
 @login_required
 @api_response
 def logout():
@@ -70,7 +69,7 @@ def logout():
     return {"message": "Logout berhasil"}
 
 
-@user_bp.route('/profile', methods=['GET'])
+@auth_bp.route('/profile', methods=['GET'])
 @login_required
 @api_response
 def profile():

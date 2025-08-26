@@ -4,22 +4,17 @@ from .model.shared.users import User
 from .model.shared.enums import UserType
 from .db import get_session, create_all_tables, get_engine
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import text
 
 
 def register_commands(app):
     """Register all custom CLI commands with the Flask app."""
-    
-    @app.cli.command("init-db")
-    def init_db():
-        """Creates all database tables from the models."""
-        create_all_tables()
-        click.echo("[OLKORECT] Database tables created.")
 
-    @app.cli.command("seed-db")
+    @app.cli.command("init-db")
     def seed_db():
         """Seeds the database with minimal essential data."""
         click.echo("[OLKORECT] Seeding database with essential data...")
-        
+        create_all_tables()
         with get_session() as db:
             user_types = [
                 {"name": "admin", "description": "Administrator user"},
@@ -31,7 +26,7 @@ def register_commands(app):
                     user_type_obj = UserType(**ut_data)
                     db.add(user_type_obj)
                     click.echo(f"  - UserType '{ut_data['name']}' created")
-                    
+
         with get_session() as db:
             admin_type = db.query(UserType).filter_by(name="admin").first()
             if admin_type:
@@ -94,16 +89,21 @@ def register_commands(app):
     @click.confirmation_option(prompt="Are you sure you want to drop all tables?")
     def reset_db():
         """Drop all tables and recreate them."""
-        from .model.base import Base
-        # Import all models to ensure they're registered
-        from .model.shared.users import User
-        from .model.shared.enums import UserType, AssessmentStatus, MediaType, AssessmentType, PHQCategory, ScaleLabel, SettingType
-        from .model.admin.admin import SystemSetting, AssessmentConfig, MediaSetting, AdminLog, QuestionPool
-        from .model.assessment.sessions import AssessmentSession, PHQResponse, OpenQuestionResponse, CameraCapture, SessionExport
-        
         engine = get_engine()
-        Base.metadata.drop_all(bind=engine)
+        with engine.connect() as conn:
+            conn.execute(text("DROP SCHEMA public CASCADE"))
+            conn.execute(text("CREATE SCHEMA public"))
+            conn.commit()
+
         click.echo("[WATCHOUT] All tables dropped.")
+
+        # Now import models and recreate
+        from .model.base import Base
+        from .model.shared.users import User
+        from .model.shared.enums import UserType, AssessmentStatus
+        from .model.admin.phq import PHQCategory, PHQQuestion, PHQScale, PHQSettings
+        from .model.assessment.sessions import AssessmentSession, PHQResponse, OpenQuestionResponse, CameraCapture, SessionExport
+
         Base.metadata.create_all(bind=engine)
         click.echo("[OLKORECT] Database tables recreated.")
 
@@ -139,7 +139,7 @@ def register_commands(app):
                 else:
                     click.echo("No database URI configured")
 
-                # Test connection  
+                # Test connection
                 with get_session() as db:
                     result = db.execute(text("SELECT 1"))
                     click.echo("[OLKORECT] Database connection successful!")

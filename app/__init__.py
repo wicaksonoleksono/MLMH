@@ -25,12 +25,12 @@ def create_app():
         if user_data:
             return SimpleUser(user_data)
         return None
-    from .route.user_routes import user_bp
-    from .route.main_routes import main_bp
-    from .route.admin_routes import admin_bp
+    from .routes.auth_routes import auth_bp
+    from .routes.main_routes import main_bp
     from .commands import register_commands
-    app.register_blueprint(user_bp)
+    from app.routes.admin.phq_routes import phq_bp
+    app.register_blueprint(phq_bp)
+    app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
-    app.register_blueprint(admin_bp)
     register_commands(app)
     return app

@@ -1,21 +1,24 @@
 # app/route/admin/phq_routes.py
 from flask import Blueprint, request
+from flask_login import current_user
 from ...services.admin.phqService import PHQService
-from ...decorators import admin_required, raw_response
+from ...decorators import raw_response
 phq_bp = Blueprint('phq', __name__, url_prefix='/admin/phq')
 
 
 @phq_bp.route('/categories', methods=['GET'])
-@admin_required
 @raw_response
 def get_categories():
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return {"status": "SNAFU", "error": "Admin access required"}, 403
     return PHQService.get_categories()
 
 
 @phq_bp.route('/categories', methods=['POST'])
-@admin_required
 @raw_response
 def create_category():
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return {"status": "SNAFU", "error": "Admin access required"}, 403
     data = request.get_json()
     return PHQService.create_category(
         name=data['name'],
@@ -27,33 +30,37 @@ def create_category():
 
 
 @phq_bp.route('/categories/<int:category_id>', methods=['PUT'])
-@admin_required
 @raw_response
 def update_category(category_id):
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return {"status": "SNAFU", "error": "Admin access required"}, 403
     data = request.get_json()
     return PHQService.update_category(category_id, data)
 
 
 @phq_bp.route('/categories/<int:category_id>', methods=['DELETE'])
-@admin_required
 @raw_response
 def delete_category(category_id):
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return {"status": "SNAFU", "error": "Admin access required"}, 403
     return PHQService.delete_category(category_id)
 
 
 # ===== QUESTION ROUTES =====
 @phq_bp.route('/questions', methods=['GET'])
-@admin_required
 @raw_response
 def get_questions():
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return {"status": "SNAFU", "error": "Admin access required"}, 403
     category_id = request.args.get('category_id', type=int)
     return PHQService.get_questions(category_id)
 
 
 @phq_bp.route('/questions', methods=['POST'])
-@admin_required
 @raw_response
 def create_question():
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return {"status": "SNAFU", "error": "Admin access required"}, 403
     data = request.get_json()
     return PHQService.create_question(
         category_id=data['category_id'],
@@ -64,32 +71,36 @@ def create_question():
 
 
 @phq_bp.route('/questions/<int:question_id>', methods=['PUT'])
-@admin_required
 @raw_response
 def update_question(question_id):
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return {"status": "SNAFU", "error": "Admin access required"}, 403
     data = request.get_json()
     return PHQService.update_question(question_id, data)
 
 
 @phq_bp.route('/questions/<int:question_id>', methods=['DELETE'])
-@admin_required
 @raw_response
 def delete_question(question_id):
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return {"status": "SNAFU", "error": "Admin access required"}, 403
     return PHQService.delete_question(question_id)
 
 
 # ===== SCALE ROUTES =====
 @phq_bp.route('/scales', methods=['GET'])
-@admin_required
 @raw_response
 def get_scales():
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return {"status": "SNAFU", "error": "Admin access required"}, 403
     return PHQService.get_scales()
 
 
 @phq_bp.route('/scales', methods=['POST'])
-@admin_required
 @raw_response
 def create_scale():
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return {"status": "SNAFU", "error": "Admin access required"}, 403
     data = request.get_json()
     return PHQService.create_scale(
         scale_name=data['scale_name'],
@@ -101,32 +112,36 @@ def create_scale():
 
 
 @phq_bp.route('/scales/<int:scale_id>', methods=['PUT'])
-@admin_required
 @raw_response
 def update_scale(scale_id):
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return {"status": "SNAFU", "error": "Admin access required"}, 403
     data = request.get_json()
     return PHQService.update_scale(scale_id, data)
 
 
 @phq_bp.route('/scales/<int:scale_id>', methods=['DELETE'])
-@admin_required
 @raw_response
 def delete_scale(scale_id):
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return {"status": "SNAFU", "error": "Admin access required"}, 403
     return PHQService.delete_scale(scale_id)
 
 
 # ===== SETTINGS ROUTES =====
 @phq_bp.route('/settings', methods=['GET'])
-@admin_required
 @raw_response
 def get_settings():
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return {"status": "SNAFU", "error": "Admin access required"}, 403
     return PHQService.get_settings()
 
 
 @phq_bp.route('/settings', methods=['POST'])
-@admin_required
 @raw_response
 def create_settings():
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return {"status": "SNAFU", "error": "Admin access required"}, 403
     data = request.get_json()
     return PHQService.create_settings(
         setting_name=data['setting_name'],
@@ -138,15 +153,17 @@ def create_settings():
 
 
 @phq_bp.route('/settings/<int:settings_id>', methods=['PUT'])
-@admin_required
 @raw_response
 def update_settings(settings_id):
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return {"status": "SNAFU", "error": "Admin access required"}, 403
     data = request.get_json()
     return PHQService.update_settings(settings_id, data)
 
 
 @phq_bp.route('/settings/<int:settings_id>', methods=['DELETE'])
-@admin_required
 @raw_response
 def delete_settings(settings_id):
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return {"status": "SNAFU", "error": "Admin access required"}, 403
     return PHQService.delete_settings(settings_id)

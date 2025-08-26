@@ -2,13 +2,14 @@ from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 import uuid
 from ...db import get_session
-from ...decorators import api_response
+from ...decorators import raw_response
 from ...model.assessment import AssessmentSession, PHQResponse
 from ...model.shared.users import User
 
+
 class PHQService:
     """PHQ Assessment Service for Patient Health Questionnaire processing"""
-    
+
     PHQ_QUESTIONS = [
         "Sedikit minat atau kesenangan dalam melakukan aktivitas",
         "Merasa sedih, tertekan, atau putus asa",
@@ -20,14 +21,14 @@ class PHQService:
         "Bergerak atau berbicara sangat lambat sehingga orang lain bisa menyadarinya, atau sebaliknya menjadi gelisah atau resah",
         "Berpikir bahwa lebih baik mati atau menyakiti diri sendiri dengan cara tertentu"
     ]
-    
+
     RESPONSE_OPTIONS = [
         {"value": 0, "text": "Tidak pernah"},
         {"value": 1, "text": "Beberapa hari"},
         {"value": 2, "text": "Lebih dari setengah hari"},
         {"value": 3, "text": "Hampir setiap hari"}
     ]
-    
+
     INTERPRETATION_LEVELS = {
         "minimal": {"range": [0, 4], "label": "Depresi minimal"},
         "mild": {"range": [5, 9], "label": "Depresi ringan"},
@@ -35,18 +36,17 @@ class PHQService:
         "moderately_severe": {"range": [15, 19], "label": "Depresi cukup berat"},
         "severe": {"range": [20, 27], "label": "Depresi berat"}
     }
-    
+
     @staticmethod
-    @api_response
     def start_phq_session(user_id: int, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Start a new PHQ assessment session"""
         with get_session() as db:
             user = db.query(User).filter_by(id=user_id).first()
             if not user:
                 raise ValueError("User not found")
-            
+
             session_token = str(uuid.uuid4())
-            
+
             session = AssessmentSession(
                 user_id=user_id,
                 assessment_type='PHQ',
@@ -60,11 +60,11 @@ class PHQService:
                 },
                 session_metadata=metadata or {}
             )
-            
+
             db.add(session)
             db.flush()  # Get the session ID
             session_id = session.id
-        
+
             return {
                 'session_id': session_id,
                 'session_token': session_token,
@@ -75,39 +75,39 @@ class PHQService:
                 'question_text': PHQService.PHQ_QUESTIONS[0],
                 'response_options': PHQService.RESPONSE_OPTIONS
             }
-    
+
     @staticmethod
-    @api_response
-    def submit_phq_response(session_token: str, question_number: int, response_value: int, 
-                           response_time_ms: Optional[int] = None) -> Dict[str, Any]:
+    def submit_phq_response(session_token: str, question_number: int, response_value: int,
+                            response_time_ms: Optional[int] = None) -> Dict[str, Any]:
         """Submit PHQ response for a specific question"""
         with get_session() as db:
             session = db.query(AssessmentSession).filter_by(
                 session_token=session_token,
                 assessment_type='PHQ'
             ).first()
-            
+
             if not session:
                 raise ValueError("PHQ session not found")
-            
+
             if session.is_completed:
                 raise ValueError("Session already completed")
-            
+
             if question_number < 0 or question_number >= len(PHQService.PHQ_QUESTIONS):
                 raise ValueError("Invalid question number")
-            
+
             if response_value not in [0, 1, 2, 3]:
                 raise ValueError("Invalid response value")
-            
+
             # Check if response already exists
             existing = db.query(PHQResponse).filter_by(
                 session_id=session.id,
                 question_number=question_number
             ).first()
-            
+
             if existing:
                 existing.response_value = response_value
-                existing.response_text = next(opt['text'] for opt in PHQService.RESPONSE_OPTIONS if opt['value'] == response_value)
+                existing.response_text = next(opt['text']
+                                              for opt in PHQService.RESPONSE_OPTIONS if opt['value'] == response_value)
                 existing.response_time_ms = response_time_ms
                 response = existing
             else:
@@ -116,21 +116,22 @@ class PHQService:
                     question_number=question_number,
                     question_text=PHQService.PHQ_QUESTIONS[question_number],
                     response_value=response_value,
-                    response_text=next(opt['text'] for opt in PHQService.RESPONSE_OPTIONS if opt['value'] == response_value),
+                    response_text=next(opt['text']
+                                       for opt in PHQService.RESPONSE_OPTIONS if opt['value'] == response_value),
                     response_time_ms=response_time_ms
                 )
                 db.add(response)
-            
+
             # Update session data
             session.session_data['current_question'] = question_number + 1
             session.updated_at = datetime.utcnow()
-            
+
             # Check if all questions answered
             total_responses = db.query(PHQResponse).filter_by(session_id=session.id).count()
-        
+
             if total_responses >= len(PHQService.PHQ_QUESTIONS):
                 return PHQService._complete_phq_session_with_db(session, db)
-            
+
             # Return next question
             next_question = question_number + 1
             return {
@@ -141,25 +142,25 @@ class PHQService:
                 'response_options': PHQService.RESPONSE_OPTIONS,
                 'progress_percentage': round((total_responses / len(PHQService.PHQ_QUESTIONS)) * 100, 2)
             }
-    
+
     @staticmethod
     def _complete_phq_session_with_db(session: AssessmentSession, db) -> Dict[str, Any]:
         """Complete PHQ session and calculate results with provided db session"""
         responses = db.query(PHQResponse).filter_by(session_id=session.id).all()
-        
+
         if len(responses) != len(PHQService.PHQ_QUESTIONS):
             raise ValueError("Incomplete PHQ responses")
-        
+
         # Calculate total score
         total_score = sum(response.response_value for response in responses)
-        
+
         # Determine severity level
         severity_level = PHQService._get_severity_level(total_score)
-        
+
         # Calculate response statistics
         response_times = [r.response_time_ms for r in responses if r.response_time_ms]
         avg_response_time = sum(response_times) / len(response_times) if response_times else None
-        
+
         results = {
             'total_score': total_score,
             'severity_level': severity_level['level'],
@@ -173,16 +174,16 @@ class PHQService:
             'average_response_time_ms': avg_response_time,
             'completion_time': datetime.utcnow().isoformat()
         }
-        
+
         session.complete_session(results)
-        
+
         return {
             'session_id': session.id,
             'status': 'COMPLETED',
             'results': results,
             'completion_message': f"PHQ-9 selesai dengan skor {total_score} ({severity_level['label']})"
         }
-    
+
     @staticmethod
     def _get_severity_level(score: int) -> Dict[str, Any]:
         """Determine PHQ severity level from total score"""
@@ -193,13 +194,13 @@ class PHQService:
                     'label': data['label'],
                     'interpretation': PHQService._get_interpretation_text(level, score)
                 }
-        
+
         return {
             'level': 'severe',
             'label': 'Depresi berat',
             'interpretation': 'Skor menunjukkan tingkat depresi yang sangat tinggi'
         }
-    
+
     @staticmethod
     def _get_interpretation_text(level: str, score: int) -> str:
         """Get detailed interpretation text for severity level"""
@@ -211,9 +212,8 @@ class PHQService:
             'severe': f'Skor {score} menunjukkan tingkat depresi berat. Gejala depresi sangat mengganggu dan memerlukan bantuan profesional.'
         }
         return interpretations.get(level, f'Skor {score} memerlukan evaluasi lebih lanjut.')
-    
+
     @staticmethod
-    @api_response
     def get_phq_session(session_token: str) -> Dict[str, Any]:
         """Get PHQ session details"""
         with get_session() as db:
@@ -221,12 +221,12 @@ class PHQService:
                 session_token=session_token,
                 assessment_type='PHQ'
             ).first()
-            
+
             if not session:
                 raise ValueError("PHQ session not found")
-            
+
             responses = db.query(PHQResponse).filter_by(session_id=session.id).all()
-        
+
             return {
                 'session_id': session.id,
                 'status': session.status,
@@ -246,9 +246,8 @@ class PHQService:
                     } for r in responses
                 ]
             }
-    
+
     @staticmethod
-    @api_response
     def get_user_phq_history(user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
         """Get PHQ assessment history for user"""
         with get_session() as db:
@@ -256,7 +255,7 @@ class PHQService:
                 user_id=user_id,
                 assessment_type='PHQ'
             ).order_by(AssessmentSession.created_at.desc()).limit(limit).all()
-            
+
             return [
                 {
                     'session_id': session.id,

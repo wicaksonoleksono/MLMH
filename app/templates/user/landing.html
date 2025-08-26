@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}User Dashboard - Mental Health Assessment{% endblock %}
+
+{% block content %}
+<div class="min-h-full bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <div class="text-center mb-12">
+            <h1 class="text-4xl font-bold text-gray-900">Welcome, {{ user.uname }}</h1>
+            <p class="mt-2 text-lg text-gray-600">Your mental health journey starts here</p>
+        </div>
+
+        <!-- Placeholder Content -->
+        <div class="bg-white rounded-3xl shadow-lg p-12 text-center">
+            <div class="text-6xl mb-6">🚧</div>
+            <h2 class="text-2xl font-bold text-gray-900 mb-4">Coming Soon</h2>
+            <p class="text-gray-600">User interface is under development</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

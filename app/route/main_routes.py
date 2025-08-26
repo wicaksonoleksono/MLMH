@@ -10,7 +10,8 @@ main_bp = Blueprint('main', __name__)
 def serve_index():
     """Main landing page with authentication check."""
     if current_user.is_authenticated:
-        return render_template('landing.html', user=current_user)
+        template = "admin/landing.html" if current_user.is_admin else "user/landing.html"
+        return render_template(template, user=current_user)
     return redirect(url_for('main.auth_page'))
 
 
@@ -18,7 +19,6 @@ def serve_index():
 @raw_response
 def auth_page():
     """Authentication page (login/register)."""
-    # If already authenticated, redirect to main
     if current_user.is_authenticated:
         return redirect(url_for('main.serve_index'))
 

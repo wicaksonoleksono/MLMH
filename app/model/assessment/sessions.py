@@ -26,7 +26,7 @@ class AssessmentSession(BaseModel):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    user = relationship("User", back_populates="assessment_sessions")
+    user = relationship("User")
     phq_responses = relationship("PHQResponse", back_populates="session", cascade="all, delete-orphan")
     open_question_responses = relationship("OpenQuestionResponse", back_populates="session", cascade="all, delete-orphan")
     camera_captures = relationship("CameraCapture", back_populates="session", cascade="all, delete-orphan")

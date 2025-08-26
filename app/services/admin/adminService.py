@@ -1,9 +1,9 @@
 # app/services/admin/adminService.py
 from typing import List, Optional, Dict, Any
 from sqlalchemy import and_, or_
-from ..shared.database import db_session
 from ...decorators import api_response
 from ...model.admin import SystemSetting, AssessmentConfig, MediaSetting, AdminLog, QuestionPool
+from ...db import get_session
 
 
 class AdminService:
@@ -13,30 +13,31 @@ class AdminService:
     @api_response
     def get_system_settings(category: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get all system settings, optionally filtered by category"""
-        query = db_session.query(SystemSetting).filter(SystemSetting.is_active == True)
-        
-        if category:
-            query = query.filter(SystemSetting.category == category)
-        
-        settings = query.order_by(SystemSetting.category, SystemSetting.key).all()
-        
-        return [{
-            'id': setting.id,
-            'key': setting.key,
-            'value': setting.value,
-            'parsed_value': setting.parsed_value,
-            'data_type': setting.data_type,
-            'category': setting.category,
-            'description': setting.description,
-            'is_editable': setting.is_editable,
-            'requires_restart': setting.requires_restart
-        } for setting in settings]
+        with get_session() as db:
+            query = db.query(SystemSetting).filter(SystemSetting.is_active == True)
+            
+            if category:
+                query = query.filter(SystemSetting.category == category)
+            
+            settings = query.order_by(SystemSetting.category, SystemSetting.key).all()
+            
+            return [{
+                'id': setting.id,
+                'key': setting.key,
+                'value': setting.value,
+                'parsed_value': setting.parsed_value,
+                'data_type': setting.data_type,
+                'category': setting.category,
+                'description': setting.description,
+                'is_editable': setting.is_editable,
+                'requires_restart': setting.requires_restart
+            } for setting in settings]
     
     @staticmethod
     @api_response
     def update_system_setting(key: str, value: str, admin_user: str) -> Dict[str, Any]:
         """Update a system setting value"""
-        setting = db_session.query(SystemSetting).filter(
+        setting = AdminService._get_db().query(SystemSetting).filter(
             and_(SystemSetting.key == key, SystemSetting.is_active == True)
         ).first()
         
@@ -58,7 +59,7 @@ class AdminService:
             details={'old_value': old_value, 'new_value': value}
         )
         
-        db_session.commit()
+        AdminService._get_db().commit()
         
         return {
             'key': setting.key,
@@ -73,7 +74,7 @@ class AdminService:
     def create_system_setting(key: str, value: str, data_type: str, category: str, 
                             description: str, admin_user: str) -> Dict[str, Any]:
         """Create a new system setting"""
-        existing = db_session.query(SystemSetting).filter(SystemSetting.key == key).first()
+        existing = AdminService._get_db().query(SystemSetting).filter(SystemSetting.key == key).first()
         if existing:
             raise ValueError(f"System setting '{key}' already exists")
         
@@ -85,7 +86,7 @@ class AdminService:
             description=description
         )
         
-        db_session.add(setting)
+        AdminService._get_db().add(setting)
         
         AdminService._log_action(
             admin_user=admin_user,
@@ -95,7 +96,7 @@ class AdminService:
             details={'value': value, 'data_type': data_type, 'category': category}
         )
         
-        db_session.commit()
+        AdminService._get_db().commit()
         
         return {
             'id': setting.id,
@@ -109,7 +110,7 @@ class AdminService:
     @api_response
     def get_assessment_configs(assessment_type: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get assessment configurations"""
-        query = db_session.query(AssessmentConfig).filter(AssessmentConfig.is_active == True)
+        query = AdminService._get_db().query(AssessmentConfig).filter(AssessmentConfig.is_active == True)
         
         if assessment_type:
             query = query.filter(AssessmentConfig.assessment_type == assessment_type)
@@ -132,7 +133,7 @@ class AdminService:
     def create_assessment_config(config_name: str, assessment_type: str, config_data: Dict[str, Any],
                                description: str, admin_user: str) -> Dict[str, Any]:
         """Create new assessment configuration"""
-        existing = db_session.query(AssessmentConfig).filter(
+        existing = AdminService._get_db().query(AssessmentConfig).filter(
             AssessmentConfig.config_name == config_name
         ).first()
         if existing:
@@ -146,7 +147,7 @@ class AdminService:
             created_by_admin=admin_user
         )
         
-        db_session.add(config)
+        AdminService._get_db().add(config)
         
         AdminService._log_action(
             admin_user=admin_user,
@@ -156,7 +157,7 @@ class AdminService:
             details={'assessment_type': assessment_type}
         )
         
-        db_session.commit()
+        AdminService._get_db().commit()
         
         return {
             'id': config.id,
@@ -169,7 +170,7 @@ class AdminService:
     @api_response
     def get_media_settings(media_type: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get media settings"""
-        query = db_session.query(MediaSetting).filter(MediaSetting.is_active == True)
+        query = AdminService._get_db().query(MediaSetting).filter(MediaSetting.is_active == True)
         
         if media_type:
             query = query.filter(MediaSetting.media_type == media_type)
@@ -193,7 +194,7 @@ class AdminService:
     @api_response
     def update_media_setting(setting_id: int, updates: Dict[str, Any], admin_user: str) -> Dict[str, Any]:
         """Update media setting"""
-        setting = db_session.query(MediaSetting).filter(
+        setting = AdminService._get_db().query(MediaSetting).filter(
             and_(MediaSetting.id == setting_id, MediaSetting.is_active == True)
         ).first()
         
@@ -214,7 +215,7 @@ class AdminService:
             details={'updates': updates, 'old_values': old_values}
         )
         
-        db_session.commit()
+        AdminService._get_db().commit()
         
         return {
             'id': setting.id,
@@ -226,7 +227,7 @@ class AdminService:
     @api_response
     def get_question_pools(question_type: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get question pools"""
-        query = db_session.query(QuestionPool).filter(QuestionPool.is_active == True)
+        query = AdminService._get_db().query(QuestionPool).filter(QuestionPool.is_active == True)
         
         if question_type:
             query = query.filter(QuestionPool.question_type == question_type)
@@ -249,7 +250,7 @@ class AdminService:
     @api_response
     def get_admin_logs(limit: int = 100, admin_user: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get admin action logs"""
-        query = db_session.query(AdminLog)
+        query = AdminService._get_db().query(AdminLog)
         
         if admin_user:
             query = query.filter(AdminLog.admin_user == admin_user)
@@ -271,15 +272,16 @@ class AdminService:
     def _log_action(admin_user: str, action: str, target_type: str, target_id: str = None,
                    details: Dict[str, Any] = None, ip_address: str = None):
         """Internal method to log admin actions"""
-        log = AdminLog(
-            admin_user=admin_user,
-            action=action,
-            target_type=target_type,
-            target_id=target_id,
-            details=details,
-            ip_address=ip_address
-        )
-        db_session.add(log)
+        with get_session() as db:
+            log = AdminLog(
+                admin_user=admin_user,
+                action=action,
+                target_type=target_type,
+                target_id=target_id,
+                details=details,
+                ip_address=ip_address
+            )
+            db.add(log)
     
     @staticmethod
     @api_response
@@ -289,15 +291,15 @@ class AdminService:
         from ...model.assessment import AssessmentSession, Assessment
         
         # User statistics
-        total_users = db_session.query(User).filter(User.is_active == True).count()
-        admin_users = db_session.query(User).join(User.user_type).filter(
+        total_users = AdminService._get_db().query(User).filter(User.is_active == True).count()
+        admin_users = AdminService._get_db().query(User).join(User.user_type).filter(
             and_(User.is_active == True, User.user_type.has(name='admin'))
         ).count()
         
         # Assessment statistics
-        total_assessments = db_session.query(Assessment).filter(Assessment.is_active == True).count()
-        total_sessions = db_session.query(AssessmentSession).count()
-        completed_sessions = db_session.query(AssessmentSession).filter(
+        total_assessments = AdminService._get_db().query(Assessment).filter(Assessment.is_active == True).count()
+        total_sessions = AdminService._get_db().query(AssessmentSession).count()
+        completed_sessions = AdminService._get_db().query(AssessmentSession).filter(
             AssessmentSession.status == 'COMPLETED'
         ).count()
         
@@ -314,8 +316,8 @@ class AdminService:
                 'completion_rate': round((completed_sessions / total_sessions * 100), 2) if total_sessions > 0 else 0
             },
             'settings': {
-                'total_settings': db_session.query(SystemSetting).filter(SystemSetting.is_active == True).count(),
-                'assessment_configs': db_session.query(AssessmentConfig).filter(AssessmentConfig.is_active == True).count(),
-                'media_settings': db_session.query(MediaSetting).filter(MediaSetting.is_active == True).count()
+                'total_settings': AdminService._get_db().query(SystemSetting).filter(SystemSetting.is_active == True).count(),
+                'assessment_configs': AdminService._get_db().query(AssessmentConfig).filter(AssessmentConfig.is_active == True).count(),
+                'media_settings': AdminService._get_db().query(MediaSetting).filter(MediaSetting.is_active == True).count()
             }
         }

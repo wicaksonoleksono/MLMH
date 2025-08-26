@@ -1,75 +1,65 @@
 import click
 from flask import current_app
-from . import db
 from .model.shared.users import User
 from .model.shared.enums import UserType
+from .db import get_session, create_all_tables, get_engine
 from sqlalchemy.exc import IntegrityError
 
 
 def register_commands(app):
     """Register all custom CLI commands with the Flask app."""
-
+    
     @app.cli.command("init-db")
     def init_db():
         """Creates all database tables from the models."""
-        with app.app_context():
-            db.create_all()
-            click.echo("[OLKORECT] Database tables created.")
+        create_all_tables()
+        click.echo("[OLKORECT] Database tables created.")
 
     @app.cli.command("seed-db")
     def seed_db():
         """Seeds the database with minimal essential data."""
-        with app.app_context():
-            click.echo("[OLKORECT] Seeding database with essential data...")
-
-            # Seed UserTypes
+        click.echo("[OLKORECT] Seeding database with essential data...")
+        
+        with get_session() as db:
             user_types = [
                 {"name": "admin", "description": "Administrator user"},
                 {"name": "user", "description": "Regular user"}
             ]
-
             for ut_data in user_types:
-                existing = db.session.query(UserType).filter_by(name=ut_data["name"]).first()
+                existing = db.query(UserType).filter_by(name=ut_data["name"]).first()
                 if not existing:
                     user_type_obj = UserType(**ut_data)
-                    db.session.add(user_type_obj)
+                    db.add(user_type_obj)
                     click.echo(f"  - UserType '{ut_data['name']}' created")
-
-            # Seed default admin and user accounts
-            admin_type = db.session.query(UserType).filter_by(name="admin").first()
-            user_type = db.session.query(UserType).filter_by(name="user").first()
-
+                    
+        with get_session() as db:
+            admin_type = db.query(UserType).filter_by(name="admin").first()
             if admin_type:
-                existing_admin = db.session.query(User).filter_by(uname="admin").first()
+                existing_admin = db.query(User).filter_by(uname="admin").first()
                 if not existing_admin:
                     admin_user = User.create_user(
                         uname="admin",
                         password="admin",
-                        user_type_id=admin_type.id,
-                        email="admin@localhost"
+                        user_type_id=admin_type.id
                     )
-                    db.session.add(admin_user)
+                    db.add(admin_user)
                     click.echo("  - Default admin user created (admin/admin)")
 
+        with get_session() as db:
+            user_type = db.query(UserType).filter_by(name="user").first()
             if user_type:
-                existing_user = db.session.query(User).filter_by(uname="user").first()
+                existing_user = db.query(User).filter_by(uname="user").first()
                 if not existing_user:
                     regular_user = User.create_user(
                         uname="user",
                         password="user",
-                        user_type_id=user_type.id,
-                        email="user@localhost"
+                        user_type_id=user_type.id
                     )
-                    db.session.add(regular_user)
+                    db.add(regular_user)
                     click.echo("  - Default regular user created (user/user)")
 
-            try:
-                db.session.commit()
-                click.echo("[OLKORECT] Database seeding completed successfully!")
-                click.echo("  - Admin can configure settings, assessments, and media via web UI")
-            except IntegrityError as e:
-                db.session.rollback()
-                click.echo(f"[SNAFU] Error seeding database: {str(e)}")
+        click.echo("[OLKORECT] Database seeding completed successfully!")
+        click.echo("  - Admin can configure settings, assessments, and media via web UI")
 
     @app.cli.command("create-admin")
     @click.argument("username")
@@ -77,13 +67,13 @@ def register_commands(app):
     @click.option("--email", default=None, help="Admin email address")
     def create_admin(username, password, email):
         """Create a new admin user."""
-        with app.app_context():
-            admin_type = db.session.query(UserType).filter_by(name="admin").first()
+        with get_session() as db:
+            admin_type = db.query(UserType).filter_by(name="admin").first()
             if not admin_type:
                 click.echo("[SNAFU] Admin user type not found. Run 'seed-db' first.")
                 return
 
-            existing = db.session.query(User).filter_by(uname=username).first()
+            existing = db.query(User).filter_by(uname=username).first()
             if existing:
                 click.echo(f"[SNAFU] User '{username}' already exists.")
                 return
@@ -95,28 +85,33 @@ def register_commands(app):
                     user_type_id=admin_type.id,
                     email=email
                 )
-                db.session.add(admin_user)
-                db.session.commit()
+                db.add(admin_user)
                 click.echo(f"[OLKORECT] Admin user '{username}' created successfully!")
             except Exception as e:
-                db.session.rollback()
                 click.echo(f"[SNAFU] Error creating admin user: {str(e)}")
 
     @app.cli.command("reset-db")
     @click.confirmation_option(prompt="Are you sure you want to drop all tables?")
     def reset_db():
         """Drop all tables and recreate them."""
-        with app.app_context():
-            db.drop_all()
-            click.echo("[WATCHOUT] All tables dropped.")
-            db.create_all()
-            click.echo("[OLKORECT] Database tables recreated.")
+        from .model.base import Base
+        # Import all models to ensure they're registered
+        from .model.shared.users import User
+        from .model.shared.enums import UserType, AssessmentStatus, MediaType, AssessmentType, PHQCategory, ScaleLabel, SettingType
+        from .model.admin.admin import SystemSetting, AssessmentConfig, MediaSetting, AdminLog, QuestionPool
+        from .model.assessment.sessions import AssessmentSession, PHQResponse, OpenQuestionResponse, CameraCapture, SessionExport
+        
+        engine = get_engine()
+        Base.metadata.drop_all(bind=engine)
+        click.echo("[WATCHOUT] All tables dropped.")
+        Base.metadata.create_all(bind=engine)
+        click.echo("[OLKORECT] Database tables recreated.")
 
     @app.cli.command("list-users")
     def list_users():
         """List all users in the database."""
-        with app.app_context():
-            users = db.session.query(User).all()
+        with get_session() as db:
+            users = db.query(User).all()
             if not users:
                 click.echo("No users found in database.")
                 return
@@ -126,3 +121,50 @@ def register_commands(app):
             for user in users:
                 click.echo(
                     f"ID: {user.id} | Username: {user.uname} | Type: {user.user_type.name} | Active: {user.is_active}")
+
+    @app.cli.command("ping-db")
+    def ping_db():
+        """Test database connection and show connection info."""
+        with app.app_context():
+            try:
+                from sqlalchemy import text
+
+                # Show current database URI (without password)
+                db_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+                if db_uri:
+                    # Hide password for security
+                    safe_uri = db_uri.split('@')[0].split(':')[:-1]
+                    safe_uri = ':'.join(safe_uri) + ':***@' + db_uri.split('@')[1] if '@' in db_uri else db_uri
+                    click.echo(f"Database URI: {safe_uri}")
+                else:
+                    click.echo("No database URI configured")
+
+                # Test connection  
+                with get_session() as db:
+                    result = db.execute(text("SELECT 1"))
+                    click.echo("[OLKORECT] Database connection successful!")
+
+                    # Show database info
+                    if 'postgresql' in db_uri:
+                        version_result = db.execute(text("SELECT version()"))
+                        version = version_result.scalar()
+                        click.echo(f"Database: {version}")
+
+                        # Show current database name
+                        db_name_result = db.execute(text("SELECT current_database()"))
+                        db_name = db_name_result.scalar()
+                        click.echo(f"Connected to database: {db_name}")
+
+                        # Show current user
+                        user_result = db.execute(text("SELECT current_user"))
+                        current_user_name = user_result.scalar()
+                        click.echo(f"Connected as user: {current_user_name}")
+
+                    elif 'sqlite' in db_uri:
+                        version_result = db.execute(text("SELECT sqlite_version()"))
+                        version = version_result.scalar()
+                        click.echo(f"SQLite version: {version}")
+
+            except Exception as e:
+                click.echo(f"[SNAFU] Database connection failed: {str(e)}")
+                click.echo("Check your database configuration and ensure the database server is running.")

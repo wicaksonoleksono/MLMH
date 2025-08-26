@@ -31,3 +31,13 @@ def auth_page():
 def dashboard():
     """User dashboard after login."""
     return render_template('user/dashboard.html', user=current_user)
+
+
+@main_bp.route('/admin/phq')
+@login_required
+@raw_response
+def admin_phq():
+    """PHQ settings page for admin."""
+    if not current_user.is_admin:
+        return redirect(url_for('main.serve_index'))
+    return render_template('admin/settings/phq/index.html', user=current_user)

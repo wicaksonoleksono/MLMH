@@ -1,7 +1,7 @@
 # app/services/admin/phqService.py
 from typing import List, Optional, Dict, Any
 from sqlalchemy import and_
-from ...decorators import api_response
+from ...decorators import raw_response
 from ...model.admin.phq import PHQCategory, PHQQuestion, PHQScale, PHQSettings
 from ...db import get_session
 
@@ -11,7 +11,7 @@ class PHQService:
 
     # ===== CATEGORY CRUD =====
     @staticmethod
-    @api_response
+    @raw_response
     def get_categories() -> List[Dict[str, Any]]:
         """Get all PHQ categories"""
         with get_session() as db:
@@ -29,7 +29,7 @@ class PHQService:
             } for cat in categories]
 
     @staticmethod
-    @api_response
+    @raw_response
     def create_category(name: str, name_id: str, description_en: str = None,
                         description_id: str = None, order_index: int = 0) -> Dict[str, Any]:
         """Create new PHQ category"""
@@ -57,7 +57,7 @@ class PHQService:
             }
 
     @staticmethod
-    @api_response
+    @raw_response
     def update_category(category_id: int, updates: Dict[str, Any]) -> Dict[str, Any]:
         """Update PHQ category"""
         with get_session() as db:
@@ -81,7 +81,7 @@ class PHQService:
             }
 
     @staticmethod
-    @api_response
+    @raw_response
     def delete_category(category_id: int) -> Dict[str, Any]:
         """Soft delete PHQ category"""
         with get_session() as db:
@@ -97,7 +97,7 @@ class PHQService:
 
     # ===== QUESTION CRUD =====
     @staticmethod
-    @api_response
+    @raw_response
     def get_questions(category_id: Optional[int] = None) -> List[Dict[str, Any]]:
         """Get PHQ questions, optionally filtered by category"""
         with get_session() as db:
@@ -118,7 +118,7 @@ class PHQService:
             } for q in questions]
 
     @staticmethod
-    @api_response
+    @raw_response
     def create_question(category_id: int, question_text_en: str, question_text_id: str,
                         order_index: int = 0) -> Dict[str, Any]:
         """Create new PHQ question"""
@@ -148,7 +148,7 @@ class PHQService:
             }
 
     @staticmethod
-    @api_response
+    @raw_response
     def update_question(question_id: int, updates: Dict[str, Any]) -> Dict[str, Any]:
         """Update PHQ question"""
         with get_session() as db:
@@ -171,7 +171,7 @@ class PHQService:
             }
 
     @staticmethod
-    @api_response
+    @raw_response
     def delete_question(question_id: int) -> Dict[str, Any]:
         """Soft delete PHQ question"""
         with get_session() as db:
@@ -187,7 +187,7 @@ class PHQService:
 
     # ===== SCALE CRUD =====
     @staticmethod
-    @api_response
+    @raw_response
     def get_scales() -> List[Dict[str, Any]]:
         """Get all PHQ scales"""
         with get_session() as db:
@@ -203,7 +203,7 @@ class PHQService:
             } for scale in scales]
 
     @staticmethod
-    @api_response
+    @raw_response
     def create_scale(scale_name: str, min_value: int, max_value: int,
                      scale_labels: Dict[str, str], is_default: bool = False) -> Dict[str, Any]:
         """Create new PHQ scale"""
@@ -231,7 +231,7 @@ class PHQService:
             }
 
     @staticmethod
-    @api_response
+    @raw_response
     def update_scale(scale_id: int, updates: Dict[str, Any]) -> Dict[str, Any]:
         """Update PHQ scale"""
         with get_session() as db:
@@ -258,7 +258,7 @@ class PHQService:
             }
 
     @staticmethod
-    @api_response
+    @raw_response
     def delete_scale(scale_id: int) -> Dict[str, Any]:
         """Soft delete PHQ scale"""
         with get_session() as db:
@@ -274,7 +274,7 @@ class PHQService:
 
     # ===== SETTINGS CRUD =====
     @staticmethod
-    @api_response
+    @raw_response
     def get_settings() -> List[Dict[str, Any]]:
         """Get all PHQ settings"""
         with get_session() as db:
@@ -291,7 +291,7 @@ class PHQService:
             } for setting in settings]
 
     @staticmethod
-    @api_response
+    @raw_response
     def create_settings(setting_name: str, questions_per_category: int, scale_id: int,
                         randomize_questions: bool = False, is_default: bool = False) -> Dict[str, Any]:
         """Create new PHQ settings"""
@@ -322,7 +322,7 @@ class PHQService:
             }
 
     @staticmethod
-    @api_response
+    @raw_response
     def update_settings(settings_id: int, updates: Dict[str, Any]) -> Dict[str, Any]:
         """Update PHQ settings"""
         with get_session() as db:
@@ -349,7 +349,7 @@ class PHQService:
             }
 
     @staticmethod
-    @api_response
+    @raw_response
     def delete_settings(settings_id: int) -> Dict[str, Any]:
         """Soft delete PHQ settings"""
         with get_session() as db:

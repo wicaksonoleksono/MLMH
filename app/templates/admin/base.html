@@ -1,169 +1,218 @@
 <!DOCTYPE html>
 <html lang="id" class="h-full bg-gray-50">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Admin - Mental Health Assessment{% endblock %}</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>
+      {% block title %}Admin - Mental Health Assessment{% endblock %}
+    </title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"
+    ></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <style>
-        body { font-family: 'Inter', sans-serif; }
+      body {
+        font-family: "Inter", sans-serif;
+      }
     </style>
     {% block head %}{% endblock %}
-</head>
-<body class="h-full bg-gray-50">
+  </head>
+  <body class="h-full bg-gray-50">
     <div class="min-h-full">
-        <!-- Navigation -->
-        <nav class="bg-white shadow-sm border-b border-gray-200" x-data="navbar()">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="flex justify-between h-16">
-                    <!-- Logo & Brand -->
-                    <div class="flex items-center">
-                        <div class="flex-shrink-0 flex items-center">
-                            <span class="text-2xl">🧠</span>
-                            <span class="ml-2 text-xl font-semibold text-gray-900">MH Admin</span>
-                        </div>
-                    </div>
-
-                    <!-- Navigation Links -->
-                    <div class="hidden md:flex items-center space-x-8">
-                        <template x-for="item in navItems" :key="item.name">
-                            <a :href="item.href" 
-                               class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
-                               :class="{ 'text-indigo-600 bg-indigo-50': isActive(item.href) }"
-                               x-text="item.name"></a>
-                        </template>
-                    </div>
-
-                    <!-- User Menu -->
-                    <div class="flex items-center space-x-4">
-                        <span class="text-sm text-gray-700">{{ user.uname }}</span>
-                        <div class="relative" x-data="{ open: false }">
-                            <button @click="open = !open" 
-                                    class="flex items-center text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                                <div class="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center">
-                                    <span class="text-indigo-600 font-medium">{{ user.uname[0].upper() }}</span>
-                                </div>
-                            </button>
-                            
-                            <div x-show="open" @click.away="open = false"
-                                 class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
-                                <a href="/admin/profile" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Profil</a>
-                                <hr class="my-1">
-                                <button @click="logout()" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50">
-                                    Keluar
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Mobile menu button -->
-                    <div class="md:hidden flex items-center">
-                        <button @click="mobileOpen = !mobileOpen" 
-                                class="text-gray-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 p-2">
-                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-                            </svg>
-                        </button>
-                    </div>
-                </div>
+      <!-- Navigation -->
+      <nav
+        class="bg-white shadow-sm border-b border-gray-200"
+        x-data="navbar()"
+      >
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div class="flex justify-between h-16">
+            <!-- Logo & Brand -->
+            <div class="flex items-center">
+              <div class="flex-shrink-0 flex items-center">
+                <span class="text-2xl">🧠</span>
+                <span class="ml-2 text-xl font-semibold text-gray-900"
+                  >MH Admin</span
+                >
+              </div>
             </div>
 
-            <!-- Mobile menu -->
-            <div x-show="mobileOpen" class="md:hidden">
-                <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white border-t border-gray-200">
-                    <template x-for="item in navItems" :key="item.name">
-                        <a :href="item.href" 
-                           class="block px-3 py-2 rounded-md text-base font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                           x-text="item.name"></a>
-                    </template>
-                </div>
+            <!-- Navigation Links -->
+            <div class="hidden md:flex items-center space-x-8">
+              <template x-for="item in navItems" :key="item.name">
+                <a
+                  :href="item.href"
+                  class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                  :class="{ 'text-indigo-600 bg-indigo-50': isActive(item.href) }"
+                  x-text="item.name"
+                ></a>
+              </template>
             </div>
-        </nav>
 
-        <!-- Main Content -->
-        <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-            {% block content %}{% endblock %}
-        </main>
+            <!-- User Menu -->
+            <div class="flex items-center space-x-4">
+              <span class="text-sm text-gray-700">{{ user.uname }}</span>
+              <div class="relative" x-data="{ open: false }">
+                <button
+                  @click="open = !open"
+                  class="flex items-center text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <div
+                    class="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center"
+                  >
+                    <span class="text-indigo-600 font-medium"
+                      >{{ user.uname[0].upper() }}</span
+                    >
+                  </div>
+                </button>
+
+                <div
+                  x-show="open"
+                  @click.away="open = false"
+                  class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50"
+                >
+                  <a
+                    href="/admin/profile"
+                    class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    >Profil</a
+                  >
+                  <hr class="my-1" />
+                  <button
+                    @click="logout()"
+                    class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                  >
+                    Keluar
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Mobile menu button -->
+            <div class="md:hidden flex items-center">
+              <button
+                @click="mobileOpen = !mobileOpen"
+                class="text-gray-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 p-2"
+              >
+                <svg
+                  class="h-6 w-6"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M4 6h16M4 12h16M4 18h16"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mobile menu -->
+        <div x-show="mobileOpen" class="md:hidden">
+          <div
+            class="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white border-t border-gray-200"
+          >
+            <template x-for="item in navItems" :key="item.name">
+              <a
+                :href="item.href"
+                class="block px-3 py-2 rounded-md text-base font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                x-text="item.name"
+              ></a>
+            </template>
+          </div>
+        </div>
+      </nav>
+
+      <!-- Main Content -->
+      <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        {% block content %}{% endblock %}
+      </main>
     </div>
 
     <!-- API Helper -->
     <script>
-        function setAuthToken(token) {
-            localStorage.setItem('jwt_token', token);
+      function setAuthToken(token) {
+        localStorage.setItem("jwt_token", token);
+      }
+
+      function getAuthToken() {
+        return localStorage.getItem("jwt_token");
+      }
+
+      function clearAuthToken() {
+        localStorage.removeItem("jwt_token");
+      }
+
+      async function apiCall(url, method = "GET", data = null) {
+        const options = {
+          method,
+          headers: { "Content-Type": "application/json" },
+        };
+
+        const token = getAuthToken();
+        if (token) {
+          options.headers["Authorization"] = `Bearer ${token}`;
         }
-        
-        function getAuthToken() {
-            return localStorage.getItem('jwt_token');
+
+        if (data) {
+          options.body = JSON.stringify(data);
         }
-        
-        function clearAuthToken() {
-            localStorage.removeItem('jwt_token');
+
+        try {
+          const response = await fetch(url, options);
+          const result = await response.json();
+
+          if (response.status === 401) {
+            clearAuthToken();
+          }
+
+          return result;
+        } catch (error) {
+          console.error("API Error:", error);
+          return { status: "SNAFU", error: error.message };
         }
-        
-        async function apiCall(url, method = 'GET', data = null) {
-            const options = {
-                method,
-                headers: { 'Content-Type': 'application/json' }
-            };
-            
-            const token = getAuthToken();
-            if (token) {
-                options.headers['Authorization'] = `Bearer ${token}`;
-            }
-            
-            if (data) {
-                options.body = JSON.stringify(data);
-            }
-            
+      }
+
+      function navbar() {
+        return {
+          mobileOpen: false,
+          navItems: [
+            { name: "Dasbor", href: "/" },
+            { name: "Asesmen PHQ", href: "/admin/phq" },
+            { name: "Pengaturan Kamera", href: "/admin/camera" },
+            { name: "Asesmen LLM", href: "/admin/llm" },
+          ],
+
+          isActive(href) {
+            return window.location.pathname === href;
+          },
+
+          async logout() {
             try {
-                const response = await fetch(url, options);
-                const result = await response.json();
-                
-                if (response.status === 401) {
-                    clearAuthToken();
-                }
-                
-                return result;
+              const result = await apiCall("/auth/logout", "POST");
+              if (result && result.status === "OLKORECT") {
+                window.location.href = "/auth";
+              } else {
+                alert(result.error || "Gagal keluar");
+              }
             } catch (error) {
-                console.error('API Error:', error);
-                return { status: 'SNAFU', error: error.message };
+              alert("Kesalahan keluar: " + error.message);
             }
-        }
-
-        function navbar() {
-            return {
-                mobileOpen: false,
-                navItems: [
-                    { name: 'Dasbor', href: '/' },
-                    { name: 'Asesmen PHQ', href: '/admin/phq' },
-                    { name: 'Pengaturan Kamera', href: '/admin/camera' },
-                    { name: 'Asesmen LLM', href: '/admin/llm' }
-                ],
-
-                isActive(href) {
-                    return window.location.pathname === href;
-                },
-
-                async logout() {
-                    try {
-                        const result = await apiCall('/user/logout', 'POST');
-                        if (result && result.status === 'OLKORECT') {
-                            window.location.href = '/auth';
-                        } else {
-                            alert(result.error || 'Gagal keluar');
-                        }
-                    } catch (error) {
-                        alert('Kesalahan keluar: ' + error.message);
-                    }
-                }
-            };
-        }
+          },
+        };
+      }
     </script>
 
     {% block scripts %}{% endblock %}
-</body>
+  </body>
 </html>

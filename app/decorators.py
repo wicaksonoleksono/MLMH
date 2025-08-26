@@ -43,6 +43,16 @@ def api_response(f):
     def decorated_function(*args, **kwargs):
         try:
             result = f(*args, **kwargs)
+            
+            # Handle tuple responses with status codes (e.g., return data, 401)
+            if isinstance(result, tuple) and len(result) == 2:
+                data, status_code = result
+                if status_code >= 400:  # Error status codes
+                    return jsonify({"status": "SNAFU", "error": data.get("message", "Unknown error")}), status_code
+                else:
+                    return jsonify({"status": "OLKORECT", "data": data}), status_code
+            
+            # Regular response
             return jsonify({"status": "OLKORECT", "data": result})
         except Exception as e:
             error_msg = f"{str(e)}\n{traceback.format_exc()}"

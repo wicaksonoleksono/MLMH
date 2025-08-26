@@ -20,7 +20,11 @@ def create_app():
     @login_manager.user_loader
     def load_user(user_id):  # pylint: disable=unused-variable
         from .services.shared.usManService import UserManagerService
-        return UserManagerService.get_user_by_id(int(user_id))
+        from .utils.auth_models import SimpleUser
+        user_data = UserManagerService._get_user_data_by_id(int(user_id))
+        if user_data:
+            return SimpleUser(user_data)
+        return None
     from .route.user_routes import user_bp
     from .route.main_routes import main_bp
     from .route.admin_routes import admin_bp

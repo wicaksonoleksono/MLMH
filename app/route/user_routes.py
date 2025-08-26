@@ -1,7 +1,8 @@
-from flask import Blueprint, request, redirect, url_for
+from flask import Blueprint, request, redirect, url_for, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
 from ..services.shared.usManService import UserManagerService
 from ..decorators import api_response, raw_response
+from ..utils.jwt_utils import JWTManager
 
 user_bp = Blueprint('user', __name__, url_prefix='/user')
 
@@ -33,13 +34,29 @@ def register():
 @user_bp.route('/login', methods=['POST'])
 @api_response
 def login():
-    """User login."""
+    """User login with JWT token."""
     data = request.get_json()
-    user = UserManagerService.authenticate_user(data['uname'], data['password'])
+    user_data = UserManagerService.authenticate_user(data['uname'], data['password'])
     
-    if user:
-        login_user(user)
-        return {"message": "Login berhasil", "user": {"id": user.id, "uname": user.uname, "type": user.user_type.name}}
+    if user_data:
+        # Generate JWT token
+        token = JWTManager.generate_token(user_data)
+        
+        # Create SimpleUser for Flask-Login session support (for templates)
+        from ..utils.auth_models import SimpleUser
+        simple_user = SimpleUser(user_data)
+        login_user(simple_user)
+        
+        return {
+            "message": "Login berhasil", 
+            "token": token,
+            "user": {
+                "id": user_data['id'], 
+                "uname": user_data['uname'], 
+                "type": user_data['user_type_name'],
+                "is_admin": user_data['is_admin']
+            }
+        }
     
     return {"message": "Nama pengguna atau kata sandi salah"}, 401
 
@@ -71,7 +88,7 @@ def profile():
             "medical_conditions": current_user.medical_conditions,
             "medications": current_user.medications,
             "emergency_contact": current_user.emergency_contact,
-            "type": current_user.user_type.name,
+            "type": current_user.user_type_name,
             "is_admin": current_user.is_admin(),
             "is_active": current_user.is_active
         }

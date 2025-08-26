@@ -1,5 +1,6 @@
 from typing import Optional, List
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload
 from ...model.shared.users import User
 from ...model.shared.enums import UserType
 from ...decorators import api_response
@@ -57,11 +58,37 @@ class UserManagerService:
                 raise ValueError(f"Username '{uname}' already exists")
 
     @staticmethod
-    @api_response
-    def get_user_by_id(user_id: int) -> Optional[User]:
-        """Get user by ID."""
+    def _get_user_data_by_id(user_id: int) -> Optional[dict]:
+        """Internal method to get user data by ID (no decorator)."""
         with get_session() as db:
-            return db.query(User).filter_by(id=user_id).first()
+            user = db.query(User).options(joinedload(User.user_type)).filter_by(id=user_id).first()
+            if user and user.is_active:
+                return {
+                    'id': user.id,
+                    'uname': user.uname,
+                    'email': user.email,
+                    'phone': user.phone,
+                    'age': user.age,
+                    'gender': user.gender,
+                    'educational_level': user.educational_level,
+                    'cultural_background': user.cultural_background,
+                    'medical_conditions': user.medical_conditions,
+                    'medications': user.medications,
+                    'emergency_contact': user.emergency_contact,
+                    'user_type_id': user.user_type_id,
+                    'user_type_name': user.user_type.name,
+                    'is_active': user.is_active,
+                    'is_admin': user.user_type.name.lower() == 'admin',
+                    'created_at': user.created_at.isoformat() if user.created_at else None,
+                    'updated_at': user.updated_at.isoformat() if user.updated_at else None
+                }
+            return None
+
+    @staticmethod
+    @api_response
+    def get_user_by_id(user_id: int) -> Optional[dict]:
+        """Get user by ID (API endpoint)."""
+        return UserManagerService._get_user_data_by_id(user_id)
 
     @staticmethod
     @api_response
@@ -134,12 +161,31 @@ class UserManagerService:
             return True
 
     @staticmethod
-    def authenticate_user(uname: str, password: str) -> Optional[User]:
-        """Authenticate user by username and password."""
+    def authenticate_user(uname: str, password: str) -> Optional[dict]:
+        """Authenticate user by username and password. Returns serialized user data."""
         with get_session() as db:
-            user = db.query(User).filter_by(uname=uname).first()
+            user = db.query(User).options(joinedload(User.user_type)).filter_by(uname=uname).first()
             if user and user.is_active and user.check_password(password):
-                return user
+                # Return serialized data to avoid detached instance issues
+                return {
+                    'id': user.id,
+                    'uname': user.uname,
+                    'email': user.email,
+                    'phone': user.phone,
+                    'age': user.age,
+                    'gender': user.gender,
+                    'educational_level': user.educational_level,
+                    'cultural_background': user.cultural_background,
+                    'medical_conditions': user.medical_conditions,
+                    'medications': user.medications,
+                    'emergency_contact': user.emergency_contact,
+                    'user_type_id': user.user_type_id,
+                    'user_type_name': user.user_type.name,
+                    'is_active': user.is_active,
+                    'is_admin': user.user_type.name.lower() == 'admin',
+                    'created_at': user.created_at.isoformat() if user.created_at else None,
+                    'updated_at': user.updated_at.isoformat() if user.updated_at else None
+                }
             return None
 
     @staticmethod

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LLM SSE Streaming Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .message { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .user-message { background-color: #e3f2fd; text-align: right; }
+        .ai-message { background-color: #f3e5f5; }
+        .status { background-color: #fff3e0; font-style: italic; }
+        .error { background-color: #ffebee; color: #c62828; }
+        input, button { padding: 10px; margin: 5px; }
+        #messageInput { width: 60%; }
+        #messages { height: 400px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>LLM SSE Streaming Test</h1>
+        
+        <div>
+            <input type="number" id="sessionId" placeholder="Session ID" value="1">
+            <button onclick="startConversation()">Start Conversation</button>
+            <button onclick="getStatus()">Get Status</button>
+            <button onclick="clearMessages()">Clear</button>
+        </div>
+        
+        <div id="messages"></div>
+        
+        <div>
+            <input type="text" id="messageInput" placeholder="Enter your message..." onkeypress="handleKeyPress(event)">
+            <button onclick="sendMessage()">Send Message</button>
+            <button onclick="streamMessage()">Stream Message</button>
+        </div>
+        
+        <div id="status"></div>
+    </div>
+
+    <script>
+        let eventSource = null;
+        
+        function addMessage(content, className) {
+            const messages = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.className = 'message ' + className;
+            div.textContent = content;
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+        
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+        }
+        
+        function getSessionId() {
+            return document.getElementById('sessionId').value;
+        }
+        
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                streamMessage();
+            }
+        }
+        
+        async function startConversation() {
+            const sessionId = getSessionId();
+            try {
+                const response = await fetch(`/assessment/llm/start/${sessionId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                const result = await response.json();
+                
+                if (result.status === 'OLKORECT') {
+                    addMessage('Conversation started: ' + result.data.ai_response, 'ai-message');
+                } else {
+                    addMessage('Error: ' + result.error, 'error');
+                }
+            } catch (error) {
+                addMessage('Network error: ' + error.message, 'error');
+            }
+        }
+        
+        async function sendMessage() {
+            const sessionId = getSessionId();
+            const message = document.getElementById('messageInput').value;
+            if (!message.trim()) return;
+            
+            addMessage('You: ' + message, 'user-message');
+            document.getElementById('messageInput').value = '';
+            
+            try {
+                const response = await fetch(`/assessment/llm/message/${sessionId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: message })
+                });
+                const result = await response.json();
+                
+                if (result.status === 'OLKORECT') {
+                    addMessage('Anisa: ' + result.data.ai_response, 'ai-message');
+                    if (result.data.has_end_conversation) {
+                        addMessage('Conversation ended. Analysis triggered.', 'status');
+                    }
+                } else {
+                    addMessage('Error: ' + result.error, 'error');
+                }
+            } catch (error) {
+                addMessage('Network error: ' + error.message, 'error');
+            }
+        }
+        
+        function streamMessage() {
+            const sessionId = getSessionId();
+            const message = document.getElementById('messageInput').value;
+            if (!message.trim()) return;
+            
+            addMessage('You: ' + message, 'user-message');
+            document.getElementById('messageInput').value = '';
+            
+            // Close existing EventSource if any
+            if (eventSource) {
+                eventSource.close();
+            }
+            
+            // Create new EventSource for streaming
+            const url = `/assessment/llm/stream/${sessionId}?message=${encodeURIComponent(message)}`;
+            eventSource = new EventSource(url);
+            
+            let aiResponse = '';
+            const aiMessageDiv = document.createElement('div');
+            aiMessageDiv.className = 'message ai-message';
+            aiMessageDiv.textContent = 'Anisa: ';
+            document.getElementById('messages').appendChild(aiMessageDiv);
+            
+            eventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'status') {
+                        addMessage('Status: ' + data.message, 'status');
+                    } else if (data.type === 'chunk') {
+                        aiResponse += data.chunk;
+                        aiMessageDiv.textContent = 'Anisa: ' + aiResponse;
+                        document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+                    } else if (data.type === 'complete') {
+                        addMessage('Stream complete. Turn ID: ' + data.turn_id, 'status');
+                        if (data.has_end_conversation) {
+                            addMessage('Conversation ended!', 'status');
+                        }
+                        eventSource.close();
+                    } else if (data.type === 'analysis_complete') {
+                        addMessage('Analysis complete. Analysis ID: ' + data.analysis_id, 'status');
+                        addMessage('Aspects detected: ' + data.total_aspects_detected + ', Avg severity: ' + data.average_severity.toFixed(2), 'status');
+                    } else if (data.type === 'error') {
+                        addMessage('Stream error: ' + data.message, 'error');
+                        eventSource.close();
+                    }
+                } catch (e) {
+                    addMessage('Parse error: ' + e.message, 'error');
+                }
+            };
+            
+            eventSource.onerror = function(event) {
+                addMessage('SSE connection error', 'error');
+                eventSource.close();
+            };
+        }
+        
+        async function getStatus() {
+            const sessionId = getSessionId();
+            try {
+                const response = await fetch(`/assessment/llm/status/${sessionId}`);
+                const result = await response.json();
+                
+                if (result.status === 'OLKORECT') {
+                    const status = result.data;
+                    addMessage('Status: ' + JSON.stringify(status.streaming_status, null, 2), 'status');
+                    addMessage('Summary: ' + JSON.stringify(status.conversation_summary, null, 2), 'status');
+                } else {
+                    addMessage('Error: ' + result.error, 'error');
+                }
+            } catch (error) {
+                addMessage('Network error: ' + error.message, 'error');
+            }
+        }
+    </script>
+</body>
+</html>

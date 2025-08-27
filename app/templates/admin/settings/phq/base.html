@@ -79,7 +79,17 @@ endblock %} {% block content %}
         },
       },
 
-      categories: [],
+      categories: [
+        {name_id: 'ANHEDONIA', name: 'Anhedonia', description_id: 'Kurang tertarik atau bergairah dalam melakukan apapun', questions: ['']},
+        {name_id: 'DEPRESSED_MOOD', name: 'Depressed Mood', description_id: 'Merasa murung, muram, atau putus asa', questions: ['']},
+        {name_id: 'SLEEP_DISTURBANCE', name: 'Sleep Disturbance', description_id: 'Sulit tidur atau mudah terbangun, atau terlalu banyak tidur', questions: ['']},
+        {name_id: 'FATIGUE', name: 'Fatigue', description_id: 'Merasa lelah atau kurang bertenaga', questions: ['']},
+        {name_id: 'APPETITE_CHANGES', name: 'Appetite Changes', description_id: 'Kurang nafsu makan atau terlalu banyak makan', questions: ['']},
+        {name_id: 'WORTHLESSNESS', name: 'Worthlessness', description_id: 'Kurang percaya diri — atau merasa bahwa Anda adalah orang yang gagal atau telah mengecewakan diri sendiri atau keluarga', questions: ['']},
+        {name_id: 'CONCENTRATION', name: 'Concentration', description_id: 'Sulit berkonsentrasi pada sesuatu, misalnya membaca koran atau menonton televisi', questions: ['']},
+        {name_id: 'PSYCHOMOTOR', name: 'Psychomotor', description_id: 'Bergerak atau berbicara sangat lambat sehingga orang lain memperhatikannya. Atau sebaliknya — merasa resah atau gelisah sehingga Anda lebih sering bergerak dari biasanya', questions: ['']},
+        {name_id: 'SUICIDAL_IDEATION', name: 'Suicidal Ideation', description_id: 'Merasa lebih baik mati atau ingin melukai diri sendiri dengan cara apapun', questions: ['']}      
+      ],
 
       // Modal state
       showModal: false,
@@ -104,16 +114,7 @@ endblock %} {% block content %}
         this.scale.labels = newLabels;
       },
 
-      addCategory() {
-        this.categories.push({
-          name: "",
-          questions: [""],
-        });
-      },
 
-      removeCategory(index) {
-        this.categories.splice(index, 1);
-      },
 
       addQuestion(categoryIndex) {
         this.categories[categoryIndex].questions.push("");
@@ -139,56 +140,10 @@ endblock %} {% block content %}
               4: "Hampir setiap hari",
             },
           };
-          this.categories = [
-            {
-              name: "Anhedonia",
-              questions: [
-                "Kurang tertarik atau bergairah dalam melakukan apapun",
-              ],
-            },
-            {
-              name: "Bad Mood",
-              questions: ["Merasa murung, muram, atau putus asa"],
-            },
-            {
-              name: "Sleep Disturbance",
-              questions: [
-                "Sulit tidur atau mudah terbangun, atau terlalu banyak tidur",
-              ],
-            },
-            {
-              name: "Fatigue",
-              questions: ["Merasa lelah atau kurang bertenaga"],
-            },
-            {
-              name: "Appetite Changes",
-              questions: ["Kurang nafsu makan atau terlalu banyak makan"],
-            },
-            {
-              name: "Worthlessness",
-              questions: [
-                "Kurang percaya diri — atau merasa bahwa Anda adalah orang yang gagal atau telah mengecewakan diri sendiri atau keluarga",
-              ],
-            },
-            {
-              name: "Concentration",
-              questions: [
-                "Sulit berkonsentrasi pada sesuatu, misalnya membaca koran atau menonton televisi",
-              ],
-            },
-            {
-              name: "Psychomoto Retardation r",
-              questions: [
-                "Bergerak atau berbicara sangat lambat sehingga orang lain memperhatikannya. Atau sebaliknya — merasa resah atau gelisah sehingga Anda lebih sering bergerak dari biasanya",
-              ],
-            },
-            {
-              name: "Suicidal Ideation",
-              questions: [
-                "Merasa lebih baik mati atau ingin melukai diri sendiri dengan cara apapun",
-              ],
-            },
-          ];
+          // Reset to default questions for each category
+          this.categories.forEach(cat => {
+            cat.questions = [cat.description_id];
+          });
         };
       },
 
@@ -253,23 +208,22 @@ endblock %} {% block content %}
             apiCall("/admin/phq/settings"),
           ]);
 
-          // Load categories and their questions
+          // Load questions for predefined categories
           if (Array.isArray(categoriesRes) && categoriesRes.length > 0) {
-            this.categories = [];
             for (const cat of categoriesRes) {
-              // Load questions for this category
-              const questionsRes = await apiCall(
-                `/admin/phq/questions?category_id=${cat.id}`
-              );
-              const questions = Array.isArray(questionsRes)
-                ? questionsRes.map((q) => q.question_text_id)
-                : [cat.description_id || ""];
-
-              this.categories.push({
-                id: cat.id,
-                name: cat.name,
-                questions: questions.length > 0 ? questions : [""],
-              });
+              // Find matching predefined category
+              const predefinedCat = this.categories.find(c => c.name_id === cat.name_id);
+              if (predefinedCat) {
+                // Load questions for this category
+                const questionsRes = await apiCall(
+                  `/admin/phq/questions?category_name_id=${cat.name_id}`
+                );
+                const questions = Array.isArray(questionsRes)
+                  ? questionsRes.map((q) => q.question_text_id)
+                  : [predefinedCat.description_id];
+                
+                predefinedCat.questions = questions.length > 0 ? questions : [predefinedCat.description_id];
+              }
             }
           }
 
@@ -326,39 +280,14 @@ endblock %} {% block content %}
             return;
           }
 
-          // Save categories and questions
+          // Save questions for each category
           for (let i = 0; i < this.categories.length; i++) {
             const category = this.categories[i];
-            const categoryData = {
-              name: category.name,
-              name_id: category.name.toUpperCase().replace(/\s+/g, "_"),
-              description_id: category.questions[0] || "",
-              order_index: i + 1,
-            };
-
-            console.log("Saving category:", categoryData);
-            const catResult = await apiCall(
-              "/admin/phq/categories",
-              "POST",
-              categoryData
-            );
-            console.log("Category result:", catResult);
-
-            if (catResult.status === "SNAFU") {
-              alert(
-                "Error saving category: " +
-                  (catResult.error || catResult.errorMsg || "Unknown error")
-              );
-              return;
-            }
-
-            // Always save questions regardless of catResult status
-            const categoryId =
-              catResult.id || (catResult.data && catResult.data.id);
-            if (categoryId && category.questions.length > 0) {
+            
+            if (category.questions.length > 0) {
               // Delete existing questions for this category first
               const existingQuestions = await apiCall(
-                `/admin/phq/questions?category_id=${categoryId}`
+                `/admin/phq/questions?category_name_id=${category.name_id}`
               );
               if (Array.isArray(existingQuestions)) {
                 for (const existingQ of existingQuestions) {
@@ -372,9 +301,8 @@ endblock %} {% block content %}
               // Save new questions
               for (let j = 0; j < category.questions.length; j++) {
                 if (category.questions[j].trim()) {
-                  // Only save non-empty questions
                   const questionData = {
-                    category_id: categoryId,
+                    category_name_id: category.name_id,
                     question_text_en: category.questions[j],
                     question_text_id: category.questions[j],
                     order_index: j,

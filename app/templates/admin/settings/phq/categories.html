@@ -19,14 +19,8 @@
           ></path>
         </svg>
       </div>
-      <h2 class="text-lg font-bold text-gray-800">Kategori & Pertanyaan</h2>
+      <h2 class="text-lg font-bold text-gray-800">Kategori & Pertanyaan (Predefined)</h2>
     </div>
-    <button
-      @click="addCategory()"
-      class="bg-purple-600 text-white px-3 py-2 rounded text-sm hover:bg-purple-700 transition-colors"
-    >
-      + Kategori
-    </button>
   </div>
 
   <div class="space-y-4">
@@ -46,18 +40,12 @@
               </div>
               <span class="text-sm font-medium text-gray-600">Kategori</span>
             </div>
-            <input
-              type="text"
-              x-model="category.name"
-              class="w-full px-2 py-1 border border-purple-300 rounded focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm mb-3"
-              placeholder="Nama kategori..."
-            />
-            <button
-              @click="removeCategory(catIndex)"
-              class="w-full bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600 transition-colors text-xs"
-            >
-              Hapus
-            </button>
+            <div class="w-full px-2 py-1 bg-gray-100 border border-gray-300 rounded text-sm mb-3 font-medium">
+              <span x-text="category.name"></span>
+            </div>
+            <div class="text-xs text-gray-600 p-2 bg-gray-50 rounded">
+              <span x-text="category.description_id"></span>
+            </div>
           </div>
 
           <!-- Questions (6/8) -->

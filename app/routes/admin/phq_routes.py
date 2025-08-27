@@ -14,36 +14,7 @@ def get_categories():
     return jsonify(PHQService.get_categories())
 
 
-@phq_bp.route('/categories', methods=['POST'])
-@raw_response
-def create_category():
-    if not current_user.is_authenticated or not current_user.is_admin():
-        return {"status": "SNAFU", "error": "Admin access required"}, 403
-    data = request.get_json()
-    return jsonify(PHQService.create_category(
-        name=data['name'],
-        name_id=data['name_id'],
-        description_en=data.get('description_en'),
-        description_id=data.get('description_id'),
-        order_index=data.get('order_index', 0)
-    ))
 
-
-@phq_bp.route('/categories/<int:category_id>', methods=['PUT'])
-@raw_response
-def update_category(category_id):
-    if not current_user.is_authenticated or not current_user.is_admin():
-        return {"status": "SNAFU", "error": "Admin access required"}, 403
-    data = request.get_json()
-    return jsonify(PHQService.update_category(category_id, data))
-
-
-@phq_bp.route('/categories/<int:category_id>', methods=['DELETE'])
-@raw_response
-def delete_category(category_id):
-    if not current_user.is_authenticated or not current_user.is_admin():
-        return {"status": "SNAFU", "error": "Admin access required"}, 403
-    return jsonify(PHQService.delete_category(category_id))
 
 
 # ===== QUESTION ROUTES =====
@@ -52,8 +23,8 @@ def delete_category(category_id):
 def get_questions():
     if not current_user.is_authenticated or not current_user.is_admin():
         return {"status": "SNAFU", "error": "Admin access required"}, 403
-    category_id = request.args.get('category_id', type=int)
-    return jsonify(PHQService.get_questions(category_id))
+    category_name_id = request.args.get('category_name_id')
+    return jsonify(PHQService.get_questions(category_name_id))
 
 
 @phq_bp.route('/questions', methods=['POST'])
@@ -63,7 +34,7 @@ def create_question():
         return {"status": "SNAFU", "error": "Admin access required"}, 403
     data = request.get_json()
     return jsonify(PHQService.create_question(
-        category_id=data['category_id'],
+        category_name_id=data['category_name_id'],
         question_text_en=data['question_text_en'],
         question_text_id=data['question_text_id'],
         order_index=data.get('order_index', 0)

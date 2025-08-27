@@ -63,14 +63,27 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                        depression_aspects: Optional[List[str]] = None,
                        instructions: str = None,
                        is_default: bool = False) -> Dict[str, Any]:
-        """Create or update LLM settings"""
+        """Create or update LLM settings with streaming compatibility validation"""
         with get_session() as db:
+            # Validate streaming compatibility before creating/updating
+            validation_result = LLMService.validate_streaming_models(chat_model, analysis_model, openai_api_key)
+            if not validation_result["streaming_compatible"]:
+                return {
+                    "status": "SNAFU", 
+                    "error": "Streaming compatibility validation failed",
+                    "issues": validation_result["issues"]
+                }
+            
             # Auto-generate setting name
             setting_name = f"LLM Settings (Chat: {chat_model}, Analysis: {analysis_model})"
             
             # Use defaults if not provided
             if depression_aspects is None:
                 depression_aspects = LLMService.DEFAULT_ASPECTS
+            
+            # Format aspect names: spaces to underscores, lowercase
+            for aspect in depression_aspects:
+                aspect["name"] = aspect["name"].replace(" ", "_").lower()
             
             # Store aspects as JSON
             aspects_json = {"aspects": depression_aspects}
@@ -83,6 +96,9 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                 db.query(LLMSettings).filter(LLMSettings.is_default == True).update({'is_default': False})
             
             if existing:
+                # Store old settings ID for active session refresh
+                old_settings_id = existing.id
+                
                 # Update existing settings
                 existing.setting_name = setting_name
                 existing.instructions = instructions
@@ -93,6 +109,14 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                 existing.is_default = is_default
                 existing.is_active = True
                 settings = existing
+                
+                # Trigger refresh for active sessions using these settings
+                try:
+                    refresh_result = LLMService.trigger_active_sessions_refresh(old_settings_id)
+                    print(f"Refreshed {refresh_result.get('total_sessions', 0)} active sessions")
+                except Exception as e:
+                    print(f"Warning: Failed to refresh active sessions: {e}")
+                    
             else:
                 # Create new settings
                 settings = LLMSettings(
@@ -109,6 +133,7 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
             db.commit()
             
             return {
+                "status": "OLKORECT",
                 'id': settings.id,
                 'setting_name': settings.setting_name,
                 'instructions': settings.instructions,
@@ -116,7 +141,9 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                 'chat_model': settings.chat_model,
                 'analysis_model': settings.analysis_model,
                 'depression_aspects': settings.depression_aspects,
-                'is_default': settings.is_default
+                'is_default': settings.is_default,
+                'streaming_compatible': True,
+                'validation_result': validation_result
             }
 
     @staticmethod
@@ -136,6 +163,10 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
 
             for key, value in updates.items():
                 if hasattr(settings, key):
+                    if key == 'depression_aspects' and isinstance(value, dict) and 'aspects' in value:
+                        # Format aspect names: spaces to underscores, lowercase
+                        for aspect in value['aspects']:
+                            aspect["name"] = aspect["name"].replace(" ", "_").lower()
                     setattr(settings, key, value)
 
             db.commit()
@@ -302,3 +333,227 @@ Format output JSON:
         except Exception as e:
             print(f"Error testing model {model_id}: {e}")
             return False
+
+    @staticmethod
+    def test_streaming_compatibility(llm_settings_id: int) -> Dict[str, Any]:
+        """Test if LLM settings are compatible with streaming architecture"""
+        with get_session() as db:
+            settings = db.query(LLMSettings).filter_by(id=llm_settings_id).first()
+            if not settings:
+                return {"compatible": False, "error": "Settings not found"}
+        
+        try:
+            # Import our streaming factory to test compatibility
+            from ..llm.factory import LLMFactory
+            
+            # Test factory validation
+            validation = LLMFactory.validate_settings(settings)
+            if not validation["valid"]:
+                return {
+                    "compatible": False,
+                    "error": "Settings validation failed",
+                    "issues": validation["issues"]
+                }
+            
+            # Test creating streaming LLM
+            streaming_test = LLMFactory.test_connection(settings, "chat")
+            analysis_test = LLMFactory.test_connection(settings, "analysis")
+            
+            return {
+                "compatible": streaming_test["success"] and analysis_test["success"],
+                "streaming_llm": streaming_test,
+                "analysis_agent": analysis_test,
+                "depression_aspects_count": len(settings.depression_aspects.get('aspects', [])),
+                "models": {
+                    "chat_model": settings.chat_model,
+                    "analysis_model": settings.analysis_model
+                }
+            }
+            
+        except Exception as e:
+            return {
+                "compatible": False,
+                "error": f"Compatibility test failed: {str(e)}"
+            }
+
+    @staticmethod
+    def trigger_active_sessions_refresh(llm_settings_id: int) -> Dict[str, Any]:
+        """Trigger settings refresh for all active sessions using these LLM settings"""
+        try:
+            from ..llm.manager import GlobalSessionManager
+            from ...model.assessment.sessions import AssessmentSession
+            
+            refresh_results = []
+            
+            with get_session() as db:
+                # Find all active sessions using these LLM settings
+                active_sessions = db.query(AssessmentSession).filter(
+                    AssessmentSession.llm_settings_id == llm_settings_id,
+                    AssessmentSession.status.in_(['STARTED', 'CONSENT', 'PHQ_COMPLETED'])
+                ).all()
+                
+                for session in active_sessions:
+                    refreshed = GlobalSessionManager.force_settings_refresh(session.id)
+                    refresh_results.append({
+                        "session_id": session.id,
+                        "refreshed": refreshed
+                    })
+            
+            return {
+                "success": True,
+                "refreshed_sessions": refresh_results,
+                "total_sessions": len(refresh_results),
+                "message": f"Refreshed {len(refresh_results)} active sessions"
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "message": f"Failed to refresh active sessions: {str(e)}"
+            }
+    
+    @staticmethod
+    def get_streaming_status() -> Dict[str, Any]:
+        """Get status of streaming architecture and active conversations"""
+        try:
+            from ..llm.manager import GlobalSessionManager
+            
+            stats = GlobalSessionManager.get_stats()
+            active_sessions = GlobalSessionManager.get_active_sessions()
+            
+            return {
+                "streaming_enabled": True,
+                "statistics": stats,
+                "active_conversations": active_sessions,
+                "total_managers": len(active_sessions)
+            }
+            
+        except Exception as e:
+            return {
+                "streaming_enabled": False,
+                "error": str(e),
+                "message": f"Streaming status unavailable: {str(e)}"
+            }
+
+    @staticmethod
+    def validate_streaming_models(chat_model: str, analysis_model: str, api_key: str) -> Dict[str, Any]:
+        """Validate that both models are suitable for streaming and analysis"""
+        results = {
+            "chat_model_valid": False,
+            "analysis_model_valid": False,
+            "streaming_compatible": False,
+            "issues": []
+        }
+        
+        try:
+            # Test chat model
+            chat_test = LLMService.test_model_availability(chat_model, api_key)
+            results["chat_model_valid"] = chat_test
+            
+            if not chat_test:
+                results["issues"].append(f"Chat model '{chat_model}' not available")
+            
+            # Test analysis model
+            analysis_test = LLMService.test_model_availability(analysis_model, api_key)
+            results["analysis_model_valid"] = analysis_test
+            
+            if not analysis_test:
+                results["issues"].append(f"Analysis model '{analysis_model}' not available")
+            
+            # Check if models support streaming (most OpenAI models do)
+            streaming_supported_models = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo']
+            
+            if not any(model in chat_model for model in streaming_supported_models):
+                results["issues"].append(f"Chat model '{chat_model}' may not support streaming")
+            
+            results["streaming_compatible"] = len(results["issues"]) == 0
+            
+        except Exception as e:
+            results["issues"].append(f"Validation error: {str(e)}")
+        
+        return results
+    
+    @staticmethod
+    def test_langchain_integration(llm_settings_id: int) -> Dict[str, Any]:
+        """Test LangChain integration with the streaming architecture"""
+        with get_session() as db:
+            settings = db.query(LLMSettings).filter_by(id=llm_settings_id).first()
+            if not settings:
+                return {"success": False, "error": "Settings not found"}
+        
+        try:
+            from ..llm.factory import LLMFactory
+            from langchain_core.messages import HumanMessage
+            
+            # Test streaming LLM creation and basic functionality
+            streaming_llm = LLMFactory.create_streaming_llm(settings)
+            analysis_agent = LLMFactory.create_analysis_agent(settings)
+            
+            # Test simple message with streaming LLM
+            test_message = [HumanMessage(content="Hello, this is a test message. Respond briefly.")]
+            
+            try:
+                streaming_response = streaming_llm.invoke(test_message)
+                streaming_success = bool(streaming_response.content)
+            except Exception as e:
+                return {
+                    "success": False,
+                    "error": f"Streaming LLM test failed: {str(e)}",
+                    "component": "streaming_llm"
+                }
+            
+            # Test analysis agent
+            try:
+                analysis_response = analysis_agent.invoke(test_message)
+                analysis_success = bool(analysis_response.content)
+            except Exception as e:
+                return {
+                    "success": False,
+                    "error": f"Analysis agent test failed: {str(e)}",
+                    "component": "analysis_agent"
+                }
+            
+            # Test streaming capability
+            streaming_chunks = []
+            try:
+                for chunk in streaming_llm.stream(test_message):
+                    if chunk.content:
+                        streaming_chunks.append(chunk.content)
+                        if len(streaming_chunks) >= 3:  # Just test first few chunks
+                            break
+                
+                streaming_works = len(streaming_chunks) > 0
+            except Exception as e:
+                return {
+                    "success": False,
+                    "error": f"Streaming test failed: {str(e)}",
+                    "component": "streaming"
+                }
+            
+            return {
+                "success": True,
+                "streaming_llm_working": streaming_success,
+                "analysis_agent_working": analysis_success,
+                "streaming_capability": streaming_works,
+                "streaming_chunks_received": len(streaming_chunks),
+                "models_tested": {
+                    "chat_model": settings.chat_model,
+                    "analysis_model": settings.analysis_model
+                },
+                "langchain_version": "compatible",
+                "message": "LangChain integration test successful"
+            }
+            
+        except ImportError as e:
+            return {
+                "success": False,
+                "error": f"LangChain import failed: {str(e)}",
+                "message": "LangChain dependencies may not be installed"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"LangChain integration test failed: {str(e)}",
+                "message": "Unexpected error during integration test"
+            }

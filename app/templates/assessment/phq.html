@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}PHQ Assessment{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 py-8 px-4" x-data="phqAssessment()">
+    <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">
+            <div class="text-center">
+                <h1 class="text-3xl font-bold text-gray-900">Kuesioner PHQ</h1>
+                <p class="text-gray-600 mt-2">Penilaian Kesehatan Mental Terstruktur</p>
+                <p class="text-sm text-gray-500 mt-1">Sesi ID: {{ session.id }}</p>
+            </div>
+        </div>
+
+        <!-- Loading State -->
+        <div x-show="loading" class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+            <div class="text-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+                <p class="text-gray-600 mt-4">Memuat pertanyaan...</p>
+            </div>
+        </div>
+
+        <!-- Instructions -->
+        <div x-show="!loading && !submitted && questions.length > 0" class="bg-blue-50 rounded-2xl p-6 mb-6">
+            <h3 class="text-lg font-semibold text-blue-900 mb-2">Petunjuk</h3>
+            <p class="text-blue-800" x-text="instructions || 'Pilih jawaban yang paling sesuai dengan kondisi Anda dalam 2 minggu terakhir.'"></p>
+        </div>
+
+        <!-- Questions -->
+        <div x-show="!loading && !submitted && questions.length > 0">
+            <template x-for="(question, index) in questions" :key="question.question_id">
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">
+                    <div class="mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-2" x-text="`Pertanyaan ${index + 1}`"></h3>
+                        <p class="text-gray-700" x-text="question.question_text"></p>
+                        <p class="text-sm text-gray-500 mt-1">Kategori: <span x-text="question.category_display"></span></p>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <template x-for="(label, value) in question.scale_labels" :key="value">
+                            <label class="flex items-center p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+                                <input 
+                                    type="radio" 
+                                    :name="`question_${question.question_id}`"
+                                    :value="value"
+                                    @change="updateResponse(question.question_id, parseInt(value), label)"
+                                    class="form-radio text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0">
+                                <span class="ml-3 text-gray-700" x-text="`${value} - ${label}`"></span>
+                            </label>
+                        </template>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Submit Button -->
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 text-center">
+                <button 
+                    @click="submitResponses()"
+                    :disabled="!allQuestionsAnswered() || submitting"
+                    :class="allQuestionsAnswered() ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-300 cursor-not-allowed'"
+                    class="text-white font-medium py-3 px-8 rounded-xl transition-colors">
+                    <span x-show="!submitting">Kirim Jawaban</span>
+                    <span x-show="submitting">Mengirim...</span>
+                </button>
+                <p class="text-sm text-gray-500 mt-2" x-text="`${Object.keys(responses).length} dari ${questions.length} pertanyaan dijawab`"></p>
+            </div>
+        </div>
+
+        <!-- Success State -->
+        <div x-show="submitted" class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center">
+            <div class="text-6xl mb-4">✅</div>
+            <h2 class="text-2xl font-bold text-gray-900 mb-3">PHQ Assessment Selesai</h2>
+            <p class="text-gray-600 mb-4">Terima kasih! Jawaban Anda telah disimpan.</p>
+            <div class="bg-gray-50 rounded-lg p-4 mb-6">
+                <h3 class="font-semibold text-gray-900 mb-2">Hasil Sementara:</h3>
+                <p class="text-lg font-bold text-indigo-600" x-text="`Skor Total: ${totalScore}`"></p>
+                <p class="text-sm text-gray-600" x-text="scoreAnalysis"></p>
+            </div>
+            <button 
+                @click="continueToNextStep()"
+                class="bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-8 rounded-xl transition-colors">
+                Lanjutkan ke Tahap Berikutnya
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function phqAssessment() {
+    return {
+        sessionId: {{ session.id }},
+        loading: true,
+        submitting: false,
+        submitted: false,
+        questions: [],
+        responses: {},
+        instructions: '',
+        totalScore: 0,
+        scoreAnalysis: '',
+        
+        async init() {
+            await this.loadQuestions();
+        },
+        
+        async loadQuestions() {
+            try {
+                const result = await apiCall(`/assessment/phq/start/${this.sessionId}`, 'GET');
+                if (result.status === 'OLKORECT') {
+                    this.questions = result.data.questions;
+                    this.instructions = result.data.questions[0]?.instructions || '';
+                } else {
+                    alert('Error loading questions: ' + result.error);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                this.loading = false;
+            }
+        },
+        
+        updateResponse(questionId, value, text) {
+            this.responses[questionId] = {
+                question_id: questionId,
+                response_value: value,
+                response_text: text,
+                response_time_ms: Date.now() - this.startTime || 0
+            };
+        },
+        
+        allQuestionsAnswered() {
+            return Object.keys(this.responses).length === this.questions.length;
+        },
+        
+        async submitResponses() {
+            if (!this.allQuestionsAnswered() || this.submitting) return;
+            
+            this.submitting = true;
+            try {
+                const payload = {
+                    responses: Object.values(this.responses)
+                };
+                
+                const result = await apiCall(`/assessment/phq/submit/${this.sessionId}`, 'POST', payload);
+                if (result.status === 'OLKORECT') {
+                    this.submitted = true;
+                    this.totalScore = result.data.total_score;
+                    this.scoreAnalysis = `Assessment completed with ${result.data.responses_saved} responses saved.`;
+                } else {
+                    alert('Error submitting responses: ' + result.error);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                this.submitting = false;
+            }
+        },
+        
+        continueToNextStep() {
+            // Redirect to dashboard or next assessment step
+            window.location.href = '/assessment';
+        }
+    };
+}
+</script>
+{% endblock %}

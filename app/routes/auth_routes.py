@@ -1,14 +1,14 @@
 from flask import Blueprint, request, redirect, url_for, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
 from ..services.shared.usManService import UserManagerService
-from ..decorators import raw_response
+from ..decorators import raw_response, api_response
 from ..utils.jwt_utils import JWTManager
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 
 
 @auth_bp.route('/register', methods=['POST'])
-@raw_response
+@api_response
 def register():
     """User registration."""
     data = request.get_json()
@@ -29,9 +29,9 @@ def register():
             medications=data.get('medications') or None,
             emergency_contact=data.get('emergency_contact') or None
         )
-        return {"status": "OLKORECT", "message": "Pendaftaran berhasil!"}
+        return {"message": "Pendaftaran berhasil!"}
     except ValueError as e:
-        return {"status": "SNAFU", "error": str(e)}, 400
+        return {"error": str(e)}, 400
 
 
 @auth_bp.route('/login', methods=['POST'])
@@ -68,11 +68,11 @@ def login():
 
 @auth_bp.route('/logout', methods=['POST'])
 @login_required
-@raw_response
+@api_response
 def logout():
     """User logout."""
     logout_user()
-    return {"status": "OLKORECT", "message": "Logout berhasil"}
+    return {"message": "Logout berhasil"}
 
 
 @auth_bp.route('/profile', methods=['GET'])

@@ -29,17 +29,15 @@ class SessionService:
             raise ValueError(f"User has reached maximum sessions limit ({SessionService.MAX_SESSIONS_PER_USER})")
         
         with get_session() as db:
-            # Get current default admin settings
-            phq_settings = db.query(PHQSettings).filter_by(is_default=True, is_active=True).first()
-            llm_settings = db.query(LLMSettings).filter_by(is_default=True, is_active=True).first()
-            camera_settings = db.query(CameraSettings).filter_by(is_default=True, is_active=True).first()
+            # Get any active admin settings (fallback to first available)
+            phq_settings = db.query(PHQSettings).filter_by(is_active=True).first()
+            llm_settings = db.query(LLMSettings).filter_by(is_active=True).first()
+            camera_settings = db.query(CameraSettings).filter_by(is_active=True).first()
             
-            if not phq_settings:
-                raise ValueError("No default PHQ settings found")
-            if not llm_settings:
-                raise ValueError("No default LLM settings found")
-            if not camera_settings:
-                raise ValueError("No default Camera settings found")
+            # Use None if no settings found (will be handled in assessment)
+            phq_settings_id = phq_settings.id if phq_settings else None
+            llm_settings_id = llm_settings.id if llm_settings else None
+            camera_settings_id = camera_settings.id if camera_settings else None
             
             # Get total session count for 50:50 alternating
             total_sessions = db.query(func.count(AssessmentSession.id)).scalar() or 0
@@ -51,9 +49,9 @@ class SessionService:
             session = AssessmentSession(
                 user_id=user_id,
                 session_token=session_token,
-                phq_settings_id=phq_settings.id,
-                llm_settings_id=llm_settings.id,
-                camera_settings_id=camera_settings.id,
+                phq_settings_id=phq_settings_id,
+                llm_settings_id=llm_settings_id,
+                camera_settings_id=camera_settings_id,
                 is_first=is_first,
                 status='STARTED'
             )
@@ -103,6 +101,25 @@ class SessionService:
                 raise ValueError("Session not found")
             
             session.complete_phq()
+            db.commit()
+            return session
+    
+    @staticmethod
+    def complete_camera_check(session_id: int) -> AssessmentSession:
+        """Mark camera check as completed"""
+        with get_session() as db:
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                raise ValueError("Session not found")
+            
+            # Add camera completion timestamp and update status
+            session.session_metadata = session.session_metadata or {}
+            session.session_metadata['camera_completed_at'] = datetime.utcnow().isoformat()
+            
+            if session.status == 'CONSENT':
+                session.status = 'CAMERA_COMPLETED'
+            
+            session.updated_at = datetime.utcnow()
             db.commit()
             return session
     

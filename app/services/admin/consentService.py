@@ -28,7 +28,7 @@ class ConsentService:
 
     @staticmethod
     def create_settings(title: str, content: str, 
-                       require_signature: bool = True, require_date: bool = True,
+                       require_signature: Optional[bool] = None, require_date: Optional[bool] = None,
                        allow_withdrawal: bool = True, footer_text: str = None,
                        is_default: bool = False) -> Dict[str, Any]:
         """Create or update consent settings"""
@@ -131,8 +131,8 @@ class ConsentService:
             "setting_name": "Default Consent Settings",
             "title": "Formulir Persetujuan Penelitian Kesehatan Mental",
             "content": "Dengan ini saya menyatakan bahwa saya telah mendapat penjelasan yang cukup mengenai penelitian ini dan saya bersedia berpartisipasi dalam penelitian assessment kesehatan mental.\n\nSaya memahami bahwa:\n1. Partisipasi saya bersifat sukarela\n2. Data yang dikumpulkan akan dijaga kerahasiaannya\n3. Saya dapat mengundurkan diri kapan saja\n4. Hasil assessment akan digunakan untuk keperluan penelitian",
-            "require_signature": True,
-            "require_date": True,
+            "require_signature": None,
+            "require_date": None,
             "allow_withdrawal": True,
             "footer_text": "Terima kasih atas partisipasi Anda dalam penelitian ini.",
             "is_default": True

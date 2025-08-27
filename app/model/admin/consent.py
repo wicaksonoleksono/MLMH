@@ -16,9 +16,9 @@ class ConsentSettings(BaseModel, StatusMixin):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     
-    # Additional settings
-    require_signature: Mapped[bool] = mapped_column(Boolean, default=True)
-    require_date: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Additional settings (kept for future use but not used in current implementation)
+    require_signature: Mapped[Optional[bool]] = mapped_column(Boolean, default=None, nullable=True)
+    require_date: Mapped[Optional[bool]] = mapped_column(Boolean, default=None, nullable=True)
     allow_withdrawal: Mapped[bool] = mapped_column(Boolean, default=True)
     
     # Footer text

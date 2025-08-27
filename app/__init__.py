@@ -32,12 +32,16 @@ def create_app():
     from app.routes.admin.camera_routes import camera_bp
     from app.routes.admin.llm_routes import llm_bp
     from app.routes.admin.consent_routes import consent_bp
+    from app.routes.consent_routes import consent_bp as user_consent_bp
+    from app.routes.assessment_routes import assessment_bp
     from app.routes.assessment.llm_routes import llm_assessment_bp
     from app.routes.assessment.phq_routes import phq_assessment_bp
     app.register_blueprint(phq_bp)
     app.register_blueprint(camera_bp)
     app.register_blueprint(llm_bp)
     app.register_blueprint(consent_bp)
+    app.register_blueprint(user_consent_bp)
+    app.register_blueprint(assessment_bp)
     app.register_blueprint(llm_assessment_bp)
     app.register_blueprint(phq_assessment_bp)
     app.register_blueprint(auth_bp)

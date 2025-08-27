@@ -8,9 +8,9 @@ main_bp = Blueprint('main', __name__)
 @main_bp.route('/')
 @raw_response
 def serve_index():
-    """Main landing page with authentication check."""
+    """Main dashboard - admin or user based on role."""
     if current_user.is_authenticated:
-        template = "admin/landing.html" if current_user.is_admin else "user/landing.html"
+        template = "admin/landing.html" if current_user.is_admin() else "user/dashboard.html"
         return render_template(template, user=current_user)
     return redirect(url_for('main.auth_page'))
 
@@ -23,21 +23,3 @@ def auth_page():
         return redirect(url_for('main.serve_index'))
 
     return render_template('auth/login_register.html')
-
-
-@main_bp.route('/dashboard')
-@login_required
-@raw_response
-def dashboard():
-    """User dashboard after login."""
-    return render_template('user/dashboard.html', user=current_user)
-
-
-@main_bp.route('/admin/phq')
-@login_required
-@raw_response
-def admin_phq():
-    """PHQ settings page for admin."""
-    if not current_user.is_admin:
-        return redirect(url_for('main.serve_index'))
-    return render_template('admin/settings/phq/index.html', user=current_user)

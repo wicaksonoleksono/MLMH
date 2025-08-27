@@ -13,9 +13,9 @@ class AssessmentSession(BaseModel):
     session_token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
 
     # FK references to admin settings used for this session
-    phq_settings_id: Mapped[int] = mapped_column(Integer, ForeignKey('phq_settings.id'), nullable=False)
-    llm_settings_id: Mapped[int] = mapped_column(Integer, ForeignKey('llm_settings.id'), nullable=False)
-    camera_settings_id: Mapped[int] = mapped_column(Integer, ForeignKey('camera_settings.id'), nullable=False)
+    phq_settings_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey('phq_settings.id'), nullable=True)
+    llm_settings_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey('llm_settings.id'), nullable=True)
+    camera_settings_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey('camera_settings.id'), nullable=True)
 
     # Session flow control (50:50 alternating PHQ/LLM first)
     is_first: Mapped[str] = mapped_column(String(10), nullable=False)  # 'phq' or 'llm'

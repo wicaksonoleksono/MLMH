@@ -53,6 +53,122 @@ def register_commands(app):
                     db.add(regular_user)
                     click.echo("  - Default regular user created (user/user)")
 
+        # Seed default admin settings
+        click.echo("  - Creating default admin settings...")
+        
+        # Create default PHQ settings
+        from .model.admin.phq import PHQSettings, PHQScale, PHQQuestion, PHQCategoryType
+        with get_session() as db:
+            # Create default PHQ scale
+            existing_scale = db.query(PHQScale).filter_by(is_default=True).first()
+            if not existing_scale:
+                default_scale = PHQScale(
+                    scale_name="PHQ-9 Standard Scale",
+                    min_value=0,
+                    max_value=3,
+                    scale_labels={
+                        0: "Tidak sama sekali",
+                        1: "Beberapa hari", 
+                        2: "Lebih dari setengah hari",
+                        3: "Hampir setiap hari"
+                    },
+                    is_default=True,
+                    is_active=True
+                )
+                db.add(default_scale)
+                db.flush()
+                scale_id = default_scale.id
+            else:
+                scale_id = existing_scale.id
+            
+            # Create default PHQ settings
+            existing_phq_settings = db.query(PHQSettings).filter_by(is_default=True).first()
+            if not existing_phq_settings:
+                default_phq_settings = PHQSettings(
+                    setting_name="Default PHQ Settings",
+                    questions_per_category=1,
+                    scale_id=scale_id,
+                    randomize_categories=False,
+                    instructions="Dalam 2 minggu terakhir, seberapa sering Anda terganggu oleh masalah-masalah berikut?",
+                    is_default=True,
+                    is_active=True
+                )
+                db.add(default_phq_settings)
+                click.echo("    ✓ Default PHQ settings created")
+            
+            # Create sample PHQ questions if none exist
+            existing_questions = db.query(PHQQuestion).first()
+            if not existing_questions:
+                sample_questions = [
+                    {
+                        "category_name_id": "ANHEDONIA",
+                        "question_text_en": "Little interest or pleasure in doing things",
+                        "question_text_id": "Kurang tertarik atau bergairah dalam melakukan apapun",
+                        "order_index": 1
+                    },
+                    {
+                        "category_name_id": "DEPRESSED_MOOD", 
+                        "question_text_en": "Feeling down, depressed, or hopeless",
+                        "question_text_id": "Merasa murung, muram, atau putus asa",
+                        "order_index": 2
+                    },
+                    {
+                        "category_name_id": "SLEEP_DISTURBANCE",
+                        "question_text_en": "Trouble falling or staying asleep, or sleeping too much", 
+                        "question_text_id": "Sulit tidur atau mudah terbangun, atau terlalu banyak tidur",
+                        "order_index": 3
+                    }
+                ]
+                
+                for q_data in sample_questions:
+                    question = PHQQuestion(**q_data, is_active=True)
+                    db.add(question)
+                click.echo("    ✓ Sample PHQ questions created")
+
+        # Create default LLM settings
+        from .model.admin.llm import LLMSettings
+        with get_session() as db:
+            existing_llm_settings = db.query(LLMSettings).filter_by(is_default=True).first()
+            if not existing_llm_settings:
+                default_llm_settings = LLMSettings(
+                    setting_name="Default LLM Settings",
+                    openai_api_key="your-openai-api-key-here",
+                    chat_model="gpt-4o",
+                    analysis_model="gpt-4o-mini", 
+                    depression_aspects={
+                        "aspects": [
+                            {"name": "Anhedonia", "description": "Loss of interest or pleasure"},
+                            {"name": "Depressed Mood", "description": "Feeling sad or hopeless"},
+                            {"name": "Sleep Disturbance", "description": "Sleep problems"}
+                        ]
+                    },
+                    instructions="Anda adalah Anisa, seorang konselor AI yang ramah dan empatik. Lakukan percakapan natural untuk assessment kesehatan mental.",
+                    is_default=True,
+                    is_active=True
+                )
+                db.add(default_llm_settings)
+                click.echo("    ✓ Default LLM settings created")
+
+        # Create default Camera settings 
+        from .model.admin.camera import CameraSettings
+        with get_session() as db:
+            existing_camera_settings = db.query(CameraSettings).filter_by(is_default=True).first()
+            if not existing_camera_settings:
+                default_camera_settings = CameraSettings(
+                    setting_name="Default Camera Settings",
+                    recording_mode="INTERVAL",
+                    interval_seconds=30,
+                    resolution="640x480",
+                    storage_path="/uploads/camera_captures",
+                    capture_on_button_click=True,
+                    capture_on_message_send=False,
+                    capture_on_question_start=False,
+                    is_default=True,
+                    is_active=True
+                )
+                db.add(default_camera_settings)
+                click.echo("    ✓ Default camera settings created")
+
         click.echo("[OLKORECT] Database seeding completed successfully!")
         click.echo("  - Admin can configure settings, assessments, and media via web UI")
 

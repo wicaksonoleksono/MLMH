@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}Assessment Dashboard{% endblock %}
+
+{% block content %}
+<div class="space-y-6" x-data="assessmentDashboard()">
+    <!-- Header -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+        <div class="text-center">
+            <h1 class="text-3xl font-bold text-gray-900">Assessment Session</h1>
+            <p class="text-gray-600 mt-2">Sesi ID: {{ session.id }} | Tipe: {{ session.is_first.upper() }} First</p>
+        </div>
+    </div>
+
+    <!-- Progress Steps -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+        <h2 class="text-xl font-semibold text-gray-900 mb-4">Progress Assessment</h2>
+        <div class="flex items-center justify-between">
+            <div class="flex items-center">
+                <div class="w-10 h-10 {% if not session.consent_completed_at %}bg-blue-600 text-white{% else %}bg-green-600 text-white{% endif %} rounded-full flex items-center justify-center text-sm font-medium">1</div>
+                <span class="ml-3 text-sm font-medium {% if not session.consent_completed_at %}text-blue-600{% else %}text-green-600{% endif %}">Informed Consent</span>
+            </div>
+            <div class="flex-1 h-2 {% if session.consent_completed_at %}bg-green-200{% else %}bg-gray-200{% endif %} mx-4 rounded"></div>
+            <div class="flex items-center">
+                {% set camera_completed = session.session_metadata and session.session_metadata.get('camera_completed_at') %}
+                <div class="w-10 h-10 {% if session.consent_completed_at and not camera_completed %}bg-blue-600 text-white{% elif camera_completed %}bg-green-600 text-white{% else %}bg-gray-300 text-gray-600{% endif %} rounded-full flex items-center justify-center text-sm font-medium">2</div>
+                <span class="ml-3 text-sm font-medium {% if session.consent_completed_at and not camera_completed %}text-blue-600{% elif camera_completed %}text-green-600{% else %}text-gray-500{% endif %}">Camera Check</span>
+            </div>
+            <div class="flex-1 h-2 {% if camera_completed %}bg-green-200{% else %}bg-gray-200{% endif %} mx-4 rounded"></div>
+            <div class="flex items-center">
+                <div class="w-10 h-10 {% if camera_completed %}bg-blue-600 text-white{% else %}bg-gray-300 text-gray-600{% endif %} rounded-full flex items-center justify-center text-sm font-medium">3</div>
+                <span class="ml-3 text-sm font-medium {% if camera_completed %}text-blue-600{% else %}text-gray-500{% endif %}">Assessment</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Current Step Card -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+        {% if not session.consent_completed_at %}
+            <!-- Consent Step -->
+            <div class="text-center">
+                <div class="text-6xl mb-4">📋</div>
+                <h2 class="text-2xl font-bold text-gray-900 mb-3">Informed Consent</h2>
+                <p class="text-gray-600 mb-6">Silakan baca dan setujui formulir persetujuan untuk melanjutkan assessment</p>
+                <button 
+                    @click="goToConsent()"
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-8 rounded-xl transition-colors">
+                    Baca Formulir Persetujuan
+                </button>
+            </div>
+        {% elif not camera_completed %}
+            <!-- Camera Check Step -->
+            <div class="text-center">
+                <div class="text-6xl mb-4">📷</div>
+                <h2 class="text-2xl font-bold text-gray-900 mb-3">Camera Check</h2>
+                <p class="text-gray-600 mb-6">Kami perlu mengaktifkan kamera untuk assessment. Pastikan kamera berfungsi dengan baik.</p>
+                <button 
+                    @click="goToCameraCheck()"
+                    class="bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-8 rounded-xl transition-colors">
+                    Periksa Kamera
+                </button>
+            </div>
+        {% else %}
+            <!-- Ready for Assessment -->
+            <div class="text-center">
+                <div class="text-6xl mb-4">📝</div>
+                <h2 class="text-2xl font-bold text-gray-900 mb-3">Mulai Assessment</h2>
+                <p class="text-gray-600 mb-6">Semua persiapan selesai. Assessment akan dimulai dengan {{ session.is_first.upper() }} terlebih dahulu.</p>
+                <button 
+                    @click="startFirstAssessment()"
+                    class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-8 rounded-xl transition-colors mr-4">
+                    Mulai {{ session.is_first.upper() }} Assessment
+                </button>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Back to Dashboard -->
+    <div class="text-center">
+        <a href="{{ url_for('main.serve_index') }}" class="text-gray-500 hover:text-gray-700 font-medium">
+            ← Kembali ke Dashboard
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function assessmentDashboard() {
+    return {
+        sessionId: {{ session.id }},
+        sessionType: '{{ session.is_first }}',
+        
+        goToConsent() {
+            window.location.href = '/assessment/consent';
+        },
+        
+        goToCameraCheck() {
+            window.location.href = '/assessment/camera-check';
+        },
+        
+        startFirstAssessment() {
+            if (this.sessionType === 'phq') {
+                window.location.href = '/assessment/phq';
+            } else if (this.sessionType === 'llm') {
+                window.location.href = '/assessment/llm';
+            }
+        }
+    };
+}
+</script>
+{% endblock %}

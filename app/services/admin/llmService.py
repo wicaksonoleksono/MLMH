@@ -25,6 +25,8 @@ class LLMService:
         {"name": "Alexithymia", "description": "sulit mengenali & mengungkap emosi"},
         {"name": "Defisit regulasi emosi", "description": "kesulitan mengatur emosi"}
     ]
+
+
     
     # Hard-coded Anisa system prompt - TIDAK BISA DIUBAH
     ANISA_SYSTEM_PROMPT = """Anda adalah Anisa, seorang mahasiswa psikologi yang supportive dan senang hati mendengarkan curhatan orang lain. Teman anda kemungkinan mengalami gejala depresi, atau bisa jadi tidak.
@@ -160,25 +162,17 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
             return {'id': settings_id, 'deleted': True}
 
     @staticmethod
-    def get_default_settings() -> Optional[Dict[str, Any]]:
-        """Get default LLM settings"""
-        with get_session() as db:
-            settings = db.query(LLMSettings).filter(
-                and_(LLMSettings.is_default == True, LLMSettings.is_active == True)
-            ).first()
-
-            if settings:
-                return {
-                    'id': settings.id,
-                    'setting_name': settings.setting_name,
-                    'instructions': settings.instructions,
-                    'openai_api_key': settings.openai_api_key,
-                    'chat_model': settings.chat_model,
-                    'analysis_model': settings.analysis_model,
-                    'depression_aspects': settings.depression_aspects,
-                    'is_default': settings.is_default
-                }
-            return None
+    def get_default_settings() -> Dict[str, Any]:
+        """Get hardcoded default LLM settings for 'Muat Default' button"""
+        return {
+            "setting_name": "Default LLM Settings",
+            "instructions": "",
+            "openai_api_key": "",
+            "chat_model": "gpt-4o",
+            "analysis_model": "gpt-4o-mini",
+            "depression_aspects": {"aspects": LLMService.DEFAULT_ASPECTS},
+            "is_default": True
+        }
 
     @staticmethod
     def build_system_prompt(aspects: List[dict]) -> str:

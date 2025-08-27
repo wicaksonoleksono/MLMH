@@ -1,0 +1,226 @@
+{% extends "admin/base.html" %}
+{% block title %}Pengaturan Consent - Admin{% endblock %}
+{% block content %}
+<div class="min-h-screen bg-gray-50" x-data="consentSettings()">
+  <!-- Header -->
+  <div class="bg-white border-b border-gray-200 sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-6 py-4">
+      <div class="flex justify-between items-center">
+        <div>
+          <h1 class="text-3xl font-bold text-gray-900">
+            Pengaturan Informed Consent
+          </h1>
+          <p class="text-gray-600 mt-1">
+            Konfigurasi formulir persetujuan digital untuk assessment
+          </p>
+        </div>
+        <div class="flex space-x-3">
+          <button
+            @click="loadDefaults()"
+            class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+          >
+            Muat Default
+          </button>
+          <button
+            @click="clearAll()"
+            class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+          >
+            Hapus Semua
+          </button>
+          <button
+            @click="saveAll()"
+            class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Simpan Semua
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="max-w-7xl mx-auto px-6 py-6 space-y-6">
+    {% block consent_content %}{% endblock %}
+  </div>
+
+  {% include "components/modal.html" %}
+
+  <!-- Loading -->
+  <div
+    x-show="loading"
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+  >
+    <div class="bg-white rounded-lg p-8 shadow-xl">
+      <div class="text-center">
+        <div
+          class="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-blue-600 mx-auto mb-4"
+        ></div>
+        <p class="text-gray-600 text-lg">Menyimpan data...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function consentSettings() {
+    return {
+      loading: false,
+
+      settings: {
+        title: "Formulir Persetujuan Penelitian",
+        content: "",
+        require_signature: true,
+        require_date: true,
+        allow_withdrawal: true,
+        footer_text: ""
+      },
+
+      // Modal state
+      showModal: false,
+      modalTitle: "",
+      modalMessage: "",
+      modalConfirm: () => {},
+
+      async init() {
+        await this.loadData();
+      },
+
+      async loadDefaults() {
+        this.showModal = true;
+        this.modalTitle = "Muat Data Default";
+        this.modalMessage = "Apakah Anda yakin ingin memuat pengaturan consent default? Data yang ada akan diganti.";
+        this.modalConfirm = async () => {
+          try {
+            const defaults = await apiCall("/admin/consent/settings/default");
+            if (defaults) {
+              this.settings = {
+                title: defaults.title,
+                content: defaults.content,
+                require_signature: defaults.require_signature,
+                require_date: defaults.require_date,
+                allow_withdrawal: defaults.allow_withdrawal,
+                footer_text: defaults.footer_text || ""
+              };
+            } else {
+              this.settings = {
+                title: "Formulir Persetujuan Penelitian Kesehatan Mental",
+                content: "Dengan ini saya menyatakan bahwa saya telah mendapat penjelasan yang cukup mengenai penelitian ini dan saya bersedia berpartisipasi dalam penelitian assessment kesehatan mental.\\n\\nSaya memahami bahwa:\\n1. Partisipasi saya bersifat sukarela\\n2. Data yang dikumpulkan akan dijaga kerahasiaannya\\n3. Saya dapat mengundurkan diri kapan saja\\n4. Hasil assessment akan digunakan untuk keperluan penelitian",
+                require_signature: true,
+                require_date: true,
+                allow_withdrawal: true,
+                footer_text: "Terima kasih atas partisipasi Anda dalam penelitian ini."
+              };
+            }
+          } catch (error) {
+            console.error("Error loading defaults:", error);
+            this.settings = {
+              title: "Formulir Persetujuan Penelitian Kesehatan Mental",
+              content: "Dengan ini saya menyatakan bahwa saya telah mendapat penjelasan yang cukup mengenai penelitian ini dan saya bersedia berpartisipasi dalam penelitian assessment kesehatan mental.\\n\\nSaya memahami bahwa:\\n1. Partisipasi saya bersifat sukarela\\n2. Data yang dikumpulkan akan dijaga kerahasiaannya\\n3. Saya dapat mengundurkan diri kapan saja\\n4. Hasil assessment akan digunakan untuk keperluan penelitian",
+              require_signature: true,
+              require_date: true,
+              allow_withdrawal: true,
+              footer_text: "Terima kasih atas partisipasi Anda dalam penelitian ini."
+            };
+          }
+          this.showModal = false;
+        };
+      },
+
+      async clearAll() {
+        this.showModal = true;
+        this.modalTitle = "Hapus Semua Data";
+        this.modalMessage = "Apakah Anda yakin ingin menghapus semua pengaturan consent yang ada?";
+        this.modalConfirm = async () => {
+          this.loading = true;
+          try {
+            const settings = await apiCall("/admin/consent/settings");
+            
+            if (Array.isArray(settings)) {
+              for (const setting of settings) {
+                await apiCall(`/admin/consent/settings/${setting.id}`, "DELETE");
+              }
+            }
+
+            this.showModal = true;
+            this.modalTitle = 'Berhasil';
+            this.modalMessage = 'Semua pengaturan consent berhasil dihapus!';
+            this.modalConfirm = () => {};
+          } catch (error) {
+            this.showModal = true;
+            this.modalTitle = 'Error';
+            this.modalMessage = 'Error clearing data: ' + error.message;
+            this.modalConfirm = () => {};
+          } finally {
+            this.loading = false;
+          }
+        };
+      },
+
+      async loadData() {
+        this.loading = true;
+        try {
+          const settingsRes = await apiCall("/admin/consent/settings");
+
+          if (Array.isArray(settingsRes) && settingsRes.length > 0) {
+            const setting = settingsRes[0];
+            this.settings = {
+              id: setting.id,
+              title: setting.title,
+              content: setting.content,
+              require_signature: setting.require_signature,
+              require_date: setting.require_date,
+              allow_withdrawal: setting.allow_withdrawal,
+              footer_text: setting.footer_text || ""
+            };
+          }
+        } catch (error) {
+          console.error("Error loading data:", error);
+        } finally {
+          this.loading = false;
+        }
+      },
+
+      async saveAll() {
+        this.loading = true;
+        try {
+          const settingsData = {
+            title: this.settings.title,
+            content: this.settings.content,
+            require_signature: this.settings.require_signature,
+            require_date: this.settings.require_date,
+            allow_withdrawal: this.settings.allow_withdrawal,
+            footer_text: this.settings.footer_text,
+            is_default: true
+          };
+
+          console.log("Saving consent settings:", settingsData);
+          const result = await apiCall("/admin/consent/settings", "POST", settingsData);
+          console.log("Consent settings result:", result);
+
+          if (result.status === "SNAFU") {
+            this.showModal = true;
+            this.modalTitle = 'Error';
+            this.modalMessage = 'Error saving settings: ' + (result.error || result.errorMsg || "Unknown error");
+            this.modalConfirm = () => {};
+            return;
+          }
+
+          this.showModal = true;
+          this.modalTitle = 'Berhasil';
+          this.modalMessage = 'Pengaturan consent berhasil disimpan!';
+          this.modalConfirm = () => {
+            window.location.reload();
+          };
+        } catch (error) {
+          console.error("Save error:", error);
+          this.showModal = true;
+          this.modalTitle = 'Error';
+          this.modalMessage = 'Error saving data: ' + error.message;
+          this.modalConfirm = () => {};
+        } finally {
+          this.loading = false;
+        }
+      }
+    };
+  }
+</script>
+{% endblock %}

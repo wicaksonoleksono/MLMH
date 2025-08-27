@@ -1,0 +1,133 @@
+<!-- Consent Configuration Component -->
+<div class="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-8 border border-green-100">
+  <h3 class="text-2xl font-semibold text-gray-900 mb-4 flex items-center">
+    <div class="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center mr-4">
+      <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+    </div>
+    Konfigurasi Informed Consent
+  </h3>
+  <p class="text-gray-600 mb-8">
+    Konfigurasikan formulir persetujuan digital yang akan ditampilkan kepada responden sebelum memulai assessment.
+  </p>
+
+  <div class="space-y-8">
+    <!-- Form Title -->
+    <div class="bg-white rounded-lg p-6 border border-green-200">
+      <div class="flex items-center mb-4">
+        <div class="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mr-3">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+          </svg>
+        </div>
+        <h4 class="font-medium text-gray-900">Judul Formulir</h4>
+      </div>
+      
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Judul</label>
+        <input 
+          type="text" 
+          x-model="settings.title"
+          class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+          placeholder="Formulir Persetujuan Penelitian Kesehatan Mental"
+        >
+        <p class="text-xs text-gray-500 mt-1">Judul yang akan ditampilkan di bagian atas formulir consent</p>
+      </div>
+    </div>
+
+    <!-- Form Content -->
+    <div class="bg-white rounded-lg p-6 border border-green-200">
+      <div class="flex items-center mb-4">
+        <div class="w-8 h-8 bg-purple-500 rounded-lg flex items-center justify-center mr-3">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+        </div>
+        <h4 class="font-medium text-gray-900">Konten Formulir</h4>
+      </div>
+      
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Isi Persetujuan</label>
+        <textarea 
+          x-model="settings.content"
+          rows="10"
+          class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 resize-vertical text-sm"
+          placeholder="Masukkan teks persetujuan yang akan dibaca dan disetujui oleh responden..."
+        ></textarea>
+        <p class="text-xs text-gray-500 mt-1">Konten lengkap formulir persetujuan yang harus dibaca responden</p>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="bg-white rounded-lg p-6 border border-green-200">
+      <div class="flex items-center mb-4">
+        <div class="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center mr-3">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+        </div>
+        <h4 class="font-medium text-gray-900">Pengaturan Formulir</h4>
+      </div>
+      
+      <div class="space-y-4">
+        <div class="flex items-center justify-between p-4 bg-green-50 rounded-lg border border-green-200">
+          <div>
+            <label class="font-medium text-gray-700">Wajib Tanda Tangan Digital</label>
+            <p class="text-sm text-gray-600">Responden harus mengetik nama lengkap sebagai tanda tangan</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" x-model="settings.require_signature" class="sr-only peer">
+            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+          </label>
+        </div>
+
+        <div class="flex items-center justify-between p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <div>
+            <label class="font-medium text-gray-700">Wajib Tanggal</label>
+            <p class="text-sm text-gray-600">Responden harus mengisi tanggal persetujuan</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" x-model="settings.require_date" class="sr-only peer">
+            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          </label>
+        </div>
+
+        <div class="flex items-center justify-between p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+          <div>
+            <label class="font-medium text-gray-700">Izinkan Penarikan Diri</label>
+            <p class="text-sm text-gray-600">Responden dapat membatalkan persetujuan kapan saja</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" x-model="settings.allow_withdrawal" class="sr-only peer">
+            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-yellow-600"></div>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer Text -->
+    <div class="bg-white rounded-lg p-6 border border-green-200">
+      <div class="flex items-center mb-4">
+        <div class="w-8 h-8 bg-gray-500 rounded-lg flex items-center justify-center mr-3">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-1l-4 4z"/>
+          </svg>
+        </div>
+        <h4 class="font-medium text-gray-900">Teks Footer</h4>
+      </div>
+      
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Pesan Penutup (Opsional)</label>
+        <textarea 
+          x-model="settings.footer_text"
+          rows="3"
+          class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 resize-vertical text-sm"
+          placeholder="Terima kasih atas partisipasi Anda dalam penelitian ini."
+        ></textarea>
+        <p class="text-xs text-gray-500 mt-1">Pesan yang akan ditampilkan setelah responden menyetujui</p>
+      </div>
+    </div>
+  </div>
+</div>

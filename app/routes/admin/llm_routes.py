@@ -30,13 +30,10 @@ def create_settings():
         return {"status": "SNAFU", "error": "Admin access required"}, 403
     data = request.get_json()
     
-    # Validate required API key
-    api_key = data.get('openai_api_key')
-    if not api_key:
-        return jsonify({"status": "SNAFU", "error": "OpenAI API key is required"})
+
     
     return jsonify(LLMService.create_settings(
-        openai_api_key=api_key,
+        openai_api_key=data.get('openai_api_key', ''),
         chat_model=data.get('chat_model', 'gpt-4o'),
         analysis_model=data.get('analysis_model', 'gpt-4o-mini'),
         depression_aspects=data.get('depression_aspects'),

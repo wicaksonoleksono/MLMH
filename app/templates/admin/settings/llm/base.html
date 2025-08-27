@@ -71,17 +71,17 @@
         chat_model: "gpt-4o",
         analysis_model: "gpt-4o-mini", 
         depression_aspects: [
-          "Anhedonia (kehilangan minat/kenikmatan)",
-          "Bias kognitif negatif & hopelessness", 
-          "Rumination (pikiran berputar tanpa solusi)",
-          "Psikomotor retardation",
-          "Gangguan tidur (insomnia, kualitas tidur jelek)",
-          "Iritabilitas & ledakan marah",
-          "Rasa bersalah berlebih / self-blame",
-          "Gangguan kognitif (concentration & executive function)",
-          "Penarikan diri sosial / isolasi",
-          "Alexithymia (sulit mengenali & mengungkap emosi)",
-          "Defisit regulasi emosi"
+          {name: "Anhedonia", description: "kehilangan minat/kenikmatan"},
+          {name: "Bias kognitif negatif", description: "hopelessness & negative thinking patterns"},
+          {name: "Rumination", description: "pikiran berputar tanpa solusi"},
+          {name: "Psikomotor retardation", description: "perlambatan gerakan dan bicara"},
+          {name: "Gangguan tidur", description: "insomnia, kualitas tidur jelek"},
+          {name: "Iritabilitas", description: "ledakan marah & mudah tersinggung"},
+          {name: "Rasa bersalah berlebih", description: "self-blame & worthlessness"},
+          {name: "Gangguan kognitif", description: "concentration & executive function issues"},
+          {name: "Penarikan diri sosial", description: "isolasi & withdrawal"},
+          {name: "Alexithymia", description: "sulit mengenali & mengungkap emosi"},
+          {name: "Defisit regulasi emosi", description: "kesulitan mengatur emosi"}
         ]
       },
 
@@ -108,30 +108,76 @@
         }
       },
 
-      loadDefaults() {
+      async loadDefaults() {
         this.showModal = true;
         this.modalTitle = "Muat Data Default";
         this.modalMessage = "Apakah Anda yakin ingin memuat pengaturan LLM default? Data yang ada akan diganti.";
-        this.modalConfirm = () => {
-          this.settings = {
-            instructions: "",
-            openai_api_key: "",
-            chat_model: "gpt-4o",
-            analysis_model: "gpt-4o-mini",
-            depression_aspects: [
-              {name: "Anhedonia", description: "kehilangan minat/kenikmatan"},
-              {name: "Bias kognitif negatif", description: "hopelessness & negative thinking patterns"},
-              {name: "Rumination", description: "pikiran berputar tanpa solusi"},
-              {name: "Psikomotor retardation", description: "perlambatan gerakan dan bicara"},
-              {name: "Gangguan tidur", description: "insomnia, kualitas tidur jelek"},
-              {name: "Iritabilitas", description: "ledakan marah & mudah tersinggung"},
-              {name: "Rasa bersalah berlebih", description: "self-blame & worthlessness"},
-              {name: "Gangguan kognitif", description: "concentration & executive function issues"},
-              {name: "Penarikan diri sosial", description: "isolasi & withdrawal"},
-              {name: "Alexithymia", description: "sulit mengenali & mengungkap emosi"},
-              {name: "Defisit regulasi emosi", description: "kesulitan mengatur emosi"}
-            ]
-          };
+        this.modalConfirm = async () => {
+          try {
+            const defaults = await apiCall("/admin/llm/settings/default");
+            if (defaults) {
+              this.settings = {
+                instructions: defaults.instructions || "",
+                openai_api_key: defaults.openai_api_key || "",
+                chat_model: defaults.chat_model || "gpt-4o",
+                analysis_model: defaults.analysis_model || "gpt-4o-mini",
+                depression_aspects: defaults.depression_aspects?.aspects || [
+                  {name: "Anhedonia", description: "kehilangan minat/kenikmatan"},
+                  {name: "Bias kognitif negatif", description: "hopelessness & negative thinking patterns"},
+                  {name: "Rumination", description: "pikiran berputar tanpa solusi"},
+                  {name: "Psikomotor retardation", description: "perlambatan gerakan dan bicara"},
+                  {name: "Gangguan tidur", description: "insomnia, kualitas tidur jelek"},
+                  {name: "Iritabilitas", description: "ledakan marah & mudah tersinggung"},
+                  {name: "Rasa bersalah berlebih", description: "self-blame & worthlessness"},
+                  {name: "Gangguan kognitif", description: "concentration & executive function issues"},
+                  {name: "Penarikan diri sosial", description: "isolasi & withdrawal"},
+                  {name: "Alexithymia", description: "sulit mengenali & mengungkap emosi"},
+                  {name: "Defisit regulasi emosi", description: "kesulitan mengatur emosi"}
+                ]
+              };
+            } else {
+              this.settings = {
+                instructions: "",
+                openai_api_key: "",
+                chat_model: "gpt-4o",
+                analysis_model: "gpt-4o-mini",
+                depression_aspects: [
+                  {name: "Anhedonia", description: "kehilangan minat/kenikmatan"},
+                  {name: "Bias kognitif negatif", description: "hopelessness & negative thinking patterns"},
+                  {name: "Rumination", description: "pikiran berputar tanpa solusi"},
+                  {name: "Psikomotor retardation", description: "perlambatan gerakan dan bicara"},
+                  {name: "Gangguan tidur", description: "insomnia, kualitas tidur jelek"},
+                  {name: "Iritabilitas", description: "ledakan marah & mudah tersinggung"},
+                  {name: "Rasa bersalah berlebih", description: "self-blame & worthlessness"},
+                  {name: "Gangguan kognitif", description: "concentration & executive function issues"},
+                  {name: "Penarikan diri sosial", description: "isolasi & withdrawal"},
+                  {name: "Alexithymia", description: "sulit mengenali & mengungkap emosi"},
+                  {name: "Defisit regulasi emosi", description: "kesulitan mengatur emosi"}
+                ]
+              };
+            }
+          } catch (error) {
+            console.error("Error loading defaults:", error);
+            this.settings = {
+              instructions: "",
+              openai_api_key: "",
+              chat_model: "gpt-4o",
+              analysis_model: "gpt-4o-mini",
+              depression_aspects: [
+                {name: "Anhedonia", description: "kehilangan minat/kenikmatan"},
+                {name: "Bias kognitif negatif", description: "hopelessness & negative thinking patterns"},
+                {name: "Rumination", description: "pikiran berputar tanpa solusi"},
+                {name: "Psikomotor retardation", description: "perlambatan gerakan dan bicara"},
+                {name: "Gangguan tidur", description: "insomnia, kualitas tidur jelek"},
+                {name: "Iritabilitas", description: "ledakan marah & mudah tersinggung"},
+                {name: "Rasa bersalah berlebih", description: "self-blame & worthlessness"},
+                {name: "Gangguan kognitif", description: "concentration & executive function issues"},
+                {name: "Penarikan diri sosial", description: "isolasi & withdrawal"},
+                {name: "Alexithymia", description: "sulit mengenali & mengungkap emosi"},
+                {name: "Defisit regulasi emosi", description: "kesulitan mengatur emosi"}
+              ]
+            };
+          }
           this.showModal = false;
         };
       },
@@ -182,7 +228,19 @@
               openai_api_key: setting.openai_api_key || "",
               chat_model: setting.chat_model,
               analysis_model: setting.analysis_model,
-              depression_aspects: setting.depression_aspects?.aspects || this.settings.depression_aspects
+              depression_aspects: setting.depression_aspects?.aspects || [
+                {name: "Anhedonia", description: "kehilangan minat/kenikmatan"},
+                {name: "Bias kognitif negatif", description: "hopelessness & negative thinking patterns"},
+                {name: "Rumination", description: "pikiran berputar tanpa solusi"},
+                {name: "Psikomotor retardation", description: "perlambatan gerakan dan bicara"},
+                {name: "Gangguan tidur", description: "insomnia, kualitas tidur jelek"},
+                {name: "Iritabilitas", description: "ledakan marah & mudah tersinggung"},
+                {name: "Rasa bersalah berlebih", description: "self-blame & worthlessness"},
+                {name: "Gangguan kognitif", description: "concentration & executive function issues"},
+                {name: "Penarikan diri sosial", description: "isolasi & withdrawal"},
+                {name: "Alexithymia", description: "sulit mengenali & mengungkap emosi"},
+                {name: "Defisit regulasi emosi", description: "kesulitan mengatur emosi"}
+              ]
             };
             console.log("Settings loaded:", this.settings);
           } else {

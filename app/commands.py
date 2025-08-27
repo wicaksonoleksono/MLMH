@@ -104,6 +104,7 @@ def register_commands(app):
         from .model.admin.phq import PHQCategory, PHQQuestion, PHQScale, PHQSettings
         from .model.admin.camera import CameraSettings
         from .model.admin.llm import LLMSettings
+        from .model.admin.consent import ConsentSettings
         from .model.assessment.sessions import AssessmentSession, PHQResponse, OpenQuestionResponse, CameraCapture, SessionExport
 
         Base.metadata.create_all(bind=engine)

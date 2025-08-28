@@ -65,16 +65,18 @@ def submit_phq_responses(session_id):
         except Exception as e:
             return {"message": f"Error processing response: {str(e)}"}, 400
     
-    # Calculate total score and complete PHQ assessment
+    # Calculate total score (but don't complete yet - let universal handler do it)
     total_score = PHQResponseService.calculate_session_score(session_id)
-    SessionService.complete_phq_assessment(session_id)
     
+    # Call universal completion handler via internal redirect
+    from flask import url_for
     return {
         "session_id": session_id,
         "responses_saved": len(results),
-        "responses": results,
         "total_score": total_score,
-        "assessment_completed": True
+        "assessment_completed": True,
+        "completion_redirect": f"/assessment/complete/phq/{session_id}",
+        "message": "PHQ responses saved! Completing assessment..."
     }
 
 

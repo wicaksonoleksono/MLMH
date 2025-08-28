@@ -1,242 +1,338 @@
-{% extends "base.html" %}
-
-{% block title %}PHQ Assessment{% endblock %}
-
-{% block content %}
+{% extends "base.html" %} {% block title %}PHQ Assessment{% endblock %} {% block
+content %}
 <div class="min-h-screen bg-gray-50" x-data="phqAssessment()">
-    <!-- Navigation -->
-    <nav class="bg-white shadow-sm border-b border-gray-200">
-        <div class="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
-            <div class="flex items-center space-x-4">
-                <h1 class="text-xl font-semibold text-gray-900">PHQ Assessment</h1>
-                <div class="bg-purple-600 rounded-lg px-3 py-1" x-show="!loading && questions.length > 0">
-                    <span class="text-white font-medium text-sm" x-text="`Pertanyaan ${currentQuestionIndex + 1} dari ${questions.length}`"></span>
-                </div>
-            </div>
-            <a href="{{ url_for('auth.logout') }}" class="text-gray-500 hover:text-red-600 font-medium transition-colors">
-                Keluar
-            </a>
+  <!-- Navigation -->
+  <nav class="bg-white shadow-sm border-b border-gray-200">
+    <div class="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-4">
+        <h1 class="text-xl font-semibold text-gray-900">PHQ Assessment</h1>
+        <div
+          class="bg-purple-600 rounded-lg px-3 py-1"
+          x-show="!loading && questions.length > 0"
+        >
+          <span
+            class="text-white font-medium text-sm"
+            x-text="`Pertanyaan ${currentQuestionIndex + 1} dari ${questions.length}`"
+          ></span>
         </div>
-    </nav>
-
-    <div class="max-w-4xl mx-auto px-4 py-8">
-        <!-- Loading State -->
-        <div x-show="loading" class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-            <div class="text-center">
-                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-                <p class="text-gray-600 mt-4">Memuat pertanyaan...</p>
-            </div>
-        </div>
-
-        <!-- Single Question Display -->
-        <div x-show="!loading && !submitted && questions.length > 0" class="bg-white rounded-lg shadow-lg overflow-hidden">
-            <!-- Progress Header -->
-            <div class="bg-gradient-to-r from-purple-600 to-indigo-600 px-8 py-8">
-                <div class="flex items-center justify-between mb-6">
-                    <div class="flex items-center">
-                        <div class="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center mr-6">
-                            <span class="text-white font-bold text-xl" x-text="currentQuestionIndex + 1"></span>
-                        </div>
-                        <div>
-                            <h2 class="text-3xl font-bold text-white mb-2">Pertanyaan</h2>
-                            <p class="text-purple-100" x-text="`dari ${questions.length} pertanyaan`"></p>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Progress Bar -->
-                <div class="w-full bg-white bg-opacity-20 rounded-full h-3">
-                    <div class="bg-gradient-to-r from-green-400 to-blue-400 h-3 rounded-full transition-all duration-500" 
-                         :style="`width: ${((currentQuestionIndex + 1) / questions.length * 100)}%`"></div>
-                </div>
-            </div>
-
-            <!-- Question Form -->
-            <div class="p-8" x-show="currentQuestion">
-                <!-- Question Text -->
-                <div class="mb-8">
-                    <div class="bg-gray-50 rounded-lg p-6 border border-gray-200">
-                        <p class="text-xl text-gray-900 leading-relaxed" x-text="currentQuestion?.question_text"></p>
-                    </div>
-                </div>
-
-                <!-- Response Options -->
-                <div class="mb-8">
-                    <fieldset>
-                        <legend class="text-lg font-medium text-gray-900 mb-6">Silakan pilih jawaban Anda:</legend>
-                        <div class="space-y-3">
-                            <template x-for="(label, value) in currentQuestion?.scale_labels || {}" :key="value">
-                                <label class="flex items-center p-4 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 cursor-pointer transition-all duration-200">
-                                    <input 
-                                        type="radio" 
-                                        name="current_response"
-                                        :value="value"
-                                        @change="updateCurrentResponse(parseInt(value), label)"
-                                        :checked="currentResponse?.response_value == value"
-                                        class="h-5 w-5 text-purple-600 border-gray-300 focus:ring-purple-500">
-                                    <div class="ml-4 flex-1">
-                                        <div class="flex items-center justify-between">
-                                            <span class="text-base font-medium text-gray-900" x-text="label"></span>
-                                            <span class="text-xl font-bold text-purple-600" x-text="value"></span>
-                                        </div>
-                                    </div>
-                                </label>
-                            </template>
-                        </div>
-                    </fieldset>
-                </div>
-
-                <!-- Navigation -->
-                <div class="flex justify-between items-center pt-6 border-t border-gray-200">
-                    <button 
-                        @click="previousQuestion()"
-                        x-show="currentQuestionIndex > 0"
-                        class="px-6 py-3 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors">
-                        ← Sebelumnya
-                    </button>
-                    
-                    <div class="text-gray-600" x-text="`Pertanyaan ${currentQuestionIndex + 1} dari ${questions.length}`"></div>
-                    
-                    <button 
-                        @click="nextQuestion()"
-                        :disabled="!currentResponse"
-                        :class="currentResponse ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700' : 'bg-gray-300 cursor-not-allowed'"
-                        class="px-8 py-3 text-white rounded-lg font-medium transition-all duration-200 shadow-lg">
-                        <span x-show="currentQuestionIndex < questions.length - 1">Berikutnya →</span>
-                        <span x-show="currentQuestionIndex === questions.length - 1">Selesai ✓</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Success State -->
-        <div x-show="submitted" class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center">
-            <div class="text-6xl mb-4">✅</div>
-            <h2 class="text-2xl font-bold text-gray-900 mb-3">PHQ Assessment Selesai</h2>
-            <p class="text-gray-600 mb-4">Terima kasih! Jawaban Anda telah disimpan.</p>
-            <div class="bg-gray-50 rounded-lg p-4 mb-6">
-                <h3 class="font-semibold text-gray-900 mb-2">Hasil Sementara:</h3>
-                <p class="text-lg font-bold text-indigo-600" x-text="`Skor Total: ${totalScore}`"></p>
-                <p class="text-sm text-gray-600" x-text="scoreAnalysis"></p>
-            </div>
-            <button 
-                @click="continueToNextStep()"
-                class="bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-8 rounded-xl transition-colors">
-                Lanjutkan ke Tahap Berikutnya
-            </button>
-        </div>
+      </div>
+      <a
+        href="{{ url_for('auth.logout') }}"
+        class="text-gray-500 hover:text-red-600 font-medium transition-colors"
+      >
+        Keluar
+      </a>
     </div>
-</div>
-{% endblock %}
+  </nav>
 
-{% block scripts %}
+  <div class="max-w-4xl mx-auto px-4 py-8">
+    <!-- Loading State -->
+    <div
+      x-show="loading"
+      class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8"
+    >
+      <div class="text-center">
+        <div
+          class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"
+        ></div>
+        <p class="text-gray-600 mt-4">Memuat pertanyaan...</p>
+      </div>
+    </div>
+
+    <!-- Single Question Display -->
+    <div
+      x-show="!loading && !submitted && questions.length > 0"
+      class="bg-white rounded-lg shadow-lg overflow-hidden"
+    >
+      <!-- Progress Header -->
+      <div class="bg-gradient-to-r from-purple-600 to-indigo-600 px-8 py-8">
+        <div class="flex items-center justify-between mb-6">
+          <div class="flex items-center">
+            <div
+              class="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center mr-6"
+            >
+              <span
+                class="text-white font-bold text-xl"
+                x-text="currentQuestionIndex + 1"
+              ></span>
+            </div>
+            <div>
+              <h2 class="text-3xl font-bold text-white mb-2">Pertanyaan</h2>
+              <p
+                class="text-purple-100"
+                x-text="`dari ${questions.length} pertanyaan`"
+              ></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="w-full bg-white bg-opacity-20 rounded-full h-3">
+          <div
+            class="bg-gradient-to-r from-green-400 to-blue-400 h-3 rounded-full transition-all duration-500"
+            :style="`width: ${((currentQuestionIndex + 1) / questions.length * 100)}%`"
+          ></div>
+        </div>
+      </div>
+
+      <!-- Question Form -->
+      <div class="p-8" x-show="currentQuestion">
+        <!-- Question Text -->
+        <div class="mb-8">
+          <div class="bg-gray-50 rounded-lg p-6 border border-gray-200">
+            <p
+              class="text-xl text-gray-900 leading-relaxed"
+              x-text="currentQuestion?.question_text"
+            ></p>
+          </div>
+        </div>
+
+        <!-- Response Options -->
+        <div class="mb-8">
+          <fieldset>
+            <legend class="text-lg font-medium text-gray-900 mb-6">
+              Silakan pilih jawaban Anda:
+            </legend>
+            <div class="space-y-3">
+              <template
+                x-for="(label, value) in currentQuestion?.scale_labels || {}"
+                :key="value"
+              >
+                <label
+                  class="flex items-center p-4 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 cursor-pointer transition-all duration-200"
+                >
+                  <input
+                    type="radio"
+                    name="current_response"
+                    :value="parseInt(value)"
+                    @change="updateCurrentResponse(parseInt(value), label)"
+                    :checked="currentResponse?.response_value == parseInt(value)"
+                    class="h-5 w-5 text-purple-600 border-gray-300 focus:ring-purple-500"
+                  />
+                  <div class="ml-4 flex-1">
+                    <div class="flex items-center justify-between">
+                      <span
+                        class="text-base font-medium text-gray-900"
+                        x-text="label"
+                      ></span>
+                      <span
+                        class="text-xl font-bold text-purple-600"
+                        x-text="value"
+                      ></span>
+                    </div>
+                  </div>
+                </label>
+              </template>
+            </div>
+          </fieldset>
+        </div>
+
+        <!-- Navigation -->
+        <div
+          class="flex justify-between items-center pt-6 border-t border-gray-200"
+        >
+          <button
+            @click="previousQuestion()"
+            x-show="currentQuestionIndex > 0"
+            class="px-6 py-3 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors"
+          >
+            ← Sebelumnya
+          </button>
+
+          <div
+            class="text-gray-600"
+            x-text="`Pertanyaan ${currentQuestionIndex + 1} dari ${questions.length}`"
+          ></div>
+
+          <button
+            @click="nextQuestion()"
+            :disabled="!currentResponse"
+            :class="currentResponse ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700' : 'bg-gray-300 cursor-not-allowed'"
+            class="px-8 py-3 text-white rounded-lg font-medium transition-all duration-200 shadow-lg"
+          >
+            <span x-show="currentQuestionIndex < questions.length - 1"
+              >Berikutnya →</span
+            >
+            <span x-show="currentQuestionIndex === questions.length - 1"
+              >Selesai ✓</span
+            >
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Processing State (No Results Display) -->
+    <div
+      x-show="submitted"
+      class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center"
+    >
+      <div class="text-6xl mb-4">✅</div>
+      <h2 class="text-2xl font-bold text-gray-900 mb-3">
+        PHQ Assessment Selesai
+      </h2>
+      <p class="text-gray-600 mb-4">
+        Mengarahkan ke assessment berikutnya...
+      </p>
+      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block scripts %}
 <script>
-function phqAssessment() {
-    return {
-        sessionId: {{ session.id }},
-        loading: true,
-        submitting: false,
-        submitted: false,
-        questions: [],
-        responses: {},
-        currentQuestionIndex: 0,
-        currentResponse: null,
-        totalScore: 0,
-        scoreAnalysis: '',
-        
-        get currentQuestion() {
-            return this.questions[this.currentQuestionIndex] || null;
-        },
-        
-        async init() {
-            await this.loadQuestions();
-        },
-        
-        async loadQuestions() {
-            try {
-                const result = await apiCall(`{{ url_for("phq_assessment.get_phq_questions", session_id=0) }}`.replace('0', this.sessionId));
-                if (result && result.status === 'OLKORECT') {
-                    this.questions = result.data.questions;
-                    this.loadCurrentResponse();
-                } else {
-                    alert('Error loading questions: ' + (result?.error || 'Unknown error'));
-                }
-            } catch (error) {
-                alert('Error: ' + error.message);
-            } finally {
-                this.loading = false;
-            }
-        },
-        
-        loadCurrentResponse() {
-            if (this.currentQuestion) {
-                this.currentResponse = this.responses[this.currentQuestion.question_id] || null;
-            }
-        },
-        
-        updateCurrentResponse(value, text) {
-            if (!this.currentQuestion) return;
-            
-            this.currentResponse = {
-                question_id: this.currentQuestion.question_id,
-                response_value: value,
-                response_text: text,
-                response_time_ms: Date.now() - (this.questionStartTime || Date.now())
-            };
-            
-            this.responses[this.currentQuestion.question_id] = this.currentResponse;
-        },
-        
-        previousQuestion() {
-            if (this.currentQuestionIndex > 0) {
-                this.currentQuestionIndex--;
-                this.loadCurrentResponse();
-                this.questionStartTime = Date.now();
-            }
-        },
-        
-        async nextQuestion() {
-            if (!this.currentResponse) return;
-            
-            // If this is the last question, submit all responses
-            if (this.currentQuestionIndex === this.questions.length - 1) {
-                await this.submitAllResponses();
-            } else {
-                // Go to next question
-                this.currentQuestionIndex++;
-                this.loadCurrentResponse();
-                this.questionStartTime = Date.now();
-            }
-        },
-        
-        async submitAllResponses() {
-            if (this.submitting) return;
-            
-            this.submitting = true;
-            try {
-                const payload = {
-                    responses: Object.values(this.responses)
-                };
-                
-                const result = await apiCall(`{{ url_for("phq_assessment.submit_phq_responses", session_id=0) }}`.replace('0', this.sessionId), 'POST', payload);
-                if (result && result.status === 'OLKORECT') {
-                    this.submitted = true;
-                    this.totalScore = result.data.total_score;
-                    this.scoreAnalysis = `Assessment berhasil diselesaikan dengan skor ${result.data.total_score}`;
-                } else {
-                    alert('Error submitting responses: ' + (result?.error || 'Unknown error'));
-                    this.submitting = false;
-                }
-            } catch (error) {
-                alert('Error: ' + error.message);
-                this.submitting = false;
-            }
-        },
-        
-        continueToNextStep() {
-            window.location.href = '/assessment';
-        }
-    };
-}
+  function phqAssessment() {
+      return {
+          sessionId: {{ session.id }},
+          loading: true,
+          submitting: false,
+          submitted: false,
+          questions: [],
+          responses: {},
+          currentQuestionIndex: 0,
+          currentResponse: null,
+          totalScore: 0,
+          scoreAnalysis: '',
+
+          get currentQuestion() {
+              return this.questions[this.currentQuestionIndex] || null;
+          },
+
+          async init() {
+              await this.loadQuestions();
+              this.setupAbandonTracking();
+          },
+
+          setupAbandonTracking() {
+              // Track when user leaves the page
+              window.addEventListener('beforeunload', () => {
+                  if (!this.submitted) {
+                      // Use sendBeacon for reliable tracking when page unloads
+                      navigator.sendBeacon(`/assessment/abandon/${this.sessionId}`,
+                        JSON.stringify({ reason: 'User left PHQ assessment page' }));
+                  }
+              });
+
+              // Track when user navigates away
+              window.addEventListener('pagehide', () => {
+                  if (!this.submitted) {
+                      fetch(`/assessment/abandon/${this.sessionId}`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ reason: 'User navigated away from PHQ assessment' }),
+                          keepalive: true
+                      }).catch(() => {}); // Ignore errors
+                  }
+              });
+          },
+
+          async loadQuestions() {
+              try {
+                  const result = await apiCall(`{{ url_for("phq_assessment.get_phq_questions", session_id=0) }}`.replace('0', this.sessionId));
+                  if (result && result.status === 'OLKORECT') {
+                      this.questions = result.data.questions;
+                      this.loadCurrentResponse();
+                  } else {
+                      alert('Error loading questions: ' + (result?.error || 'Unknown error'));
+                  }
+              } catch (error) {
+                  alert('Error: ' + error.message);
+              } finally {
+                  this.loading = false;
+              }
+          },
+
+          loadCurrentResponse() {
+              if (this.currentQuestion) {
+                  this.currentResponse = this.responses[this.currentQuestion.question_id] || null;
+              }
+          },
+
+          updateCurrentResponse(value, text) {
+              if (!this.currentQuestion) return;
+
+              // Ensure value is integer and in valid scale range
+              const responseValue = parseInt(value);
+              const scaleMin = this.currentQuestion?.scale_min || 0;
+              const scaleMax = this.currentQuestion?.scale_max || 3;
+
+              if (isNaN(responseValue) || responseValue < scaleMin || responseValue > scaleMax) {
+                  console.error('Invalid response value:', value, 'converted to:', responseValue, 'valid range:', scaleMin, '-', scaleMax);
+                  return;
+              }
+
+              this.currentResponse = {
+                  question_id: this.currentQuestion.question_id,
+                  response_value: responseValue,
+                  response_text: text,
+                  response_time_ms: Date.now() - (this.questionStartTime || Date.now())
+              };
+
+              console.log('Response updated:', this.currentResponse); // Debug log
+              this.responses[this.currentQuestion.question_id] = this.currentResponse;
+          },
+
+          previousQuestion() {
+              if (this.currentQuestionIndex > 0) {
+                  this.currentQuestionIndex--;
+                  this.loadCurrentResponse();
+                  this.questionStartTime = Date.now();
+              }
+          },
+
+          async nextQuestion() {
+              if (!this.currentResponse) return;
+
+              // If this is the last question, submit all responses
+              if (this.currentQuestionIndex === this.questions.length - 1) {
+                  await this.submitAllResponses();
+              } else {
+                  // Go to next question
+                  this.currentQuestionIndex++;
+                  this.loadCurrentResponse();
+                  this.questionStartTime = Date.now();
+              }
+          },
+
+          async submitAllResponses() {
+              if (this.submitting) return;
+
+              this.submitting = true;
+              try {
+                  const payload = {
+                      responses: Object.values(this.responses)
+                  };
+
+                  // Submit responses first
+                  const result = await apiCall(`{{ url_for("phq_assessment.submit_phq_responses", session_id=0) }}`.replace('0', this.sessionId), 'POST', payload);
+                  if (result && result.status === 'OLKORECT') {
+                      this.totalScore = result.data.total_score;
+
+                      // Call completion handler for seamless flow
+                      if (result.data.completion_redirect) {
+                          const completionResult = await apiCall(result.data.completion_redirect, 'POST', {});
+                          if (completionResult && completionResult.status === 'OLKORECT') {
+                              // Immediate redirect to next assessment - no results display
+                              window.location.href = completionResult.data.next_redirect;
+                              return;
+                          }
+                      }
+
+                      // Fallback - show completed state
+                      this.submitted = true;
+                      this.scoreAnalysis = `Assessment berhasil diselesaikan dengan skor ${result.data.total_score}`;
+                  } else {
+                      alert('Error submitting responses: ' + (result?.error || 'Unknown error'));
+                      this.submitting = false;
+                  }
+              } catch (error) {
+                  alert('Error: ' + error.message);
+                  this.submitting = false;
+              }
+          },
+
+          continueToNextStep() {
+              window.location.href = '/assessment';
+          }
+      };
+  }
 </script>
 {% endblock %}

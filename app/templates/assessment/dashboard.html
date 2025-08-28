@@ -55,8 +55,9 @@ block content %}
           class="flex-1 h-2 {% if camera_completed %}bg-green-200{% else %}bg-gray-200{% endif %} mx-4 rounded"
         ></div>
         <div class="flex items-center">
-          {% set assessment_in_progress = session.status in ['PHQ_IN_PROGRESS', 'LLM_IN_PROGRESS'] %}
-          {% set assessment_completed = session.status == 'COMPLETED' %}
+          {% set assessment_in_progress = session.status in ['PHQ_IN_PROGRESS',
+          'LLM_IN_PROGRESS'] %} {% set assessment_completed = session.status ==
+          'COMPLETED' %}
           <div
             class="w-10 h-10 {% if assessment_completed %}bg-green-600 text-white{% elif assessment_in_progress %}bg-blue-600 text-white{% elif camera_completed %}bg-yellow-500 text-white{% else %}bg-gray-300 text-gray-600{% endif %} rounded-full flex items-center justify-center text-sm font-medium"
           >
@@ -92,20 +93,31 @@ block content %}
       <!-- Assessment Complete -->
       <div class="text-center">
         <div class="text-6xl mb-4">✅</div>
-        <h2 class="text-2xl font-bold text-gray-900 mb-3">Assessment Selesai</h2>
+        <h2 class="text-2xl font-bold text-gray-900 mb-3">
+          Assessment Selesai
+        </h2>
         <p class="text-gray-600 mb-6">
           Terima kasih! Assessment Anda telah selesai.
         </p>
         <div class="bg-gray-50 rounded-lg p-4 mb-6">
           <h3 class="font-semibold text-gray-900 mb-2">Ringkasan Session:</h3>
           <div class="text-sm text-gray-600 space-y-1">
-            <p>PHQ selesai: {{ session.phq_completed_at.strftime('%d/%m/%Y %H:%M') if session.phq_completed_at else '-' }}</p>
-            <p>LLM selesai: {{ session.llm_completed_at.strftime('%d/%m/%Y %H:%M') if session.llm_completed_at else '-' }}</p>
-            <p>Durasi total: {{ session.duration_seconds // 60 if session.duration_seconds else '-' }} menit</p>
+            <p>
+              PHQ selesai: {{ session.phq_completed_at.strftime('%d/%m/%Y
+              %H:%M') if session.phq_completed_at else '-' }}
+            </p>
+            <p>
+              LLM selesai: {{ session.llm_completed_at.strftime('%d/%m/%Y
+              %H:%M') if session.llm_completed_at else '-' }}
+            </p>
+            <p>
+              Durasi total: {{ session.duration_seconds // 60 if
+              session.duration_seconds else '-' }} menit
+            </p>
           </div>
         </div>
       </div>
-      {% else %}
+      {% elif session.status == 'CAMERA_CHECK' %}
       <!-- Ready for Assessment -->
       <div class="text-center">
         <div class="text-6xl mb-4">📝</div>
@@ -120,6 +132,21 @@ block content %}
         >
           Mulai {{ session.is_first.upper() }} Assessment
         </button>
+      </div>
+
+      {% else %}
+      <!-- Redirecting to Assessment -->
+      <div class="text-center">
+        <div class="text-6xl mb-4">🔄</div>
+        <h2 class="text-2xl font-bold text-gray-900 mb-3">
+          Mengarahkan ke Assessment
+        </h2>
+        <p class="text-gray-600 mb-6">
+          Sistem sedang mengarahkan Anda ke assessment berikutnya...
+        </p>
+        <div
+          class="animate-spin rounded-full h-8 w-8 border-4 border-gray-200 border-t-purple-600 mx-auto"
+        ></div>
       </div>
       {% endif %}
     </div>
@@ -136,18 +163,13 @@ block content %}
               window.location.href = '/assessment/consent';
           },
 
-          goToCameraCheck() {
-              window.location.href = '/assessment/camera-check';
-          },
-
           startFirstAssessment() {
               if (this.sessionType === 'phq') {
                   window.location.href = '/assessment/phq';
               } else if (this.sessionType === 'llm') {
                   window.location.href = '/assessment/llm';
               }
-          },
-
+          }
       };
   }
 </script>

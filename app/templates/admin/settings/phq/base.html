@@ -70,26 +70,77 @@ endblock %} {% block content %}
       },
 
       scale: {
-        minValue: 1,
-        maxValue: 4,
+        minValue: 0,
+        maxValue: 3,
         labels: {
-          1: "Label 1",
-          2: "Label 2",
-          3: "Label 3",
-          4: "Label 4",
+          0: "Tidak sama sekali",
+          1: "Beberapa hari",
+          2: "Lebih dari setengah hari",
+          3: "Hampir setiap hari",
         },
       },
 
       categories: [
-        {name_id: 'ANHEDONIA', name: 'Anhedonia', description_id: 'Kurang tertarik atau bergairah dalam melakukan apapun', questions: ['']},
-        {name_id: 'DEPRESSED_MOOD', name: 'Depressed Mood', description_id: 'Merasa murung, muram, atau putus asa', questions: ['']},
-        {name_id: 'SLEEP_DISTURBANCE', name: 'Sleep Disturbance', description_id: 'Sulit tidur atau mudah terbangun, atau terlalu banyak tidur', questions: ['']},
-        {name_id: 'FATIGUE', name: 'Fatigue', description_id: 'Merasa lelah atau kurang bertenaga', questions: ['']},
-        {name_id: 'APPETITE_CHANGES', name: 'Appetite Changes', description_id: 'Kurang nafsu makan atau terlalu banyak makan', questions: ['']},
-        {name_id: 'WORTHLESSNESS', name: 'Worthlessness', description_id: 'Kurang percaya diri — atau merasa bahwa Anda adalah orang yang gagal atau telah mengecewakan diri sendiri atau keluarga', questions: ['']},
-        {name_id: 'CONCENTRATION', name: 'Concentration', description_id: 'Sulit berkonsentrasi pada sesuatu, misalnya membaca koran atau menonton televisi', questions: ['']},
-        {name_id: 'PSYCHOMOTOR', name: 'Psychomotor', description_id: 'Bergerak atau berbicara sangat lambat sehingga orang lain memperhatikannya. Atau sebaliknya — merasa resah atau gelisah sehingga Anda lebih sering bergerak dari biasanya', questions: ['']},
-        {name_id: 'SUICIDAL_IDEATION', name: 'Suicidal Ideation', description_id: 'Merasa lebih baik mati atau ingin melukai diri sendiri dengan cara apapun', questions: ['']}      
+        {
+          name_id: "ANHEDONIA",
+          name: "Anhedonia",
+          description_id:
+            "Kurang tertarik atau bergairah dalam melakukan apapun",
+          questions: [""],
+        },
+        {
+          name_id: "DEPRESSED_MOOD",
+          name: "Depressed Mood",
+          description_id: "Merasa murung, muram, atau putus asa",
+          questions: [""],
+        },
+        {
+          name_id: "SLEEP_DISTURBANCE",
+          name: "Sleep Disturbance",
+          description_id:
+            "Sulit tidur atau mudah terbangun, atau terlalu banyak tidur",
+          questions: [""],
+        },
+        {
+          name_id: "FATIGUE",
+          name: "Fatigue",
+          description_id: "Merasa lelah atau kurang bertenaga",
+          questions: [""],
+        },
+        {
+          name_id: "APPETITE_CHANGES",
+          name: "Appetite Changes",
+          description_id: "Kurang nafsu makan atau terlalu banyak makan",
+          questions: [""],
+        },
+        {
+          name_id: "WORTHLESSNESS",
+          name: "Worthlessness",
+          description_id:
+            "Kurang percaya diri — atau merasa bahwa Anda adalah orang yang gagal atau telah mengecewakan diri sendiri atau keluarga",
+          questions: [""],
+        },
+        {
+          name_id: "CONCENTRATION",
+          name: "Concentration",
+          description_id:
+            "Sulit berkonsentrasi pada sesuatu, misalnya membaca koran atau menonton televisi",
+          questions: [""],
+        },
+        {
+          name_id: "PSYCHOMOTOR",
+          name: "Psychomotor",
+          description_id:
+            "Bergerak atau berbicara sangat lambat sehingga orang lain memperhatikannya. Atau sebaliknya — merasa resah atau gelisah sehingga Anda lebih sering bergerak dari biasanya",
+          questions: [""],
+        },
+        {
+          name_id: "SUICIDAL_IDEATION",
+          name: "Suicidal Ideation",
+          description_id:
+            "Merasa lebih baik mati atau ingin melukai diri sendiri dengan cara apapun",
+          questions: [""],
+        },
       ],
 
       // Modal state
@@ -102,20 +153,17 @@ endblock %} {% block content %}
         this.updateScale();
         this.loadDataFromTemplate();
       },
-
       updateScale() {
-        this.scale.minValue = 1; // Always start from 1
+        this.scale.minValue = 0; // Always start from 0 (0-based)
         const max = parseInt(this.scale.maxValue);
         const newLabels = {};
 
-        for (let i = 1; i <= max; i++) {
+        for (let i = 0; i <= max; i++) {
           newLabels[i] = this.scale.labels[i] || `Label ${i}`;
         }
 
         this.scale.labels = newLabels;
       },
-
-
 
       addQuestion(categoryIndex) {
         this.categories[categoryIndex].questions.push("");
@@ -132,17 +180,17 @@ endblock %} {% block content %}
           "Apakah Anda yakin ingin memuat data default PHQ-9? Data yang ada akan diganti.";
         this.modalConfirm = () => {
           this.scale = {
-            minValue: 1,
-            maxValue: 4,
+            minValue: 0,
+            maxValue: 3,
             labels: {
-              1: "Tidak sama sekali",
-              2: "Beberapa hari",
-              3: "Lebih dari setengah hari",
-              4: "Hampir setiap hari",
+              0: "Tidak sama sekali",
+              1: "Beberapa hari",
+              2: "Lebih dari setengah hari",
+              3: "Hampir setiap hari",
             },
           };
           // Reset to default questions for each category
-          this.categories.forEach(cat => {
+          this.categories.forEach((cat) => {
             cat.questions = [cat.description_id];
           });
         };
@@ -185,13 +233,13 @@ endblock %} {% block content %}
             }
 
             this.showModal = true;
-            this.modalTitle = 'Berhasil';
-            this.modalMessage = 'Semua data PHQ berhasil dihapus!';
+            this.modalTitle = "Berhasil";
+            this.modalMessage = "Semua data PHQ berhasil dihapus!";
             this.modalConfirm = () => {};
           } catch (error) {
             this.showModal = true;
-            this.modalTitle = 'Error';
-            this.modalMessage = 'Error clearing data: ' + error.message;
+            this.modalTitle = "Error";
+            this.modalMessage = "Error clearing data: " + error.message;
             this.modalConfirm = () => {};
           } finally {
             this.loading = false;
@@ -202,13 +250,15 @@ endblock %} {% block content %}
       loadDataFromTemplate() {
         // Load data from Jinja template context (passed via window.phqData)
         const phqData = window.phqData || {};
-        
+
         try {
           // Load questions for predefined categories
           if (phqData.questions_by_category) {
             for (const category of this.categories) {
-              const questions = phqData.questions_by_category[category.name_id] || [];
-              category.questions = questions.length > 0 ? questions : [category.description_id];
+              const questions =
+                phqData.questions_by_category[category.name_id] || [];
+              category.questions =
+                questions.length > 0 ? questions : [category.description_id];
             }
           }
 
@@ -224,7 +274,9 @@ endblock %} {% block content %}
 
           // Load settings
           if (phqData.settings) {
-            this.config.randomize = phqData.settings.randomize_categories ? "true" : "false";
+            this.config.randomize = phqData.settings.randomize_categories
+              ? "true"
+              : "false";
             this.config.instructions = phqData.settings.instructions || "";
           }
         } catch (error) {
@@ -247,7 +299,9 @@ endblock %} {% block content %}
           if (Array.isArray(categoriesRes) && categoriesRes.length > 0) {
             for (const cat of categoriesRes) {
               // Find matching predefined category
-              const predefinedCat = this.categories.find(c => c.name_id === cat.name_id);
+              const predefinedCat = this.categories.find(
+                (c) => c.name_id === cat.name_id
+              );
               if (predefinedCat) {
                 // Load questions for this category
                 const questionsRes = await apiCall(
@@ -256,15 +310,18 @@ endblock %} {% block content %}
                 const questions = Array.isArray(questionsRes)
                   ? questionsRes.map((q) => q.question_text_id)
                   : [predefinedCat.description_id];
-                
-                predefinedCat.questions = questions.length > 0 ? questions : [predefinedCat.description_id];
+
+                predefinedCat.questions =
+                  questions.length > 0
+                    ? questions
+                    : [predefinedCat.description_id];
               }
             }
           }
 
           // Load scale (find default or first active scale)
           if (Array.isArray(scalesRes) && scalesRes.length > 0) {
-            const scale = scalesRes.find(s => s.is_default) || scalesRes[0];
+            const scale = scalesRes.find((s) => s.is_default) || scalesRes[0];
             this.scale = {
               id: scale.id,
               minValue: scale.min_value,
@@ -275,7 +332,8 @@ endblock %} {% block content %}
 
           // Load settings (find default or first active setting)
           if (Array.isArray(settingsRes) && settingsRes.length > 0) {
-            const settings = settingsRes.find(s => s.is_default) || settingsRes[0];
+            const settings =
+              settingsRes.find((s) => s.is_default) || settingsRes[0];
             this.config.randomize = settings.randomize_categories
               ? "true"
               : "false";
@@ -319,7 +377,7 @@ endblock %} {% block content %}
           // Save questions for each category
           for (let i = 0; i < this.categories.length; i++) {
             const category = this.categories[i];
-            
+
             if (category.questions.length > 0) {
               // Delete existing questions for this category first
               const existingQuestions = await apiCall(
@@ -395,16 +453,16 @@ endblock %} {% block content %}
           }
 
           this.showModal = true;
-          this.modalTitle = 'Berhasil';
-          this.modalMessage = 'Semua pengaturan PHQ berhasil disimpan!';
+          this.modalTitle = "Berhasil";
+          this.modalMessage = "Semua pengaturan PHQ berhasil disimpan!";
           this.modalConfirm = () => {
             window.location.reload();
           };
         } catch (error) {
           console.error("Save error:", error);
           this.showModal = true;
-          this.modalTitle = 'Error';
-          this.modalMessage = 'Error saving data: ' + error.message;
+          this.modalTitle = "Error";
+          this.modalMessage = "Error saving data: " + error.message;
           this.modalConfirm = () => {};
         } finally {
           this.loading = false;

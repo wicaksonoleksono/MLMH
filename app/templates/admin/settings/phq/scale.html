@@ -1,59 +1,88 @@
 <!-- Scale Settings Component -->
 <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-    <div class="flex items-center space-x-2 mb-4">
-        <div class="w-8 h-8 bg-orange-500 rounded flex items-center justify-center">
-            <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-            </svg>
-        </div>
-        <h2 class="text-lg font-bold text-gray-800">Pengaturan Skala</h2>
+  <div class="flex items-center space-x-2 mb-4">
+    <div class="w-8 h-8 bg-orange-500 rounded flex items-center justify-center">
+      <svg
+        class="w-4 h-4 text-white"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+        ></path>
+      </svg>
     </div>
-    
-    <div class="space-y-4">
-        <!-- Scale Range -->
-        <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">Jumlah Tingkat Skala: <span x-text="scale.maxValue"></span> (1 - <span x-text="scale.maxValue"></span>)</label>
-            <input type="range" x-model="scale.maxValue" @input="updateScale()" min="2" max="10" value="4"
-                   class="w-full h-2 bg-orange-200 rounded-lg appearance-none cursor-pointer slider">
-        </div>
+    <h2 class="text-lg font-bold text-gray-800">Pengaturan Skala</h2>
+  </div>
 
-        <!-- Scale Labels -->
-        <div class="bg-orange-50 rounded p-3 border border-orange-200">
-            <div class="text-sm font-medium text-gray-700 mb-2">Label Skala</div>
-            <div class="space-y-2 max-h-48 overflow-y-auto">
-                <template x-for="i in Array.from({length: parseInt(scale.maxValue) - parseInt(scale.minValue) + 1}, (_, idx) => parseInt(scale.minValue) + idx)" :key="i">
-                    <div class="flex items-center space-x-2">
-                        <div class="w-8 h-8 bg-orange-500 rounded flex items-center justify-center">
-                            <span class="text-white font-bold text-xs" x-text="i"></span>
-                        </div>
-                        <input type="text" x-model="scale.labels[i]" 
-                               class="flex-1 px-2 py-1 border border-orange-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
-                               :placeholder="'Label untuk nilai ' + i">
-                    </div>
-                </template>
-            </div>
-        </div>
+  <div class="space-y-4">
+    <!-- Scale Range -->
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-2"
+        >Jumlah Tingkat Skala:
+        <span x-text="parseInt(scale.maxValue) + 1"></span> (0 -
+        <span x-text="scale.maxValue"></span>)</label
+      >
+      <input
+        type="range"
+        x-model="scale.maxValue"
+        @input="updateScale()"
+        min="1"
+        max="9"
+        value="3"
+        class="w-full h-2 bg-orange-200 rounded-lg appearance-none cursor-pointer slider"
+      />
     </div>
+
+    <!-- Scale Labels -->
+    <div class="bg-orange-50 rounded p-3 border border-orange-200">
+      <div class="text-sm font-medium text-gray-700 mb-2">Label Skala</div>
+      <div class="space-y-2 max-h-48 overflow-y-auto">
+        <template
+          x-for="i in Array.from({length: parseInt(scale.maxValue) - parseInt(scale.minValue) + 1}, (_, idx) => parseInt(scale.minValue) + idx)"
+          :key="i"
+        >
+          <div class="flex items-center space-x-2">
+            <div
+              class="w-8 h-8 bg-orange-500 rounded flex items-center justify-center"
+            >
+              <span class="text-white font-bold text-xs" x-text="i"></span>
+            </div>
+            <input
+              type="text"
+              x-model="scale.labels[i]"
+              class="flex-1 px-2 py-1 border border-orange-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
+              :placeholder="'Label untuk nilai ' + i"
+            />
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
 </div>
 
 <style>
-.slider::-webkit-slider-thumb {
+  .slider::-webkit-slider-thumb {
     appearance: none;
     height: 20px;
     width: 20px;
     border-radius: 50%;
     background: #f97316;
     cursor: pointer;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
 
-.slider::-moz-range-thumb {
+  .slider::-moz-range-thumb {
     height: 20px;
     width: 20px;
     border-radius: 50%;
     background: #f97316;
     cursor: pointer;
     border: none;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
 </style>

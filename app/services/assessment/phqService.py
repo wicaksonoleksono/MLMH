@@ -21,14 +21,28 @@ class PHQResponseService:
     ) -> PHQResponse:
         """Create a PHQ response for a session"""
         with get_session() as db:
+            # Get session and scale for validation
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                raise ValueError(f"Session {session_id} not found")
+
             # Get question details for snapshot
             question = db.query(PHQQuestion).filter_by(id=question_id).first()
             if not question:
                 raise ValueError(f"PHQ question with ID {question_id} not found")
 
-            # Validate response value (should be 0-3)
-            if response_value not in [0, 1, 2, 3]:
-                raise ValueError("Response value must be between 0-3")
+            # Get scale for dynamic validation
+            phq_settings = session.phq_settings
+            if not phq_settings:
+                raise ValueError(f"Session {session_id} has no PHQ settings")
+
+            scale = phq_settings.scale
+            if not scale:
+                raise ValueError(f"PHQ settings has no scale configured")
+
+            # Validate response value against dynamic scale range
+            if response_value < scale.min_value or response_value > scale.max_value:
+                raise ValueError(f"Response value must be between {scale.min_value}-{scale.max_value}")
 
             response = PHQResponse(
                 session_id=session_id,
@@ -90,7 +104,7 @@ class PHQResponseService:
                         raise ValueError(f"Found None question in category {category['name_id']}")
                     if not hasattr(question, 'id') or question.id is None:
                         raise ValueError(f"Question missing ID in category {category['name_id']}: {question}")
-                    
+
                     selected_questions.append({
                         "question_id": question.id,
                         "question_number": question_number,
@@ -109,20 +123,21 @@ class PHQResponseService:
             # Get scale information
             scale = phq_settings.scale
             if not scale:
-                raise ValueError(f"PHQ settings {phq_settings.id} has no scale configured (scale_id: {phq_settings.scale_id})")
-            
+                raise ValueError(
+                    f"PHQ settings {phq_settings.id} has no scale configured (scale_id: {phq_settings.scale_id})")
+
             scale_labels = scale.scale_labels if scale else {
-                0: "Tidak sama sekali",
-                1: "Beberapa hari",
-                2: "Lebih dari setengah hari",
-                3: "Hampir setiap hari"
+                1: "Tidak sama sekali",
+                2: "Beberapa hari",
+                3: "Lebih dari setengah hari",
+                4: "Hampir setiap hari"
             }
 
             # Add metadata to response
             for question in selected_questions:
                 question.update({
-                    "scale_min": scale.min_value if scale else 0,
-                    "scale_max": scale.max_value if scale else 3,
+                    "scale_min": scale.min_value if scale else 1,
+                    "scale_max": scale.max_value if scale else 4,
                     "scale_labels": scale_labels,
                     "instructions": phq_settings.instructions
                 })
@@ -150,8 +165,15 @@ class PHQResponseService:
                 raise ValueError(f"PHQ response with ID {response_id} not found")
 
             # Validate response_value if being updated
-            if 'response_value' in updates and updates['response_value'] not in [0, 1, 2, 3]:
-                raise ValueError("Response value must be between 0-3")
+            if 'response_value' in updates:
+                # Get session and scale for validation
+                session = db.query(AssessmentSession).filter_by(id=response.session_id).first()
+                if session and session.phq_settings and session.phq_settings.scale:
+                    scale = session.phq_settings.scale
+                    if updates['response_value'] < scale.min_value or updates['response_value'] > scale.max_value:
+                        raise ValueError(f"Response value must be between {scale.min_value}-{scale.max_value}")
+                else:
+                    raise ValueError("Cannot validate response value: scale configuration not found")
 
             for key, value in updates.items():
                 if hasattr(response, key):
@@ -182,6 +204,16 @@ class PHQResponseService:
     def get_detailed_session_scores(session_id: int) -> Dict[str, Any]:
         """Calculate PHQ score for a session by category"""
         with get_session() as db:
+            # Get session to access scale configuration
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                return {"total_score": 0, "category_scores": {}, "response_count": 0}
+
+            # Get scale max value for proper scoring
+            scale_max = 4  # Default fallback
+            if session.phq_settings and session.phq_settings.scale:
+                scale_max = session.phq_settings.scale.max_value
+
             responses = db.query(PHQResponse).filter_by(session_id=session_id).all()
 
             if not responses:
@@ -201,7 +233,7 @@ class PHQResponseService:
                     }
 
                 category_scores[category]["score"] += response.response_value
-                category_scores[category]["max_possible"] += 3  # Max value per question
+                category_scores[category]["max_possible"] += scale_max  # Use dynamic max value
                 category_scores[category]["question_count"] += 1
                 total_score += response.response_value
 
@@ -214,7 +246,7 @@ class PHQResponseService:
                 else:
                     category_scores[category]["percentage"] = 0
 
-            max_possible_total = len(responses) * 3
+            max_possible_total = len(responses) * scale_max
             total_percentage = (total_score / max_possible_total) * 100 if max_possible_total > 0 else 0
 
             return {
@@ -340,5 +372,16 @@ class PHQResponseService:
     @staticmethod
     def get_max_possible_score(session_id: int) -> int:
         """Get maximum possible score for session"""
-        expected_responses = PHQResponseService.get_expected_response_count(session_id)
-        return expected_responses * 3  # Max score per question is 3
+        with get_session() as db:
+            # Get session to access scale configuration
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                return 0
+
+            # Get scale max value for proper scoring
+            scale_max = 4  # Default fallback
+            if session.phq_settings and session.phq_settings.scale:
+                scale_max = session.phq_settings.scale.max_value
+
+            expected_responses = PHQResponseService.get_expected_response_count(session_id)
+            return expected_responses * scale_max

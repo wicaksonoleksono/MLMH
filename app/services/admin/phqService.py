@@ -59,13 +59,13 @@ class PHQService:
             # Null handling - don't save if category or questions are null/empty
             if not category_name_id or not category_name_id.strip():
                 raise ValueError("Category name ID cannot be null or empty")
-            
+
             if not question_text_en or not question_text_en.strip():
                 raise ValueError("English question text cannot be null or empty")
-            
+
             if not question_text_id or not question_text_id.strip():
                 raise ValueError("Indonesian question text cannot be null or empty")
-            
+
             # Verify category exists in predefined list
             valid_categories = [cat.name_id for cat in PHQCategoryType]
             if category_name_id not in valid_categories:
@@ -278,16 +278,16 @@ class PHQService:
             # Null handling - don't save if required fields are null/empty
             if not setting_name or not setting_name.strip():
                 raise ValueError("Setting name cannot be null or empty")
-            
+
             if not questions_per_category or questions_per_category <= 0:
                 raise ValueError("Questions per category must be a positive number")
-            
+
             if not scale_id:
                 raise ValueError("Scale ID cannot be null or empty")
-            
+
             # Null handling for instructions - don't save if null/empty
             final_instructions = instructions if instructions and instructions.strip() else None
-            
+
             if is_default:
                 # Find existing default settings to update
                 existing = db.query(PHQSettings).filter(PHQSettings.is_default == True).first()

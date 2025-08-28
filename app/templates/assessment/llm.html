@@ -1,376 +1,446 @@
-{% extends "base.html" %}
-
-{% block title %}LLM Assessment - Chat dengan Anisa{% endblock %}
-
-{% block content %}
+{% extends "base.html" %} {% block title %}LLM Assessment - Chat dengan Anisa{%
+endblock %} {% block content %}
 <div class="min-h-screen bg-gray-50" x-data="chatInterface()">
-    <!-- Navigation -->
-    <nav class="bg-white shadow-sm border-b border-gray-200">
-        <div class="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
-            <div class="flex items-center space-x-4">
-                <h1 class="text-xl font-semibold text-gray-900">Chat dengan Anisa</h1>
-                <div class="bg-gradient-to-r from-green-500 to-teal-500 rounded-lg px-3 py-1">
-                    <span class="text-white font-medium text-sm">LLM Assessment</span>
-                </div>
-            </div>
-            <div class="flex items-center space-x-4">
-                <div id="conversation-timer" class="text-gray-600 text-sm font-mono">00:00</div>
-                <a href="{{ url_for('auth.logout') }}" class="text-gray-500 hover:text-red-600 font-medium transition-colors">
-                    Keluar
-                </a>
-            </div>
+  <!-- Navigation -->
+  <nav class="bg-white shadow-sm border-b border-gray-200">
+    <div class="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-4">
+        <h1 class="text-xl font-semibold text-gray-900">Chat dengan Anisa</h1>
+        <div
+          class="bg-gradient-to-r from-green-500 to-teal-500 rounded-lg px-3 py-1"
+        >
+          <span class="text-white font-medium text-sm">LLM Assessment</span>
         </div>
-    </nav>
-
-    <!-- Chat Container -->
-    <div class="max-w-4xl mx-auto py-6 px-4">
-        <div class="bg-white rounded-lg shadow-lg overflow-hidden h-[80vh] flex flex-col">
-            
-            <!-- Instructions Header -->
-            <div class="bg-gray-50 p-4 border-b border-gray-200">
-                <div class="flex items-start">
-                    <svg class="w-5 h-5 text-green-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
-                    <div>
-                        <h3 class="text-sm font-medium text-green-700">Instruksi</h3>
-                        <p class="text-sm text-gray-700 mt-1">Silakan berbicara dengan Anisa tentang perasaan dan pikiran Anda. Ceritakan apa yang sedang Anda alami dengan jujur dan terbuka.</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Chat Messages -->
-            <div class="flex-1 overflow-y-auto p-6 space-y-4" x-ref="chatContainer">
-                <!-- Loading State -->
-                <div x-show="loading" class="text-center py-8">
-                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
-                    <p class="text-gray-600 mt-2">Memuat percakapan...</p>
-                </div>
-
-                <!-- Dynamic Messages -->
-                <template x-for="message in messages" :key="message.id">
-                    <div :class="message.type === 'user' ? 'flex justify-end' : 'flex items-start space-x-3'">
-                        <!-- AI Avatar -->
-                        <div x-show="message.type === 'ai'" class="w-10 h-10 bg-gradient-to-r from-green-500 to-teal-500 rounded-full flex items-center justify-center flex-shrink-0">
-                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-                            </svg>
-                        </div>
-
-                        <!-- Message Bubble -->
-                        <div :class="message.type === 'user' ? 
-                            'bg-blue-600 text-white rounded-2xl px-6 py-4 max-w-xl border border-blue-200' : 
-                            'bg-gray-50 rounded-2xl px-6 py-4 max-w-2xl border border-gray-200'">
-                            
-                            <p :class="message.type === 'user' ? 'text-white' : 'text-gray-900'" x-text="message.content"></p>
-                            
-                            <!-- Typing indicator only when content is empty -->
-                            <div x-show="message.type === 'ai' && message.streaming && message.content === ''" class="flex items-center mt-2">
-                                <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                                <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse ml-1"></div>
-                                <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse ml-1"></div>
-                            </div>
-                        </div>
-
-                        <!-- User Avatar -->
-                        <div x-show="message.type === 'user'" class="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
-                            <span class="text-white font-medium">{{ current_user.uname[0].upper() }}</span>
-                        </div>
-                    </div>
-                </template>
-            </div>
-
-            <!-- Input Area -->
-            <div class="bg-gray-50 border-t border-gray-200 p-6">
-                <form @submit.prevent="sendMessage()" class="flex space-x-4">
-                    <input 
-                        type="text" 
-                        x-model="currentMessage"
-                        :disabled="isTyping || conversationEnded"
-                        :placeholder="conversationEnded ? 'Percakapan telah selesai' : (isTyping ? 'Anisa sedang merespons...' : 'Bagikan pikiran, perasaan, atau apa pun yang ada di benak Anda...')"
-                        class="flex-1 bg-white border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:opacity-50"
-                        maxlength="1000">
-                    
-                    <button 
-                        type="submit" 
-                        :disabled="!currentMessage.trim() || isTyping || conversationEnded"
-                        class="px-6 py-3 bg-gradient-to-r from-green-500 to-teal-500 text-white rounded-lg font-medium hover:from-green-600 hover:to-teal-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg">
-                        
-                        <span x-show="!isTyping" class="flex items-center">
-                            <span>Kirim</span>
-                            <svg class="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
-                            </svg>
-                        </span>
-                        <span x-show="isTyping" class="flex items-center">
-                            <div class="w-2 h-2 bg-white rounded-full animate-pulse mr-2"></div>
-                            <span>Merespons</span>
-                        </span>
-                    </button>
-                </form>
-                
-                <!-- Chat Status and Controls -->
-                <div class="mt-4 flex justify-between items-center">
-                    <div class="flex items-center space-x-4 text-gray-600">
-                        <span class="text-sm">Pertukaran: <span x-text="exchangeCount" class="font-mono"></span></span>
-                        <span class="text-sm">Pesan: <span x-text="messages.length" class="font-mono"></span></span>
-                    </div>
-                    
-                    <!-- Finish Button -->
-                    <button 
-                        @click="finishConversation()"
-                        :disabled="isTyping || isFinishing || messages.length < 2"
-                        x-show="!conversationEnded"
-                        class="px-6 py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-lg font-medium hover:from-orange-600 hover:to-red-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg">
-                        
-                        <span x-show="!isFinishing" class="flex items-center">
-                            <span>Selesaikan Percakapan</span>
-                            <svg class="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                            </svg>
-                        </span>
-                        <span x-show="isFinishing" class="flex items-center">
-                            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                            </svg>
-                            Menyelesaikan...
-                        </span>
-                    </button>
-
-                    <!-- Conversation Ended Message -->
-                    <div x-show="conversationEnded" class="text-green-600 font-medium">
-                        ✅ Percakapan selesai! Mengarahkan ke tahap selanjutnya...
-                    </div>
-                </div>
-            </div>
+      </div>
+      <div class="flex items-center space-x-4">
+        <div id="conversation-timer" class="text-gray-600 text-sm font-mono">
+          00:00
         </div>
+        <a
+          href="{{ url_for('auth.logout') }}"
+          class="text-gray-500 hover:text-red-600 font-medium transition-colors"
+        >
+          Keluar
+        </a>
+      </div>
     </div>
+  </nav>
+
+  <!-- Chat Container -->
+  <div class="max-w-4xl mx-auto py-6 px-4">
+    <div
+      class="bg-white rounded-lg shadow-lg overflow-hidden h-[80vh] flex flex-col"
+    >
+      <!-- Instructions Header -->
+      <div class="bg-gray-50 p-4 border-b border-gray-200">
+        <div class="flex items-start">
+          <svg
+            class="w-5 h-5 text-green-600 mt-0.5 mr-3 flex-shrink-0"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+          <div>
+            <h3 class="text-sm font-medium text-green-700">Instruksi</h3>
+            <p class="text-sm text-gray-700 mt-1">
+              Silakan berbicara dengan Anisa tentang perasaan dan pikiran Anda.
+              Ceritakan apa yang sedang Anda alami dengan jujur dan terbuka.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat Messages -->
+      <div class="flex-1 overflow-y-auto p-6 space-y-4" x-ref="chatContainer">
+        <!-- Loading State -->
+        <div x-show="loading" class="text-center py-8">
+          <div
+            class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"
+          ></div>
+          <p class="text-gray-600 mt-2">Memuat percakapan...</p>
+        </div>
+
+        <!-- Dynamic Messages -->
+        <template x-for="message in messages" :key="message.id">
+          <div
+            :class="message.type === 'user' ? 'flex justify-end' : 'flex items-start space-x-3'"
+          >
+            <!-- AI Avatar -->
+            <div
+              x-show="message.type === 'ai'"
+              class="w-10 h-10 bg-gradient-to-r from-green-500 to-teal-500 rounded-full flex items-center justify-center flex-shrink-0"
+            >
+              <svg
+                class="w-5 h-5 text-white"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                />
+              </svg>
+            </div>
+
+            <!-- Message Bubble -->
+            <div
+              :class="message.type === 'user' ? 
+                            'bg-blue-600 text-white rounded-2xl px-6 py-4 max-w-xl border border-blue-200' : 
+                            'bg-gray-50 rounded-2xl px-6 py-4 max-w-2xl border border-gray-200'"
+            >
+              <p
+                :class="message.type === 'user' ? 'text-white' : 'text-gray-900'"
+                x-text="message.content"
+              ></p>
+
+              <!-- Typing indicator only when content is empty -->
+              <div
+                x-show="message.type === 'ai' && message.streaming && message.content === ''"
+                class="flex items-center mt-2"
+              >
+                <div
+                  class="w-2 h-2 bg-green-500 rounded-full animate-pulse"
+                ></div>
+                <div
+                  class="w-2 h-2 bg-green-500 rounded-full animate-pulse ml-1"
+                ></div>
+                <div
+                  class="w-2 h-2 bg-green-500 rounded-full animate-pulse ml-1"
+                ></div>
+              </div>
+            </div>
+
+            <!-- User Avatar -->
+            <div
+              x-show="message.type === 'user'"
+              class="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center flex-shrink-0"
+            >
+              <span class="text-white font-medium"
+                >{{ current_user.uname[0].upper() }}</span
+              >
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Input Area -->
+      <div class="bg-gray-50 border-t border-gray-200 p-6">
+        <form @submit.prevent="sendMessage()" class="flex space-x-4">
+          <input
+            type="text"
+            x-model="currentMessage"
+            :disabled="isTyping || conversationEnded"
+            :placeholder="conversationEnded ? 'Percakapan telah selesai' : (isTyping ? 'Anisa sedang merespons...' : 'Bagikan pikiran, perasaan, atau apa pun yang ada di benak Anda...')"
+            class="flex-1 bg-white border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:opacity-50"
+            maxlength="1000"
+          />
+
+          <button
+            type="submit"
+            :disabled="!currentMessage.trim() || isTyping || conversationEnded"
+            class="px-6 py-3 bg-gradient-to-r from-green-500 to-teal-500 text-white rounded-lg font-medium hover:from-green-600 hover:to-teal-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+          >
+            <span x-show="!isTyping" class="flex items-center">
+              <span>Kirim</span>
+              <svg
+                class="ml-2 w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                />
+              </svg>
+            </span>
+            <span x-show="isTyping" class="flex items-center">
+              <div
+                class="w-2 h-2 bg-white rounded-full animate-pulse mr-2"
+              ></div>
+              <span>Merespons</span>
+            </span>
+          </button>
+        </form>
+
+        <!-- Chat Status and Controls -->
+        <div class="mt-4 flex justify-between items-center">
+          <div class="flex items-center space-x-4 text-gray-600">
+            <span class="text-sm"
+              >Pertukaran: <span x-text="exchangeCount" class="font-mono"></span
+            ></span>
+            <span class="text-sm"
+              >Pesan: <span x-text="messages.length" class="font-mono"></span
+            ></span>
+          </div>
+
+          <!-- Finish Button -->
+          <button
+            @click="finishConversation()"
+            :disabled="isTyping || isFinishing || messages.length < 2"
+            x-show="!conversationEnded"
+            class="px-6 py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-lg font-medium hover:from-orange-600 hover:to-red-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+          >
+            <span x-show="!isFinishing" class="flex items-center">
+              <span>Selesaikan Percakapan</span>
+              <svg
+                class="ml-2 w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+            </span>
+            <span x-show="isFinishing" class="flex items-center">
+              <svg
+                class="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              Menyelesaikan...
+            </span>
+          </button>
+
+          <!-- Conversation Ended Message -->
+          <div x-show="conversationEnded" class="text-green-600 font-medium">
+            ✅ Percakapan selesai! Mengarahkan ke tahap selanjutnya...
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
-// Conversation timer
-let conversationTimer = 0;
-let timerInterval = null;
+  // Conversation timer
+  let conversationTimer = 0;
+  let timerInterval = null;
 
-function chatInterface() {
-    return {
-        // State
-        messages: [],
-        currentMessage: '',
-        isTyping: false,
-        isFinishing: false,
-        conversationEnded: false,
-        loading: true,
-        
-        // Session data
-        sessionId: {{ session.id }},
-        exchangeCount: 0,
-        messageId: 1,
-        
-        // Initialize
-        init() {
-            console.log('🚀 Initializing LLM Chat Interface');
-            console.log('📝 Session ID:', this.sessionId);
-            
-            this.startConversationTimer();
-            this.initializeChat();
-        },
+  function chatInterface() {
+      return {
+          // State
+          messages: [],
+          currentMessage: '',
+          isTyping: false,
+          isFinishing: false,
+          conversationEnded: false,
+          loading: true,
 
-        async initializeChat() {
-            try {
-                console.log('🔧 Starting chat session...');
-                
-                // Start chat session
-                const response = await fetch(`{{ url_for("llm_assessment.start_chat", session_id=0) }}`.replace('0', this.sessionId), {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'}
-                });
-                
-                const result = await response.json();
-                console.log('✅ Chat session started:', result);
-                
-                if (result.status === 'success' && result.initial_message) {
-                    // Add initial AI greeting
-                    this.messages.push({
-                        id: this.messageId++,
-                        type: 'ai',
-                        content: result.initial_message,
-                        streaming: false,
-                        timestamp: new Date()
-                    });
-                }
-                
-                this.loading = false;
-                this.scrollToBottom();
-                
-            } catch (error) {
-                console.error('❌ Error initializing chat:', error);
-                this.loading = false;
-                alert('Error starting conversation. Please refresh the page.');
-            }
-        },
-        
-        async sendMessage() {
-            if (!this.currentMessage.trim() || this.isTyping || this.conversationEnded) return;
-            
-            const userMessage = this.currentMessage.trim();
-            this.currentMessage = '';
-            
-            console.log('📤 Sending message:', userMessage);
-            
-            // Add user message to UI
-            this.messages.push({
-                id: this.messageId++,
-                type: 'user',
-                content: userMessage,
-                timestamp: new Date()
-            });
-            
-            // Add AI response placeholder
-            const botMessageId = this.messageId++;
-            this.messages.push({
-                id: botMessageId,
-                type: 'ai',
-                content: '',
-                streaming: true,
-                timestamp: new Date()
-            });
-            
-            this.isTyping = true;
-            this.scrollToBottom();
-            
-            try {
-                // Send message via fetch to SSE endpoint
-                const response = await fetch(`{{ url_for("llm_assessment.chat_stream_new", session_id=0) }}`.replace('0', this.sessionId), {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({message: userMessage})
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                
-                // Handle SSE streaming
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                const botMessage = this.messages[this.messages.length - 1];
-                
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
-                    
-                    for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            try {
-                                const data = JSON.parse(line.slice(6));
-                                
-                                if (data.type === 'chunk') {
-                                    botMessage.content += data.content;
-                                    this.scrollToBottom();
-                                } else if (data.type === 'complete') {
-                                    botMessage.streaming = false;
-                                    this.isTyping = false;
-                                    this.exchangeCount++;
-                                    
-                                    if (data.conversation_ended) {
-                                        console.log('🏁 Conversation ended automatically');
-                                        this.handleConversationEnd();
-                                    }
-                                    
-                                } else if (data.type === 'error') {
-                                    botMessage.content = data.message || 'Maaf, terjadi kesalahan. Silakan coba lagi.';
-                                    botMessage.streaming = false;
-                                    this.isTyping = false;
-                                }
-                                
-                            } catch (e) {
-                                console.error('Error parsing SSE data:', e);
-                            }
-                        }
-                    }
-                }
-                
-            } catch (error) {
-                console.error('❌ Error sending message:', error);
-                const botMessage = this.messages[this.messages.length - 1];
-                botMessage.content = 'Kesalahan koneksi. Silakan coba lagi.';
-                botMessage.streaming = false;
-                this.isTyping = false;
-            }
-        },
-        
-        async finishConversation() {
-            if (this.isFinishing || this.isTyping) return;
-            
-            this.isFinishing = true;
-            console.log('🏁 Manually finishing conversation');
-            
-            try {
-                const response = await fetch(`{{ url_for("llm_assessment.finish_chat", session_id=0) }}`.replace('0', this.sessionId), {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'}
-                });
-                
-                const result = await response.json();
-                console.log('✅ Conversation finished:', result);
-                
-                if (result.status === 'success' && result.completion_redirect) {
-                    // Call universal completion handler
-                    const completionResponse = await fetch(result.completion_redirect, {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'}
-                    });
-                    
-                    const completionResult = await completionResponse.json();
-                    
-                    if (completionResult.status === 'OLKORECT') {
-                        // Redirect to next step
-                        window.location.href = completionResult.data.next_redirect;
-                    } else {
-                        alert('Error completing assessment: ' + completionResult.error);
-                        this.isFinishing = false;
-                    }
-                } else {
-                    alert('Error finishing conversation: ' + result.message);
-                    this.isFinishing = false;
-                }
-                
-            } catch (error) {
-                console.error('❌ Error finishing conversation:', error);
-                alert('Error finishing conversation. Please try again.');
-                this.isFinishing = false;
-            }
-        },
-        
-        handleConversationEnd() {
-            this.conversationEnded = true;
-            
-            // Auto-finish after a short delay
-            setTimeout(() => {
-                this.finishConversation();
-            }, 2000);
-        },
-        
-        startConversationTimer() {
-            timerInterval = setInterval(() => {
-                conversationTimer++;
-                const minutes = Math.floor(conversationTimer / 60);
-                const seconds = conversationTimer % 60;
-                document.getElementById('conversation-timer').textContent = 
-                    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            }, 1000);
-        },
-        
-        scrollToBottom() {
-            this.$nextTick(() => {
-                this.$refs.chatContainer.scrollTop = this.$refs.chatContainer.scrollHeight;
-            });
-        }
-    }
-}
+          // Session data
+          sessionToken: '{{ session.session_token }}',
+          exchangeCount: 0,
+          messageId: 1,
+
+          // Initialize
+          init() {
+              console.log('🚀 Initializing LLM Chat Interface');
+              console.log('📝 Session Token:', this.sessionToken);
+
+              this.startConversationTimer();
+              this.initializeChat();
+          },
+
+          async initializeChat() {
+              try {
+                  console.log('🔧 Starting chat session...');
+
+                  // Start chat session
+                  const response = await fetch(`{{ url_for("llm_assessment.start_chat", session_token='TOKEN') }}`.replace('TOKEN', this.sessionToken), {
+                      method: 'POST',
+                      headers: {'Content-Type': 'application/json'}
+                  });
+
+                  const result = await response.json();
+                  console.log('✅ Chat session started:', result);
+
+                  if (result.status === 'success' && result.initial_message) {
+                      // Add initial AI greeting
+                      this.messages.push({
+                          id: this.messageId++,
+                          type: 'ai',
+                          content: result.initial_message,
+                          streaming: false,
+                          timestamp: new Date()
+                      });
+                  }
+
+                  this.loading = false;
+                  this.scrollToBottom();
+
+              } catch (error) {
+                  console.error('❌ Error initializing chat:', error);
+                  this.loading = false;
+                  alert('Error starting conversation. Please refresh the page.');
+              }
+          },
+
+          async sendMessage() {
+              if (!this.currentMessage.trim() || this.isTyping || this.conversationEnded) return;
+
+              const userMessage = this.currentMessage.trim();
+              this.currentMessage = '';
+
+              console.log('📤 Sending message:', userMessage);
+
+              // Add user message to UI
+              this.messages.push({
+                  id: this.messageId++,
+                  type: 'user',
+                  content: userMessage,
+                  timestamp: new Date()
+              });
+
+              // Add AI response placeholder
+              const botMessageId = this.messageId++;
+              this.messages.push({
+                  id: botMessageId,
+                  type: 'ai',
+                  content: '',
+                  streaming: true,
+                  timestamp: new Date()
+              });
+
+              this.isTyping = true;
+              this.scrollToBottom();
+
+              // Use EventSource for proper SSE streaming (like working reference)
+              const encodedMessage = encodeURIComponent(userMessage);
+              const eventSource = new EventSource(`/assessment/llm/chat-stream/${this.sessionToken}/${encodedMessage}`);
+              
+              // Get reference to the bot message we just added
+              const botMessage = this.messages[this.messages.length - 1];
+              
+              eventSource.onmessage = (event) => {
+                  try {
+                      const data = JSON.parse(event.data);
+                      
+                      if (data.type === 'chunk') {
+                          botMessage.content += data.content;
+                          this.scrollToBottom();
+                      } else if (data.type === 'complete') {
+                          botMessage.streaming = false;
+                          this.isTyping = false;
+                          this.exchangeCount++;
+                          eventSource.close();
+
+                          if (data.conversation_ended) {
+                              console.log('🏁 Conversation ended automatically');
+                              this.handleConversationEnd();
+                          }
+                      } else if (data.type === 'error') {
+                          botMessage.content = data.message || 'Maaf, terjadi kesalahan. Silakan coba lagi.';
+                          botMessage.streaming = false;
+                          this.isTyping = false;
+                          eventSource.close();
+                      }
+                  } catch (e) {
+                      console.error('Error parsing SSE data:', e);
+                  }
+              };
+              
+              eventSource.onerror = (error) => {
+                  console.error('❌ EventSource error:', error);
+                  botMessage.content = 'Kesalahan koneksi. Silakan coba lagi.';
+                  botMessage.streaming = false;
+                  this.isTyping = false;
+                  eventSource.close();
+              };
+          },
+
+          async finishConversation() {
+              if (this.isFinishing || this.isTyping) return;
+
+              this.isFinishing = true;
+              console.log('🏁 Manually finishing conversation');
+
+              try {
+                  const response = await fetch(`{{ url_for("llm_assessment.finish_chat", session_token='TOKEN') }}`.replace('TOKEN', this.sessionToken), {
+                      method: 'POST',
+                      headers: {'Content-Type': 'application/json'}
+                  });
+
+                  const result = await response.json();
+                  console.log('✅ Conversation finished:', result);
+
+                  if (result.status === 'success' && result.completion_redirect) {
+                      // Call universal completion handler
+                      const completionResponse = await fetch(result.completion_redirect, {
+                          method: 'POST',
+                          headers: {'Content-Type': 'application/json'}
+                      });
+
+                      const completionResult = await completionResponse.json();
+
+                      if (completionResult.status === 'OLKORECT') {
+                          // Redirect to next step
+                          window.location.href = completionResult.next_redirect;
+                      } else {
+                          alert('Error completing assessment: ' + (completionResult.error || 'Unknown error'));
+                          this.isFinishing = false;
+                      }
+                  } else {
+                      alert('Error finishing conversation: ' + result.message);
+                      this.isFinishing = false;
+                  }
+
+              } catch (error) {
+                  console.error('❌ Error finishing conversation:', error);
+                  alert('Error finishing conversation. Please try again.');
+                  this.isFinishing = false;
+              }
+          },
+
+          handleConversationEnd() {
+              this.conversationEnded = true;
+
+              // Auto-finish after a short delay
+              setTimeout(() => {
+                  this.finishConversation();
+              }, 2000);
+          },
+
+          startConversationTimer() {
+              timerInterval = setInterval(() => {
+                  conversationTimer++;
+                  const minutes = Math.floor(conversationTimer / 60);
+                  const seconds = conversationTimer % 60;
+                  document.getElementById('conversation-timer').textContent =
+                      `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+              }, 1000);
+          },
+
+          scrollToBottom() {
+              this.$nextTick(() => {
+                  this.$refs.chatContainer.scrollTop = this.$refs.chatContainer.scrollHeight;
+              });
+          }
+      }
+  }
 </script>
 {% endblock %}

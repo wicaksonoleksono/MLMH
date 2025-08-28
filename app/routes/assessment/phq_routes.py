@@ -75,7 +75,7 @@ def submit_phq_responses(session_id):
         "responses_saved": len(results),
         "total_score": total_score,
         "assessment_completed": True,
-        "completion_redirect": f"/assessment/complete/phq/{session_id}",
+        "completion_redirect": f"/assessment/complete/phq/{session.session_token}",
         "message": "PHQ responses saved! Completing assessment..."
     }
 

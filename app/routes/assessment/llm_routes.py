@@ -71,14 +71,17 @@ def stream_conversation(session_id):
     )
 
 
-@llm_assessment_bp.route('/chat-stream/<int:session_id>/<path:message>')
-@user_required
-def chat_stream(session_id, message):
-    """SSE endpoint for streaming chat responses (matches reference pattern)"""
-    # Validate session belongs to current user
-    session = SessionService.get_session(session_id)
-    if not session or session.user_id != current_user.id:
-        return jsonify({"error": "Session not found or access denied"}), 403
+@llm_assessment_bp.route('/chat-stream/<session_token>/<path:message>')
+@user_required  
+def chat_stream(session_token, message):
+    """SSE endpoint for streaming chat responses (secure token version)"""
+    from ...services.sessionService import SessionService
+    # Get session using secure token
+    session = SessionService.get_session_by_token(session_token)
+    if not session:
+        return Response("Session not found", status=404)
+    
+    session_id = session.id  # Use internal ID for service calls
 
     def generate():
         try:
@@ -515,18 +518,18 @@ def debug_session_status(session_id):
 # NEW SSE STREAMING ENDPOINTS (AssessmentOrchestrator Integration)
 # ============================================================================
 
-@llm_assessment_bp.route('/start-chat/<int:session_id>', methods=['POST'])
+@llm_assessment_bp.route('/start-chat/<session_token>', methods=['POST'])
 @user_required
 @api_response
-def start_chat(session_id):
+def start_chat(session_token):
     """Initialize LLM chat using AssessmentOrchestrator"""
     # Validate session belongs to current user
-    session = SessionService.get_session(session_id)
+    session = SessionService.get_session_by_token(session_token)
     if not session or session.user_id != current_user.id:
         return {"message": "Session not found or access denied"}, 403
     
     try:
-        result = LLMChatService.start_conversation(session_id)
+        result = LLMChatService.start_conversation(session.id)
         return result
     except Exception as e:
         return {"status": "error", "message": str(e)}, 500
@@ -573,18 +576,18 @@ def chat_stream_new(session_id):
     return response
 
 
-@llm_assessment_bp.route('/finish-chat/<int:session_id>', methods=['POST'])
+@llm_assessment_bp.route('/finish-chat/<session_token>', methods=['POST'])
 @user_required
 @api_response
-def finish_chat(session_id):
+def finish_chat(session_token):
     """Finish conversation and prepare for completion handler"""
     # Validate session belongs to current user
-    session = SessionService.get_session(session_id)
+    session = SessionService.get_session_by_token(session_token)
     if not session or session.user_id != current_user.id:
         return {"message": "Session not found or access denied"}, 403
     
     try:
-        result = LLMChatService.finish_conversation(session_id)
+        result = LLMChatService.finish_conversation(session.id)
         return result
     except Exception as e:
         return {"status": "error", "message": str(e)}, 500

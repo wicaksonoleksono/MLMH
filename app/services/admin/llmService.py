@@ -100,7 +100,7 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                 existing.analysis_model = analysis_model
                 existing.depression_aspects = aspects_json
                 existing.is_default = is_default
-                existing.is_active = True
+                
                 settings = existing
                 
                 # Trigger refresh for active sessions using these settings
@@ -119,10 +119,20 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                     chat_model=chat_model,
                     analysis_model=analysis_model,
                     depression_aspects=aspects_json,
-                    is_default=is_default,
-                    is_active=True
+                    is_default=is_default
                 )
                 db.add(settings)
+            
+            # Auto-set is_active based on field completeness (for both new and existing)
+            api_key_valid = settings.openai_api_key and settings.openai_api_key.strip() != ''
+            aspects_valid = (settings.depression_aspects and 
+                           isinstance(settings.depression_aspects, dict) and
+                           settings.depression_aspects.get('aspects') and
+                           len(settings.depression_aspects.get('aspects', [])) > 0)
+            models_valid = (settings.chat_model and settings.chat_model.strip() != '' and
+                           settings.analysis_model and settings.analysis_model.strip() != '')
+            all_fields_valid = api_key_valid and aspects_valid and models_valid
+            settings.is_active = all_fields_valid
             
             db.commit()
             
@@ -190,7 +200,6 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
             if not settings:
                 raise ValueError(f"LLM settings with ID {settings_id} not found")
 
-            settings.is_active = False
             db.commit()
 
             return {'id': settings_id, 'deleted': True}

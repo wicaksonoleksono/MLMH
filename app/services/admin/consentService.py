@@ -63,7 +63,6 @@ class ConsentService:
                 existing.allow_withdrawal = allow_withdrawal
                 existing.footer_text = final_footer_text
                 existing.is_default = is_default
-                existing.is_active = True
                 settings = existing
             else:
                 # Create new settings
@@ -79,6 +78,14 @@ class ConsentService:
                 )
                 db.add(settings)
 
+            # Auto-set is_active based on field completeness
+            all_fields_valid = (
+                settings.setting_name and settings.setting_name.strip() != '' and
+                settings.title and settings.title.strip() != '' and
+                settings.content and settings.content.strip() != ''
+            )
+            settings.is_active = all_fields_valid
+            
             db.commit()
 
             return {
@@ -129,7 +136,6 @@ class ConsentService:
             if not settings:
                 raise ValueError(f"Consent settings with ID {settings_id} not found")
 
-            settings.is_active = False
             db.commit()
 
             return {'id': settings_id, 'deleted': True}

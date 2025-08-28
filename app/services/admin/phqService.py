@@ -1,7 +1,6 @@
 # app/services/admin/phqService.py
 from typing import List, Optional, Dict, Any
 from sqlalchemy import and_
-# from ...decorators import raw_response
 from ...model.admin.phq import PHQQuestion, PHQScale, PHQSettings, PHQCategoryType
 from ...db import get_session
 
@@ -169,7 +168,6 @@ class PHQService:
                     existing.min_value = min_value
                     existing.max_value = max_value
                     existing.scale_labels = scale_labels
-                    existing.is_active = True
                     scale = existing
                 else:
                     # Create first default scale
@@ -189,7 +187,6 @@ class PHQService:
                     existing.min_value = min_value
                     existing.max_value = max_value
                     existing.scale_labels = scale_labels
-                    existing.is_active = True
                     scale = existing
                 else:
                     # Create new scale
@@ -202,6 +199,15 @@ class PHQService:
                     )
                     db.add(scale)
 
+            # Auto-set is_active based on field completeness
+            all_fields_valid = (
+                scale.scale_name and scale.scale_name.strip() != '' and
+                scale.min_value is not None and
+                scale.max_value is not None and
+                scale.scale_labels
+            )
+            scale.is_active = all_fields_valid
+            
             db.commit()
 
             return {
@@ -298,9 +304,14 @@ class PHQService:
                     existing.scale_id = scale_id
                     existing.randomize_categories = randomize_categories
                     existing.instructions = final_instructions
-                    existing.is_active = True
+                    
+                    # Auto-manage is_active based on questions availability
+                    questions_exist = db.query(PHQQuestion).filter(PHQQuestion.is_active == True).count() > 0
                     settings = existing
                 else:
+                    # Auto-manage is_active based on questions availability
+                    questions_exist = db.query(PHQQuestion).filter(PHQQuestion.is_active == True).count() > 0
+                    
                     # Create first default settings
                     settings = PHQSettings(
                         setting_name=setting_name.strip(),
@@ -308,7 +319,8 @@ class PHQService:
                         scale_id=scale_id,
                         randomize_categories=randomize_categories,
                         instructions=final_instructions,
-                        is_default=True
+                        is_default=True,
+                        is_active=questions_exist
                     )
                     db.add(settings)
             else:
@@ -320,7 +332,9 @@ class PHQService:
                     existing.scale_id = scale_id
                     existing.randomize_categories = randomize_categories
                     existing.instructions = final_instructions
-                    existing.is_active = True
+                    
+                    # Auto-manage is_active based on questions availability
+                    questions_exist = db.query(PHQQuestion).filter(PHQQuestion.is_active == True).count() > 0
                     settings = existing
                 else:
                     # Create new settings
@@ -334,6 +348,16 @@ class PHQService:
                     )
                     db.add(settings)
 
+            # Auto-set is_active based on field completeness
+            questions_exist = db.query(PHQQuestion).filter(PHQQuestion.is_active == True).count() > 0
+            all_fields_valid = (
+                settings.setting_name and settings.setting_name.strip() != '' and
+                settings.questions_per_category is not None and settings.questions_per_category > 0 and
+                settings.scale_id is not None and
+                questions_exist
+            )
+            settings.is_active = all_fields_valid
+            
             db.commit()
 
             return {
@@ -381,7 +405,6 @@ class PHQService:
             if not settings:
                 raise ValueError(f"Settings with ID {settings_id} not found")
 
-            settings.is_active = False
             db.commit()
 
             return {'id': settings_id, 'deleted': True}

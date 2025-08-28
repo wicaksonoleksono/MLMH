@@ -43,19 +43,28 @@ class SessionService:
             ).order_by(desc(AssessmentSession.created_at)).all()
     
     @staticmethod
-    def get_user_session_count(user_id: int) -> int:
-        """DEPRECATED - Get current session count for user - use SessionManager methods instead"""
-        with get_session() as db:
-            return db.query(AssessmentSession).filter_by(user_id=user_id).count()
-    
-    @staticmethod
     def can_create_session(user_id: int) -> bool:
         """Check if user can create new session - delegate to SessionManager"""
         return SessionManager.can_create_session(user_id)
     
     @staticmethod
+    def get_user_session_count(user_id: int) -> int:
+        """Get total number of sessions for a user"""
+        with get_session() as db:
+            return db.query(AssessmentSession).filter_by(user_id=user_id).count()
+    
+    @staticmethod
+    def can_create_new_session(user_id: int) -> bool:
+        """Check if user can create a new session (max 2 sessions)"""
+        return SessionService.get_user_session_count(user_id) < 2
+
+    @staticmethod
     def create_session(user_id: int) -> AssessmentSession:
         """Create new session with improved recovery handling - NO MORE NUCLEAR CLEANUP"""
+        # Check session limit first
+        if not SessionService.can_create_new_session(user_id):
+            raise ValueError("User sudah mencapai maksimum 2 session")
+        
         # Use new SessionManager for clean session creation
         session = SessionManager.create_new_session(user_id)
         
@@ -78,6 +87,12 @@ class SessionService:
             return db.query(AssessmentSession).filter_by(id=session_id).first()
     
     @staticmethod
+    def get_session_by_token(session_token: str) -> Optional[AssessmentSession]:
+        """Get session by secure token"""
+        with get_session() as db:
+            return db.query(AssessmentSession).filter_by(session_token=session_token).first()
+    
+    @staticmethod
     def get_user_sessions(user_id: int) -> list[AssessmentSession]:
         """Get all sessions for user"""
         with get_session() as db:
@@ -91,27 +106,16 @@ class SessionService:
             
             result = []
             for session in sessions:
-                # Determine status display
+                # Simplified status display - only "Berhasil" or "Gagal" for users
                 if session.status == 'COMPLETED':
                     status_indicator = '✅'
                     status_text = 'Berhasil'
                     status_class = 'success'
-                elif session.status == 'FAILED':
+                else:
+                    # All other statuses show as "Gagal" for users
                     status_indicator = '❌'
                     status_text = 'Gagal'
                     status_class = 'failed'
-                elif session.status in ['ABANDONED', 'INCOMPLETE']:
-                    status_indicator = '⏸️'
-                    status_text = 'Tidak Selesai'
-                    status_class = 'abandoned'
-                elif session.status in ['PHQ_IN_PROGRESS', 'LLM_IN_PROGRESS']:
-                    status_indicator = '🔄'
-                    status_text = 'Sedang Berlangsung'
-                    status_class = 'in_progress'
-                else:  # CREATED, CONSENT
-                    status_indicator = '⏳'
-                    status_text = 'Belum Dimulai'
-                    status_class = 'pending'
                 
                 # Determine what's completed
                 completed_assessments = []
@@ -122,6 +126,7 @@ class SessionService:
                 
                 result.append({
                     'id': session.id,
+                    'session_token': session.session_token,  # Add secure token for operations
                     'status': session.status,
                     'status_indicator': status_indicator,
                     'status_text': status_text,
@@ -135,7 +140,13 @@ class SessionService:
                     'duration_minutes': session.duration_seconds // 60 if session.duration_seconds else None,
                     'consent_completed': session.consent_completed_at is not None,
                     'phq_completed': session.phq_completed_at is not None,
-                    'llm_completed': session.llm_completed_at is not None
+                    'llm_completed': session.llm_completed_at is not None,
+                    # Session versioning fields
+                    'session_number': getattr(session, 'session_number', 1),
+                    'session_display_name': getattr(session, 'session_display_name', f'Sesi #{session.id}'),
+                    'session_attempt': session.session_attempt,
+                    'reset_count': session.reset_count,
+                    'can_reset': session.can_reset_to_new_attempt() if hasattr(session, 'can_reset_to_new_attempt') else False
                 })
             
             return result
@@ -202,6 +213,53 @@ class SessionService:
             db.commit()
             return session
     
+    @staticmethod
+    def reset_session_to_new_attempt(session_id: int, reason: str = "MANUAL_RESET") -> Dict[str, Any]:
+        """Reset session to new attempt with version increment"""
+        with get_session() as db:
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                raise ValueError("Session not found")
+            
+            if not session.can_reset_to_new_attempt():
+                raise ValueError("Session sudah selesai dan tidak dapat direset")
+            
+            # Store previous attempt for logging
+            previous_attempt = session.session_attempt
+            
+            # Reset to new attempt
+            reset_success = session.reset_to_new_attempt(reason)
+            if not reset_success:
+                raise RuntimeError("Failed to reset session to new attempt")
+            
+            # Clear related data (PHQ responses, LLM conversations, etc.)
+            from ..model.assessment.phq import PHQResponse
+            from ..model.assessment.llm import LLMConversationTurn, LLMAnalysisResult
+            
+            # Delete PHQ responses for this session
+            db.query(PHQResponse).filter_by(session_id=session_id).delete()
+            
+            # Delete LLM conversations for this session
+            db.query(LLMConversationTurn).filter_by(session_id=session_id).delete()
+            
+            # Delete LLM analysis results for this session
+            db.query(LLMAnalysisResult).filter_by(session_id=session_id).delete()
+            
+            db.commit()
+            
+            return {
+                "session_id": session_id,
+                "previous_attempt": previous_attempt,
+                "current_attempt": session.session_attempt,
+                "reset_reason": reason,
+                "reset_at": session.last_reset_at.isoformat(),
+                "status": session.status,
+                "can_reset_again": session.can_reset_to_new_attempt(),
+                "session_number": session.session_number,
+                "session_display_name": session.session_display_name,
+                "message": f"Session reset dalam {session.session_display_name}, percobaan ke-{session.session_attempt}"
+            }
+
     @staticmethod
     def delete_session(session_id: int) -> bool:
         """Delete session"""

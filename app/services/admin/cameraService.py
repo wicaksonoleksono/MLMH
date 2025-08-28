@@ -63,7 +63,6 @@ class CameraService:
                 existing.capture_on_message_send = capture_on_message_send
                 existing.capture_on_question_start = capture_on_question_start
                 existing.is_default = is_default
-                existing.is_active = True
                 settings = existing
             else:
                 # Create new settings
@@ -80,6 +79,16 @@ class CameraService:
                 )
                 db.add(settings)
 
+            # Auto-set is_active based on field completeness
+            all_fields_valid = (
+                settings.setting_name and settings.setting_name.strip() != '' and
+                settings.recording_mode and settings.recording_mode.strip() != '' and
+                settings.resolution and settings.resolution.strip() != '' and
+                settings.storage_path and settings.storage_path.strip() != '' and
+                settings.interval_seconds is not None  # 0 is valid for interval_seconds
+            )
+            settings.is_active = all_fields_valid
+            
             db.commit()
 
             return {
@@ -137,7 +146,6 @@ class CameraService:
             if not settings:
                 raise ValueError(f"Camera settings with ID {settings_id} not found")
 
-            settings.is_active = False
             db.commit()
 
             return {'id': settings_id, 'deleted': True}

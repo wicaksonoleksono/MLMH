@@ -10,9 +10,34 @@ from sqlalchemy import text
 def register_commands(app):
     """Register all custom CLI commands with the Flask app."""
 
+    @app.cli.command("seed-db")
+    @click.confirmation_option(prompt="This will drop all tables and recreate them. Are you sure?")
+    def seed_db_combined():
+        """Reset database and seed with fresh data."""
+        click.echo("[OLKORECT] Resetting and seeding database...")
+        
+        # First reset the database (drop and recreate)
+        click.echo("  - Dropping all tables...")
+        engine = get_engine()
+        with engine.connect() as conn:
+            conn.execute(text("DROP SCHEMA public CASCADE"))
+            conn.execute(text("CREATE SCHEMA public"))
+            conn.commit()
+        click.echo("  ✓ Database reset completed")
+        
+        # Then initialize with fresh data
+        click.echo("  - Seeding with fresh data...")
+        _seed_database()
+        
+        click.echo("[OLKORECT] Database reset and seeding completed successfully!")
+
     @app.cli.command("init-db")
-    def seed_db():
-        """Seeds the database with minimal essential data."""
+    def init_db():
+        """Initialize database with essential data (no reset)."""
+        _seed_database()
+
+    def _seed_database():
+        """Internal function to seed database with essential data."""
         click.echo("[OLKORECT] Seeding database with essential data...")
         create_all_tables()
         with get_session() as db:
@@ -73,7 +98,7 @@ def register_commands(app):
                         3: "Hampir setiap hari"
                     },
                     is_default=True,
-                    is_active=True
+                    # is_active=True
                 )
                 db.add(default_scale)
                 db.flush()
@@ -132,7 +157,7 @@ def register_commands(app):
             if not existing_llm_settings:
                 default_llm_settings = LLMSettings(
                     setting_name="Default LLM Settings",
-                    openai_api_key="your-openai-api-key-here",
+                    openai_api_key="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",  # Must be set by admin
                     chat_model="gpt-4o",
                     analysis_model="gpt-4o-mini", 
                     depression_aspects={
@@ -142,7 +167,7 @@ def register_commands(app):
                             {"name": "Sleep Disturbance", "description": "Sleep problems"}
                         ]
                     },
-                    instructions="Anda adalah Anisa, seorang konselor AI yang ramah dan empatik. Lakukan percakapan natural untuk assessment kesehatan mental.",
+                    instructions="Masukan instruksi.",
                     is_default=True,
                     is_active=True
                 )
@@ -168,6 +193,21 @@ def register_commands(app):
                 )
                 db.add(default_camera_settings)
                 click.echo("    ✓ Default camera settings created")
+
+        # Create default Consent settings
+        from .model.admin.consent import ConsentSettings
+        with get_session() as db:
+            existing_consent_settings = db.query(ConsentSettings).filter_by(is_default=True).first()
+            if not existing_consent_settings:
+                default_consent_settings = ConsentSettings(
+                    setting_name="Default Consent Settings",
+                    title="Informed Consent Form",  # Default title
+                    content="Please configure the informed consent content in the admin panel.",  # Must be set by admin
+                    is_default=True,
+                    is_active=True
+                )
+                db.add(default_consent_settings)
+                click.echo("    ✓ Default consent settings created")
 
         click.echo("[OLKORECT] Database seeding completed successfully!")
         click.echo("  - Admin can configure settings, assessments, and media via web UI")

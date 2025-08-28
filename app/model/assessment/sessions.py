@@ -29,6 +29,14 @@ class AssessmentSession(BaseModel):
     consent_completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     phq_completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     llm_completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    
+    # Session versioning and reset tracking  
+    session_attempt: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    session_number: Mapped[int] = mapped_column(Integer, nullable=False)  # 1 or 2 (which session for this user)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=999, nullable=False)  # Unlimited resets
+    reset_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_reset_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    reset_reason: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
 
     # Session metadata
     session_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
@@ -212,6 +220,43 @@ class AssessmentSession(BaseModel):
         self.can_recover = True
         self.failure_reason = None
         self.updated_at = datetime.utcnow()
+
+    def can_reset_to_new_attempt(self) -> bool:
+        """Check if session can be reset to a new attempt - unlimited resets"""
+        return self.status != 'COMPLETED'
+
+    def reset_to_new_attempt(self, reason: str = None) -> bool:
+        """Reset session to new attempt with version increment"""
+        if not self.can_reset_to_new_attempt():
+            return False
+        
+        # Increment attempt counter
+        self.session_attempt += 1
+        self.reset_count += 1
+        self.last_reset_at = datetime.utcnow()
+        self.reset_reason = reason
+        
+        # Clear all assessment data
+        self.clear_assessment_data()
+        
+        # Clear chat history from session metadata
+        if self.session_metadata and 'chat_history' in self.session_metadata:
+            del self.session_metadata['chat_history']
+        
+        self.updated_at = datetime.utcnow()
+        return True
+
+    @property
+    def session_display_name(self) -> str:
+        """Get display name for session (Sesi 1, Sesi 2, etc)"""
+        return f"Sesi {self.session_number}"
+
+    @property 
+    def has_incomplete_assessment_after_phq(self) -> bool:
+        """Check if PHQ is completed but LLM is not (reset scenario)"""
+        return (self.phq_completed_at is not None and 
+                self.llm_completed_at is None and 
+                self.status in ['PHQ_IN_PROGRESS', 'LLM_IN_PROGRESS'])
 
     def can_be_recovered(self) -> bool:
         """Check if this session can be recovered/restarted"""

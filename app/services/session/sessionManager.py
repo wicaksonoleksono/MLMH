@@ -17,24 +17,65 @@ class SessionManager:
 
     @staticmethod
     def check_assessment_settings_configured() -> Dict[str, Any]:
-        """Check if all required assessment settings are configured"""
+        """Check if all required assessment settings are configured and complete"""
         with get_session() as db:
+            from ...model.admin.phq import PHQQuestion
+            
+            # Get active settings
             phq_settings = db.query(PHQSettings).filter_by(is_active=True).first()
             llm_settings = db.query(LLMSettings).filter_by(is_active=True).first()
             camera_settings = db.query(CameraSettings).filter_by(is_active=True).first()
+            
+            # Validate PHQ settings completeness
+            phq_valid = False
+            if phq_settings:
+                # Check if PHQ questions exist
+                phq_questions_count = db.query(PHQQuestion).filter_by(is_active=True).count()
+                phq_valid = phq_questions_count > 0
+            
+            # Validate LLM settings completeness  
+            llm_valid = False
+            if llm_settings:
+                # Check API key not empty and depression aspects exist
+                api_key_valid = (llm_settings.openai_api_key and 
+                               llm_settings.openai_api_key.strip() != '')
+                aspects_valid = (llm_settings.depression_aspects and 
+                               isinstance(llm_settings.depression_aspects, dict) and 
+                               llm_settings.depression_aspects.get('aspects') and
+                               len(llm_settings.depression_aspects.get('aspects', [])) > 0)
+                llm_valid = api_key_valid and aspects_valid
+            
+            # Camera settings just need to exist (basic validation)
+            camera_valid = camera_settings is not None
+            
+            # Collect missing/invalid settings
+            missing_settings = []
+            if not phq_valid:
+                if not phq_settings:
+                    missing_settings.append('PHQ Settings (belum dibuat)')
+                else:
+                    missing_settings.append('PHQ Questions (pertanyaan belum diset)')
+            
+            if not llm_valid:
+                if not llm_settings:
+                    missing_settings.append('LLM Settings (belum dibuat)')
+                else:
+                    if not (llm_settings.openai_api_key and llm_settings.openai_api_key.strip()):
+                        missing_settings.append('OpenAI API Key (kosong)')
+                    if not (llm_settings.depression_aspects and 
+                           llm_settings.depression_aspects.get('aspects') and
+                           len(llm_settings.depression_aspects.get('aspects', [])) > 0):
+                        missing_settings.append('Depression Aspects (aspek belum diset)')
+            
+            if not camera_valid:
+                missing_settings.append('Camera Settings (belum dibuat)')
 
             return {
-                'all_configured': all([phq_settings, llm_settings, camera_settings]),
-                'phq_configured': phq_settings is not None,
-                'llm_configured': llm_settings is not None,
-                'camera_configured': camera_settings is not None,
-                'missing_settings': [
-                    name for name, configured in {
-                        'PHQ': phq_settings is not None,
-                        'LLM': llm_settings is not None,
-                        'Camera': camera_settings is not None
-                    }.items() if not configured
-                ]
+                'all_configured': all([phq_valid, llm_valid, camera_valid]),
+                'phq_configured': phq_valid,
+                'llm_configured': llm_valid,
+                'camera_configured': camera_valid,
+                'missing_settings': missing_settings
             }
 
     @staticmethod
@@ -95,6 +136,10 @@ class SessionManager:
             # Determine assessment order (50:50 alternating based on total sessions)
             total_sessions = db.query(func.count(AssessmentSession.id)).scalar() or 0
             is_first = 'phq' if total_sessions % 2 == 0 else 'llm'
+            
+            # Get session number for this user (1 or 2)
+            user_session_count = db.query(func.count(AssessmentSession.id)).filter_by(user_id=user_id).scalar() or 0
+            session_number = user_session_count + 1
 
             # Generate unique session token
             session_token = secrets.token_urlsafe(32)
@@ -115,7 +160,8 @@ class SessionManager:
                 camera_settings_id=camera_settings.id,
                 is_first=is_first,
                 status='CREATED',
-                assessment_order=assessment_order
+                assessment_order=assessment_order,
+                session_number=session_number
             )
 
             db.add(session)

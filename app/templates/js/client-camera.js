@@ -538,12 +538,6 @@ class EmotionCapture {
     this.captureImage("event_session_end");
   }
 
-  /**
-   * 🛑 Legacy method for backward compatibility
-   */
-  stopPeriodicImageCapture() {
-    this.stopCapture();
-  }
 
   /**
    * 📸 Capture a single image with scientific context

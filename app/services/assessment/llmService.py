@@ -4,7 +4,6 @@ import re
 import requests
 from datetime import datetime
 from ...model.assessment.sessions import AssessmentSession, LLMConversationTurn, LLMAnalysisResult
-from ...model.admin.llm import OpenQuestionSettings
 from ...db import get_session
 from ...services.admin.llmService import LLMService as AdminLLMService
 

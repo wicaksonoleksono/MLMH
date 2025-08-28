@@ -103,13 +103,8 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                 
                 settings = existing
                 
-                # Trigger refresh for active sessions using these settings
-                try:
-                    refresh_result = LLMService.trigger_active_sessions_refresh(old_settings_id)
-                    print(f"Refreshed {refresh_result.get('total_sessions', 0)} active sessions")
-                except Exception as e:
-                    print(f"Warning: Failed to refresh active sessions: {e}")
-                    
+                # Note: Active sessions will use new settings on next request
+                
             else:
                 # Create new settings
                 settings = LLMSettings(
@@ -381,65 +376,6 @@ Format output JSON:
                 "error": f"Compatibility test failed: {str(e)}"
             }
 
-    @staticmethod
-    def trigger_active_sessions_refresh(llm_settings_id: int) -> Dict[str, Any]:
-        """Trigger settings refresh for all active sessions using these LLM settings"""
-        try:
-            from ..llm.manager import GlobalSessionManager
-            from ...model.assessment.sessions import AssessmentSession
-            
-            refresh_results = []
-            
-            with get_session() as db:
-                # Find all active sessions using these LLM settings
-                active_sessions = db.query(AssessmentSession).filter(
-                    AssessmentSession.llm_settings_id == llm_settings_id,
-                    AssessmentSession.status.in_(['STARTED', 'CONSENT', 'PHQ_COMPLETED'])
-                ).all()
-                
-                for session in active_sessions:
-                    refreshed = GlobalSessionManager.force_settings_refresh(session.id)
-                    refresh_results.append({
-                        "session_id": session.id,
-                        "refreshed": refreshed
-                    })
-            
-            return {
-                "success": True,
-                "refreshed_sessions": refresh_results,
-                "total_sessions": len(refresh_results),
-                "message": f"Refreshed {len(refresh_results)} active sessions"
-            }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "message": f"Failed to refresh active sessions: {str(e)}"
-            }
-    
-    @staticmethod
-    def get_streaming_status() -> Dict[str, Any]:
-        """Get status of streaming architecture and active conversations"""
-        try:
-            from ..llm.manager import GlobalSessionManager
-            
-            stats = GlobalSessionManager.get_stats()
-            active_sessions = GlobalSessionManager.get_active_sessions()
-            
-            return {
-                "streaming_enabled": True,
-                "statistics": stats,
-                "active_conversations": active_sessions,
-                "total_managers": len(active_sessions)
-            }
-            
-        except Exception as e:
-            return {
-                "streaming_enabled": False,
-                "error": str(e),
-                "message": f"Streaming status unavailable: {str(e)}"
-            }
 
     @staticmethod
     def validate_streaming_models(chat_model: str, analysis_model: str, api_key: str) -> Dict[str, Any]:

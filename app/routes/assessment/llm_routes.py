@@ -2,19 +2,13 @@
 from flask import Blueprint, request, jsonify, Response, stream_with_context
 from flask_login import current_user
 from ...decorators import api_response, user_required
-from ...services.llm import (
-    start_conversation,
-    send_message,
-    send_message_stream,
-    get_conversation_status,
-    cleanup_session,
-    force_refresh_settings
-)
+# Removed deprecated service imports - using LLMChatService directly
 from ...services.llm.chatService import LLMChatService
 from ...services.assessment.llmService import LLMConversationService
 from ...services.sessionService import SessionService
 import json
 import time
+from datetime import datetime
 
 llm_assessment_bp = Blueprint('llm_assessment', __name__, url_prefix='/assessment/llm')
 
@@ -30,7 +24,7 @@ def start_conversation_route(session_id):
         return {"message": "Session not found or access denied"}, 403
 
     # Start conversation
-    result = start_conversation(session_id)
+    result = LLMChatService.start_conversation(session_id)
     return result
 
 
@@ -53,7 +47,8 @@ def stream_conversation(session_id):
 
         # Stream the conversation
         try:
-            for chunk in send_message_stream(session_id, user_message):
+            chat_service = LLMChatService()
+            for chunk in chat_service.stream_ai_response(session_id, user_message):
                 yield f"data: {json.dumps(chunk)}\n\n"
                 time.sleep(0.01)  # Small delay to prevent overwhelming
         except Exception as e:
@@ -71,29 +66,66 @@ def stream_conversation(session_id):
     )
 
 
-@llm_assessment_bp.route('/chat-stream/<session_token>/<path:message>')
+@llm_assessment_bp.route('/send-message/<session_token>', methods=['POST'])
 @user_required
-def chat_stream(session_token, message):
-    """SSE endpoint for streaming chat responses using new LangChain service"""
-    from ...services.sessionService import SessionService
-    
+@api_response
+def send_message_proper(session_token):
+    """POST endpoint for sending message with proper headers/auth"""
     # Get session using secure token
     session = SessionService.get_session_by_token(session_token)
-    if not session:
-        return Response("data: " + json.dumps({'type': 'error', 'message': 'Session not found'}) + "\n\n", 
-                       mimetype='text/event-stream'), 404
+    if not session or int(session.user_id) != int(current_user.id):
+        return {"message": "Session not found or access denied"}, 403
     
-    # Verify session belongs to current user
-    if int(session.user_id) != int(current_user.id):
-        return Response("data: " + json.dumps({'type': 'error', 'message': 'Access denied'}) + "\n\n", 
-                       mimetype='text/event-stream'), 403
+    # Get message from JSON body
+    data = request.get_json()
+    user_message = data.get('message', '').strip()
+    if not user_message:
+        return {"message": "Message is required"}, 400
+    
+    # Generate unique message ID for this streaming session
+    import uuid
+    message_id = str(uuid.uuid4())
+    
+    # Store message temporarily for streaming (in-memory store)
+    if not hasattr(send_message_proper, 'pending_messages'):
+        send_message_proper.pending_messages = {}
+    
+    send_message_proper.pending_messages[message_id] = {
+        'session_id': session.id,
+        'user_message': user_message,
+        'created_at': datetime.utcnow()
+    }
+    
+    return {
+        'status': 'success',
+        'message_id': message_id,
+        'stream_url': f'/assessment/llm/stream-response/{message_id}'
+    }
+
+
+@llm_assessment_bp.route('/stream-response/<message_id>')
+@user_required  
+def stream_response(message_id):
+    """EventSource endpoint for streaming AI response to a specific message"""
+    # Get pending message
+    pending_messages = getattr(send_message_proper, 'pending_messages', {})
+    message_data = pending_messages.get(message_id)
+    
+    if not message_data:
+        return Response("data: " + json.dumps({'type': 'error', 'message': 'Message not found'}) + "\n\n", 
+                       mimetype='text/event-stream'), 404
 
     def generate():
         try:
-            # URL decode the message
-            from urllib.parse import unquote
-            decoded_message = unquote(message)
-
+            session_id = message_data['session_id']
+            user_message = message_data['user_message']
+            
+            # Verify session belongs to current user
+            session = SessionService.get_session(session_id)
+            if not session or int(session.user_id) != int(current_user.id):
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Access denied'})}\n\n"
+                return
+            
             # Initialize the chat service
             chat_service = LLMChatService()
             
@@ -101,15 +133,18 @@ def chat_stream(session_token, message):
             yield f"data: {json.dumps({'type': 'stream_start'})}\n\n"
             
             # Stream AI response using new service
-            for chunk in chat_service.stream_ai_response(session.id, decoded_message):
-                # Send chunk in your preferred SSE format
+            for chunk in chat_service.stream_ai_response(session_id, user_message):
                 yield f"data: {json.dumps({'type': 'chunk', 'data': chunk})}\n\n"
             
             # Check if conversation ended and send completion signal
-            if chat_service.is_conversation_complete(session.id):
+            if chat_service.is_conversation_complete(session_id):
                 yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': True})}\n\n"
             else:
                 yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': False})}\n\n"
+            
+            # Cleanup pending message
+            if message_id in pending_messages:
+                del pending_messages[message_id]
 
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
@@ -139,8 +174,17 @@ def send_message_route(session_id):
     user_message = data.get('message', '')
     if not user_message:
         return {"message": "Message is required"}, 400
-    result = send_message(session_id, user_message)
-    return result
+    # Collect streaming response into single result
+    chat_service = LLMChatService()
+    full_response = ""
+    for chunk in chat_service.stream_ai_response(session_id, user_message):
+        full_response += chunk
+    
+    return {
+        "status": "success", 
+        "ai_response": full_response,
+        "conversation_ended": LLMChatService.is_conversation_complete(session_id)
+    }
 
 
 @llm_assessment_bp.route('/conversations/<int:session_id>', methods=['GET'])
@@ -280,8 +324,11 @@ def get_conversation_status_route(session_id):
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
 
-    # Get status from streaming service
-    status = get_conversation_status(session_id)
+    # Get status from chat service and conversation service
+    status = {
+        "conversation_complete": LLMChatService.is_conversation_complete(session_id),
+        "chat_history": LLMChatService.get_session_chat_history(session_id)
+    }
 
     # Get conversation summary from assessment service
     summary = LLMConversationService.get_conversation_summary(session_id)
@@ -315,7 +362,8 @@ def cleanup_session_route(session_id):
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
 
-    result = cleanup_session(session_id)
+    # Simple cleanup - just return success since LangChain handles memory cleanup automatically
+    result = {"status": "success", "message": "Session cleaned up", "session_id": session_id}
     return result
 
 
@@ -329,7 +377,8 @@ def force_refresh_settings_route(session_id):
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
 
-    result = force_refresh_settings(session_id)
+    # Settings are loaded fresh on each request, so just return success
+    result = {"status": "success", "message": "Settings will refresh on next request", "session_id": session_id}
     return result
 
 
@@ -383,7 +432,7 @@ def get_current_turn(session_id):
         current_turn_data = LLMConversationService.get_current_turn_for_session(session_id)
         if not current_turn_data:
             # Start new conversation
-            result = start_conversation(session_id)
+            result = LLMChatService.start_conversation(session_id)
             if result.get('status') != 'success':
                 return {"message": "Failed to start conversation"}, 500
 
@@ -421,8 +470,17 @@ def submit_turn(session_id):
         return {"message": "User message is required"}, 400
 
     try:
-        # Send message and get response
-        result = send_message(session_id, user_message)
+        # Send message and get response via streaming
+        chat_service = LLMChatService()
+        full_response = ""
+        for chunk in chat_service.stream_ai_response(session_id, user_message):
+            full_response += chunk
+        
+        result = {
+            "status": "success",
+            "ai_response": full_response,
+            "conversation_ended": LLMChatService.is_conversation_complete(session_id)
+        }
         if result.get('status') != 'success':
             return {"message": "Failed to send message"}, 500
 

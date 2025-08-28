@@ -243,244 +243,308 @@ endblock %} {% block content %}
   let timerInterval = null;
 
   function chatInterface() {
-      return {
-          // State
-          messages: [],
-          currentMessage: '',
-          isTyping: false,
-          isFinishing: false,
-          conversationEnded: false,
-          loading: true,
+    return {
+      // State
+      messages: [],
+      currentMessage: "",
+      isTyping: false,
+      isFinishing: false,
+      conversationEnded: false,
+      loading: true,
 
-          // Session data
-          sessionToken: '{{ session.session_token }}',
-          exchangeCount: 0,
-          messageId: 1,
+      // Session data
+      sessionToken: "{{ session.session_token }}",
+      exchangeCount: 0,
+      messageId: 1,
 
-          // Initialize
-          init() {
-              console.log('🚀 Initializing LLM Chat Interface');
-              console.log('📝 Session Token:', this.sessionToken);
+      // Initialize
+      init() {
+        console.log("🚀 Initializing LLM Chat Interface");
+        console.log("📝 Session Token:", this.sessionToken);
 
-              this.startConversationTimer();
-              this.initializeChat();
-          },
+        this.startConversationTimer();
+        this.initializeChat();
+      },
 
-          async initializeChat() {
-              try {
-                  console.log('🔧 Starting chat session...');
+      async initializeChat() {
+        try {
+          console.log("🔧 Starting chat session...");
 
-                  // Start chat session
-                  const response = await fetch(`{{ url_for("llm_assessment.start_chat", session_token='TOKEN') }}`.replace('TOKEN', this.sessionToken), {
-                      method: 'POST',
-                      headers: {'Content-Type': 'application/json'}
-                  });
+          // Start chat session
+          const response = await fetch(
+            `{{ url_for("llm_assessment.start_chat", session_token='TOKEN') }}`.replace(
+              "TOKEN",
+              this.sessionToken
+            ),
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+            }
+          );
 
-                  const result = await response.json();
-                  console.log('✅ Chat session started:', result);
+          const result = await response.json();
+          console.log("✅ Chat session started:", result);
 
-                  if (result.status === 'success' && result.initial_message) {
-                      // Add initial AI greeting
-                      this.messages.push({
-                          id: this.messageId++,
-                          type: 'ai',
-                          content: result.initial_message,
-                          streaming: false,
-                          timestamp: new Date()
-                      });
-                  }
-
-                  // Load existing chat history if available
-                  await this.loadChatHistory();
-
-                  this.loading = false;
-                  this.scrollToBottom();
-
-              } catch (error) {
-                  console.error('❌ Error initializing chat:', error);
-                  this.loading = false;
-                  alert('Error starting conversation. Please refresh the page.');
-              }
-          },
-
-          async loadChatHistory() {
-              try {
-                  // Load chat history from server
-                  const response = await fetch(`/assessment/llm/chat-history/{{ session.id }}`, {
-                      method: 'GET',
-                      headers: {'Content-Type': 'application/json'}
-                  });
-
-                  const result = await response.json();
-                  console.log('📜 Chat history loaded:', result);
-
-                  if (result.status === 'success' && result.chat_history && result.chat_history.messages) {
-                      // Add existing messages to UI
-                      result.chat_history.messages.forEach((msg, index) => {
-                          this.messages.push({
-                              id: this.messageId++,
-                              type: msg.type,
-                              content: msg.content,
-                              streaming: false,
-                              timestamp: new Date()
-                          });
-                      });
-                      
-                      // Update exchange count
-                      this.exchangeCount = result.chat_history.exchange_count || 0;
-                  }
-
-                  this.scrollToBottom();
-              } catch (error) {
-                  console.error('❌ Error loading chat history:', error);
-              }
-          },
-
-          async sendMessage() {
-              if (!this.currentMessage.trim() || this.isTyping || this.conversationEnded) return;
-
-              const userMessage = this.currentMessage.trim();
-              this.currentMessage = '';
-
-              console.log('📤 Sending message:', userMessage);
-
-              // Add user message to UI
-              this.messages.push({
-                  id: this.messageId++,
-                  type: 'user',
-                  content: userMessage,
-                  timestamp: new Date()
-              });
-
-              // Add AI response placeholder
-              const botMessageId = this.messageId++;
-              this.messages.push({
-                  id: botMessageId,
-                  type: 'ai',
-                  content: '',
-                  streaming: true,
-                  timestamp: new Date()
-              });
-
-              this.isTyping = true;
-              this.scrollToBottom();
-
-              // Use EventSource for proper SSE streaming (like working reference)
-              const encodedMessage = encodeURIComponent(userMessage);
-              const eventSource = new EventSource(`/assessment/llm/chat-stream/${this.sessionToken}/${encodedMessage}`);
-              
-              // Get reference to the bot message we just added
-              const botMessage = this.messages[this.messages.length - 1];
-              
-              eventSource.onmessage = (event) => {
-                  try {
-                      const data = JSON.parse(event.data);
-                      
-                      if (data.type === 'chunk') {
-                          // Use data.data format from new SSE implementation
-                          botMessage.content += data.data;
-                          this.scrollToBottom();
-                      } else if (data.type === 'complete') {
-                          botMessage.streaming = false;
-                          this.isTyping = false;
-                          this.exchangeCount++;
-                          eventSource.close();
-
-                          if (data.conversation_ended) {
-                              console.log('🏁 Conversation ended automatically');
-                              this.handleConversationEnd();
-                          }
-                      } else if (data.type === 'error') {
-                          botMessage.content = data.message || 'Maaf, terjadi kesalahan. Silakan coba lagi.';
-                          botMessage.streaming = false;
-                          this.isTyping = false;
-                          eventSource.close();
-                      } else if (data.type === 'stream_start') {
-                          // Handle stream start signal
-                          console.log('🚀 Stream started');
-                      }
-                  } catch (e) {
-                      console.error('Error parsing SSE data:', e);
-                  }
-              };
-              
-              eventSource.onerror = (error) => {
-                  console.error('❌ EventSource error:', error);
-                  botMessage.content = 'Kesalahan koneksi. Silakan coba lagi.';
-                  botMessage.streaming = false;
-                  this.isTyping = false;
-                  eventSource.close();
-              };
-          },
-
-          async finishConversation() {
-              if (this.isFinishing || this.isTyping) return;
-
-              this.isFinishing = true;
-              console.log('🏁 Manually finishing conversation');
-
-              try {
-                  const response = await fetch(`{{ url_for("llm_assessment.finish_chat", session_token='TOKEN') }}`.replace('TOKEN', this.sessionToken), {
-                      method: 'POST',
-                      headers: {'Content-Type': 'application/json'}
-                  });
-
-                  const result = await response.json();
-                  console.log('✅ Conversation finished:', result);
-
-                  if (result.status === 'success' && result.completion_redirect) {
-                      // Call universal completion handler
-                      const completionResponse = await fetch(result.completion_redirect, {
-                          method: 'POST',
-                          headers: {'Content-Type': 'application/json'}
-                      });
-
-                      const completionResult = await completionResponse.json();
-
-                      if (completionResult.status === 'OLKORECT') {
-                          // Redirect to next step
-                          window.location.href = completionResult.next_redirect;
-                      } else {
-                          alert('Error completing assessment: ' + (completionResult.error || 'Unknown error'));
-                          this.isFinishing = false;
-                      }
-                  } else {
-                      alert('Error finishing conversation: ' + result.message);
-                      this.isFinishing = false;
-                  }
-
-              } catch (error) {
-                  console.error('❌ Error finishing conversation:', error);
-                  alert('Error finishing conversation. Please try again.');
-                  this.isFinishing = false;
-              }
-          },
-
-          handleConversationEnd() {
-              this.conversationEnded = true;
-
-              // Auto-finish after a short delay
-              setTimeout(() => {
-                  this.finishConversation();
-              }, 2000);
-          },
-
-          startConversationTimer() {
-              timerInterval = setInterval(() => {
-                  conversationTimer++;
-                  const minutes = Math.floor(conversationTimer / 60);
-                  const seconds = conversationTimer % 60;
-                  document.getElementById('conversation-timer').textContent =
-                      `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-              }, 1000);
-          },
-
-          scrollToBottom() {
-              this.$nextTick(() => {
-                  this.$refs.chatContainer.scrollTop = this.$refs.chatContainer.scrollHeight;
-              });
+          if (result.status === "success" && result.initial_message) {
+            // Add initial AI greeting
+            this.messages.push({
+              id: this.messageId++,
+              type: "ai",
+              content: result.initial_message,
+              streaming: false,
+              timestamp: new Date(),
+            });
           }
-      }
+
+          // Load existing chat history if available
+          await this.loadChatHistory();
+
+          this.loading = false;
+          this.scrollToBottom();
+        } catch (error) {
+          console.error("❌ Error initializing chat:", error);
+          this.loading = false;
+          alert("Error starting conversation. Please refresh the page.");
+        }
+      },
+
+      async loadChatHistory() {
+        try {
+          // Load chat history from server
+          const response = await fetch(
+            `/assessment/llm/chat-history/{{ session.id }}`,
+            {
+              method: "GET",
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+
+          const result = await response.json();
+          console.log("📜 Chat history loaded:", result);
+
+          if (
+            result.status === "success" &&
+            result.chat_history &&
+            result.chat_history.messages
+          ) {
+            // Add existing messages to UI
+            result.chat_history.messages.forEach((msg, index) => {
+              this.messages.push({
+                id: this.messageId++,
+                type: msg.type,
+                content: msg.content,
+                streaming: false,
+                timestamp: new Date(),
+              });
+            });
+
+            // Update exchange count
+            this.exchangeCount = result.chat_history.exchange_count || 0;
+          }
+
+          this.scrollToBottom();
+        } catch (error) {
+          console.error("❌ Error loading chat history:", error);
+        }
+      },
+
+      async sendMessage() {
+        if (
+          !this.currentMessage.trim() ||
+          this.isTyping ||
+          this.conversationEnded
+        )
+          return;
+
+        const userMessage = this.currentMessage.trim();
+        this.currentMessage = "";
+
+        console.log("📤 Sending message:", userMessage);
+
+        // Add user message to UI
+        this.messages.push({
+          id: this.messageId++,
+          type: "user",
+          content: userMessage,
+          timestamp: new Date(),
+        });
+
+        // Add AI response placeholder
+        const botMessageId = this.messageId++;
+        this.messages.push({
+          id: botMessageId,
+          type: "ai",
+          content: "",
+          streaming: true,
+          timestamp: new Date(),
+        });
+
+        this.isTyping = true;
+        this.scrollToBottom();
+
+        // Step 1: POST message with proper headers/auth
+        try {
+          const postResponse = await fetch(
+            `{{ url_for("llm_assessment.send_message_proper", session_token='TOKEN') }}`.replace(
+              "TOKEN",
+              this.sessionToken
+            ),
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ message: userMessage }),
+            }
+          );
+
+          const postResult = await postResponse.json();
+          console.log("📦 POST Result:", postResult);
+          
+          // Check if the API response wrapper has the success data
+          const actualResult = postResult.status === "OLKORECT" ? postResult.data : postResult;
+          
+          if (actualResult.status !== "success") {
+            throw new Error(actualResult.message || "Failed to send message");
+          }
+
+          // Step 2: Stream response using EventSource with message_id
+          const eventSource = new EventSource(actualResult.stream_url);
+          console.log("🔄 Starting EventSource:", actualResult.stream_url);
+
+          // Get reference to the bot message we just added
+          const botMessage = this.messages[this.messages.length - 1];
+
+          eventSource.onmessage = (event) => {
+            try {
+              const data = JSON.parse(event.data);
+
+              if (data.type === "chunk") {
+                // Use data.data format from new SSE implementation
+                botMessage.content += data.data;
+                this.scrollToBottom();
+              } else if (data.type === "complete") {
+                botMessage.streaming = false;
+                this.isTyping = false;
+                this.exchangeCount++;
+                eventSource.close();
+
+                if (data.conversation_ended) {
+                  console.log("🏁 Conversation ended automatically");
+                  this.handleConversationEnd();
+                }
+              } else if (data.type === "error") {
+                botMessage.content =
+                  data.message || "Maaf, terjadi kesalahan. Silakan coba lagi.";
+                botMessage.streaming = false;
+                this.isTyping = false;
+                eventSource.close();
+              } else if (data.type === "stream_start") {
+                // Handle stream start signal
+                console.log("🚀 Stream started");
+              }
+            } catch (e) {
+              console.error("Error parsing SSE data:", e);
+            }
+          };
+
+          eventSource.onerror = (error) => {
+            console.error("❌ EventSource error:", error);
+            botMessage.content = "Kesalahan koneksi. Silakan coba lagi.";
+            botMessage.streaming = false;
+            this.isTyping = false;
+            eventSource.close();
+          };
+        } catch (error) {
+          console.error("❌ Error in hybrid POST + EventSource:", error);
+          const botMessage = this.messages[this.messages.length - 1];
+          botMessage.content = `ERROR: ${error.message || error}`;
+          botMessage.streaming = false;
+          this.isTyping = false;
+        }
+      },
+
+      async finishConversation() {
+        if (this.isFinishing || this.isTyping) return;
+
+        this.isFinishing = true;
+        console.log("🏁 Manually finishing conversation");
+
+        try {
+          const response = await fetch(
+            `{{ url_for("llm_assessment.finish_chat", session_token='TOKEN') }}`.replace(
+              "TOKEN",
+              this.sessionToken
+            ),
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+
+          const result = await response.json();
+          console.log("✅ Conversation finished:", result);
+          
+          // Handle API response wrapper
+          const actualResult = result.status === "OLKORECT" ? result.data : result;
+
+          if (actualResult.status === "success" && actualResult.completion_redirect) {
+            // Call universal completion handler
+            const completionResponse = await fetch(actualResult.completion_redirect, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+            });
+
+            const completionResult = await completionResponse.json();
+
+            if (completionResult.status === "OLKORECT") {
+              // Redirect to next step
+              window.location.href = completionResult.next_redirect;
+            } else {
+              alert(
+                "Error completing assessment: " +
+                  (completionResult.error || "Unknown error")
+              );
+              this.isFinishing = false;
+            }
+          } else {
+            alert("Error finishing conversation: " + (actualResult.message || "Unknown error"));
+            this.isFinishing = false;
+          }
+        } catch (error) {
+          console.error("❌ Error finishing conversation:", error);
+          alert("Error finishing conversation. Please try again.");
+          this.isFinishing = false;
+        }
+      },
+
+      handleConversationEnd() {
+        this.conversationEnded = true;
+
+        // Auto-finish after a short delay
+        setTimeout(() => {
+          this.finishConversation();
+        }, 2000);
+      },
+
+      startConversationTimer() {
+        timerInterval = setInterval(() => {
+          conversationTimer++;
+          const minutes = Math.floor(conversationTimer / 60);
+          const seconds = conversationTimer % 60;
+          document.getElementById("conversation-timer").textContent = `${minutes
+            .toString()
+            .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+        }, 1000);
+      },
+
+      scrollToBottom() {
+        this.$nextTick(() => {
+          this.$refs.chatContainer.scrollTop =
+            this.$refs.chatContainer.scrollHeight;
+        });
+      },
+    };
   }
 </script>
 {% endblock %}

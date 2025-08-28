@@ -63,7 +63,7 @@ def create_all_tables():
     from .model.shared.enums import UserType, AssessmentStatus
     from .model.admin.phq import PHQQuestion, PHQScale, PHQSettings
     from .model.admin.camera import CameraSettings
-    from .model.admin.llm import OpenQuestionSettings
+    from .model.admin.llm import LLMSettings
     from .model.admin.consent import ConsentSettings
     from .model.assessment.sessions import AssessmentSession, PHQResponse, LLMConversationTurn, LLMAnalysisResult, OpenQuestionResponse, CameraCapture, SessionExport
     engine = get_engine()

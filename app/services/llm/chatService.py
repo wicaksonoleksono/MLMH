@@ -3,6 +3,7 @@ from typing import Generator, Dict, Any, List
 from datetime import datetime
 from ...services.sessionService import SessionService
 from ...services.admin.llmService import LLMService
+from ...services.assessment.llmService import LLMConversationService
 from ...model.assessment.sessions import AssessmentSession
 from ...db import get_session
 
@@ -13,7 +14,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import ConfigurableFieldSpec
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel, Field
+from pydantic.v1 import BaseModel, Field
 
 
 class InMemoryHistory(BaseChatMessageHistory, BaseModel):
@@ -117,120 +118,85 @@ class LLMChatService:
         except Exception as e:
             raise ValueError(f"Failed to initialize LangChain: {str(e)}")
     
-    def stream_ai_response(self, session_id: int, user_message: str) -> Generator[str, None]:
+    def stream_ai_response(self, session_id: int, user_message: str) -> Generator[str, None, None]:
         """
         Stream AI response using session's system prompt from database settings
         """
-        try:
-            # Load settings from database (NO fallbacks)
-            settings = self._load_llm_settings()
-            
-            # Initialize LangChain with database settings
-            self._init_langchain(settings)
-            
-            # Validate session
-            session = SessionService.get_session(session_id)
-            if not session:
-                raise ValueError("Session not found")
-            
-            # Stream response using Langchain
-            response_content = ""
-            config = {"configurable": {"session_id": str(session_id)}}
-            
-            for chunk in self.chain_with_history.stream(
-                {"input": user_message},
-                config=config
-            ):
-                if chunk.content:
-                    content = chunk.content
-                    response_content += content
-                    yield content
-            
-            # After streaming completes, save to database if conversation ended
-            if self._is_conversation_ended(response_content):
-                self._save_conversation_to_database(session_id, settings)
-            
-        except Exception as e:
-            error_msg = f"Error generating response: {str(e)}"
-            yield error_msg
+        # Load settings from database (NO fallbacks)
+        settings = self._load_llm_settings()
+        
+        # Initialize LangChain with database settings
+        self._init_langchain(settings)
+        
+        # Validate session
+        session = SessionService.get_session(session_id)
+        if not session:
+            raise ValueError("Session not found")
+        
+        # Stream response using Langchain
+        response_content = ""
+        config = {"configurable": {"session_id": str(session_id)}}
+        
+        for chunk in self.chain_with_history.stream(
+            {"input": user_message},
+            config=config
+        ):
+            if chunk.content:
+                content = chunk.content
+                response_content += content
+                yield content
+        
+        # After streaming completes, save turn to database immediately
+        self._save_conversation_turn(session_id, user_message, response_content, settings)
     
-    def _is_conversation_ended(self, ai_response: str) -> bool:
-        """Check if conversation ended based on AI response"""
-        return "</end_conversation>" in ai_response.lower()
-    
-    def _save_conversation_to_database(self, session_id: int, settings: Dict[str, Any]) -> None:
-        """Save complete conversation to session_metadata as JSON"""
-        try:
-            # Get conversation from LangChain store
+    def _save_conversation_turn(self, session_id: int, user_message: str, ai_response: str, settings: Dict[str, Any]) -> None:
+        """Save conversation turn immediately using LLMConversationService"""
+        # Get current turn number
+        existing_turns = LLMConversationService.get_session_conversations(session_id)
+        turn_number = len(existing_turns) + 1
+        
+        # Save turn to database
+        LLMConversationService.create_conversation_turn(
+            session_id=session_id,
+            turn_number=turn_number,
+            ai_message=ai_response,
+            user_message=user_message,
+            ai_model_used=settings['chat_model']
+        )
+        
+        # If conversation ended, clear LangChain memory
+        if "</end_conversation>" in ai_response.lower():
             history = get_by_session_id(str(session_id))
-            
-            # Convert LangChain messages to simple format
-            messages = []
-            exchange_count = 0
-            
-            for msg in history.messages:
-                if isinstance(msg, HumanMessage):
-                    messages.append({'type': 'user', 'content': msg.content})
-                    exchange_count += 1
-                elif isinstance(msg, AIMessage):
-                    messages.append({'type': 'ai', 'content': msg.content})
-            
-            # Build conversation data
-            conversation_data = {
-                "messages": messages,
-                "exchange_count": exchange_count,
-                "total_turns": len(messages),
-                "system_prompt": LLMService.build_system_prompt(settings['depression_aspects']['aspects']),
-                "model_used": settings['chat_model'],
-                "conversation_ended": True,
-                "completed_at": datetime.utcnow().isoformat()
-            }
-            
-            # Save to database
-            with get_session() as db:
-                session = db.query(AssessmentSession).filter_by(id=session_id).first()
-                if session:
-                    if not session.session_metadata:
-                        session.session_metadata = {}
-                    session.session_metadata['chat_history'] = conversation_data
-                    session.updated_at = datetime.utcnow()
-                    db.commit()
-            
-            # Clear in-memory store after saving
             history.clear()
             if str(session_id) in store:
                 del store[str(session_id)]
-                
-        except Exception as e:
-            print(f"Error saving conversation to database: {e}")
     
     @staticmethod
     def get_session_chat_history(session_id: int) -> Dict[str, Any]:
-        """Get chat history from session metadata"""
-        with get_session() as db:
-            session = db.query(AssessmentSession).filter_by(id=session_id).first()
-            if not session or not session.session_metadata:
-                return {"status": "error", "message": "No chat history found"}
-            
-            chat_history = session.session_metadata.get('chat_history', {})
-            if not chat_history:
-                return {"status": "error", "message": "No chat history found"}
-            
-            return {
-                "status": "success",
-                "chat_history": chat_history
+        """Get chat history using LLMConversationService"""
+        conversations = LLMConversationService.get_session_conversations(session_id)
+        if not conversations:
+            return {"status": "error", "message": "No chat history found"}
+        
+        # Convert to simple format for frontend
+        messages = []
+        for turn in conversations:
+            messages.append({"type": "ai", "content": turn.ai_message})
+            messages.append({"type": "user", "content": turn.user_message})
+        
+        return {
+            "status": "success",
+            "chat_history": {
+                "messages": messages,
+                "total_turns": len(conversations),
+                "conversation_ended": LLMConversationService.check_conversation_complete(session_id)
             }
+        }
     
     @staticmethod
     def is_conversation_complete(session_id: int) -> bool:
-        """Check if conversation ended by checking database"""
-        with get_session() as db:
-            session = db.query(AssessmentSession).filter_by(id=session_id).first()
-            if not session or not session.session_metadata:
-                return False
-            
-            chat_history = session.session_metadata.get('chat_history', {})
-            return chat_history.get('conversation_ended', False)
+        """Check if conversation ended using LLMConversationService"""
+        return LLMConversationService.check_conversation_complete(session_id)
     
     @staticmethod
     def start_conversation(session_id: int) -> Dict[str, Any]:
@@ -246,22 +212,15 @@ class LLMChatService:
                     'message': 'No LLM settings configured. Please configure settings first.'
                 }
             
-            # Clear any existing LangChain history
-            try:
-                history = get_by_session_id(str(session_id))
-                history.clear()
-            except Exception:
-                pass
+            # Clear any existing LangChain history and database turns
+            history = get_by_session_id(str(session_id))
+            history.clear()
             
             # Generate initial AI greeting in Indonesian
             initial_greeting = "Hai! Nama aku Anisa, temanmu yang siap mendengarkan curhatanmu. Lagi ngapain nih? Cerita dong tentang hari-harimu akhir-akhir ini!"
             
             # Add initial AI message to LangChain history
-            try:
-                history = get_by_session_id(str(session_id))
-                history.add_messages([AIMessage(content=initial_greeting)])
-            except Exception as e:
-                print(f"Warning: Could not add initial message to history: {e}")
+            history.add_messages([AIMessage(content=initial_greeting)])
             
             return {
                 'status': 'success',
@@ -281,27 +240,20 @@ class LLMChatService:
         """
         Finish conversation and prepare for completion handler
         """
-        try:
-            # Check if conversation is already saved
-            if LLMChatService.is_conversation_complete(session_id):
-                # Get session for token
-                session = SessionService.get_session(session_id)
-                if not session:
-                    return {'status': 'error', 'message': 'Session not found'}
-                
-                return {
-                    'status': 'success',
-                    'conversation_completed': True,
-                    'completion_redirect': f'/assessment/complete/llm/{session.session_token}'
-                }
-            else:
-                return {
-                    'status': 'error',
-                    'message': 'Conversation not yet complete. Please continue chatting until Anisa ends the conversation.'
-                }
+        # Check if conversation is complete
+        if LLMChatService.is_conversation_complete(session_id):
+            # Get session for token
+            session = SessionService.get_session(session_id)
+            if not session:
+                raise ValueError('Session not found')
             
-        except Exception as e:
+            return {
+                'status': 'success',
+                'conversation_completed': True,
+                'completion_redirect': f'/assessment/complete/llm/{session.session_token}'
+            }
+        else:
             return {
                 'status': 'error',
-                'message': str(e)
+                'message': 'Conversation not yet complete. Please continue chatting until Anisa ends the conversation.'
             }

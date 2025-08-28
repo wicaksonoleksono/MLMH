@@ -175,11 +175,27 @@ function cameraCheck() {
             this.errorMessage = 'Kamera dimatikan. Aktifkan kembali untuk melanjutkan.';
         },
 
-        proceedToAssessment() {
+        async proceedToAssessment() {
             if (this.cameraStatus !== 'active') return;
             
-            // Keep camera active and proceed to actual assessment
-            window.location.href = '/assessment/phq'; // or /assessment/llm based on session.is_first
+            const response = await fetch('/assessment/camera-check', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    session_id: this.sessionId,
+                    camera_working: true
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.status === 'OLKORECT') {
+                window.location.href = '/assessment/';
+            } else {
+                alert('Server error: ' + result.error);
+            }
         },
 
         goBack() {

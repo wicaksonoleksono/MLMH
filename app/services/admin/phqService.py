@@ -56,6 +56,16 @@ class PHQService:
                         order_index: int = 0) -> Dict[str, Any]:
         """Create or update PHQ question"""
         with get_session() as db:
+            # Null handling - don't save if category or questions are null/empty
+            if not category_name_id or not category_name_id.strip():
+                raise ValueError("Category name ID cannot be null or empty")
+            
+            if not question_text_en or not question_text_en.strip():
+                raise ValueError("English question text cannot be null or empty")
+            
+            if not question_text_id or not question_text_id.strip():
+                raise ValueError("Indonesian question text cannot be null or empty")
+            
             # Verify category exists in predefined list
             valid_categories = [cat.name_id for cat in PHQCategoryType]
             if category_name_id not in valid_categories:
@@ -72,15 +82,15 @@ class PHQService:
 
             if existing:
                 # Update existing question
-                existing.question_text_en = question_text_en
-                existing.question_text_id = question_text_id
+                existing.question_text_en = question_text_en.strip()
+                existing.question_text_id = question_text_id.strip()
                 question = existing
             else:
                 # Create new question
                 question = PHQQuestion(
-                    category_name_id=category_name_id,
-                    question_text_en=question_text_en,
-                    question_text_id=question_text_id,
+                    category_name_id=category_name_id.strip(),
+                    question_text_en=question_text_en.strip(),
+                    question_text_id=question_text_id.strip(),
                     order_index=order_index
                 )
                 db.add(question)
@@ -148,32 +158,49 @@ class PHQService:
     @staticmethod
     def create_scale(scale_name: str, min_value: int, max_value: int,
                      scale_labels: Dict[str, str], is_default: bool = False) -> Dict[str, Any]:
-        """Create or update PHQ scale"""
+        """Create or update PHQ scale - always updates existing default if is_default=True"""
         with get_session() as db:
-            existing = db.query(PHQScale).filter(PHQScale.scale_name == scale_name).first()
-
             if is_default:
-                # Remove default from other scales
-                db.query(PHQScale).filter(PHQScale.is_default == True).update({'is_default': False})
-
-            if existing:
-                # Update existing scale
-                existing.min_value = min_value
-                existing.max_value = max_value
-                existing.scale_labels = scale_labels
-                existing.is_default = is_default
-                existing.is_active = True
-                scale = existing
+                # Find existing default scale to update
+                existing = db.query(PHQScale).filter(PHQScale.is_default == True).first()
+                if existing:
+                    # Update existing default scale
+                    existing.scale_name = scale_name
+                    existing.min_value = min_value
+                    existing.max_value = max_value
+                    existing.scale_labels = scale_labels
+                    existing.is_active = True
+                    scale = existing
+                else:
+                    # Create first default scale
+                    scale = PHQScale(
+                        scale_name=scale_name,
+                        min_value=min_value,
+                        max_value=max_value,
+                        scale_labels=scale_labels,
+                        is_default=True
+                    )
+                    db.add(scale)
             else:
-                # Create new scale
-                scale = PHQScale(
-                    scale_name=scale_name,
-                    min_value=min_value,
-                    max_value=max_value,
-                    scale_labels=scale_labels,
-                    is_default=is_default
-                )
-                db.add(scale)
+                # Non-default scale - check by name
+                existing = db.query(PHQScale).filter(PHQScale.scale_name == scale_name).first()
+                if existing:
+                    # Update existing scale
+                    existing.min_value = min_value
+                    existing.max_value = max_value
+                    existing.scale_labels = scale_labels
+                    existing.is_active = True
+                    scale = existing
+                else:
+                    # Create new scale
+                    scale = PHQScale(
+                        scale_name=scale_name,
+                        min_value=min_value,
+                        max_value=max_value,
+                        scale_labels=scale_labels,
+                        is_default=False
+                    )
+                    db.add(scale)
 
             db.commit()
 
@@ -246,34 +273,66 @@ class PHQService:
     def create_settings(setting_name: str, questions_per_category: int, scale_id: int,
                         randomize_categories: bool = False, instructions: str = None,
                         is_default: bool = False) -> Dict[str, Any]:
-        """Create or update PHQ settings"""
+        """Create or update PHQ settings - always updates existing default if is_default=True"""
         with get_session() as db:
-            existing = db.query(PHQSettings).filter(PHQSettings.setting_name == setting_name).first()
-
+            # Null handling - don't save if required fields are null/empty
+            if not setting_name or not setting_name.strip():
+                raise ValueError("Setting name cannot be null or empty")
+            
+            if not questions_per_category or questions_per_category <= 0:
+                raise ValueError("Questions per category must be a positive number")
+            
+            if not scale_id:
+                raise ValueError("Scale ID cannot be null or empty")
+            
+            # Null handling for instructions - don't save if null/empty
+            final_instructions = instructions if instructions and instructions.strip() else None
+            
             if is_default:
-                # Remove default from other settings
-                db.query(PHQSettings).filter(PHQSettings.is_default == True).update({'is_default': False})
-
-            if existing:
-                # Update existing settings
-                existing.questions_per_category = questions_per_category
-                existing.scale_id = scale_id
-                existing.randomize_categories = randomize_categories
-                existing.instructions = instructions
-                existing.is_default = is_default
-                existing.is_active = True
-                settings = existing
+                # Find existing default settings to update
+                existing = db.query(PHQSettings).filter(PHQSettings.is_default == True).first()
+                if existing:
+                    # Update existing default settings
+                    existing.setting_name = setting_name.strip()
+                    existing.questions_per_category = questions_per_category
+                    existing.scale_id = scale_id
+                    existing.randomize_categories = randomize_categories
+                    existing.instructions = final_instructions
+                    existing.is_active = True
+                    settings = existing
+                else:
+                    # Create first default settings
+                    settings = PHQSettings(
+                        setting_name=setting_name.strip(),
+                        questions_per_category=questions_per_category,
+                        scale_id=scale_id,
+                        randomize_categories=randomize_categories,
+                        instructions=final_instructions,
+                        is_default=True
+                    )
+                    db.add(settings)
             else:
-                # Create new settings
-                settings = PHQSettings(
-                    setting_name=setting_name,
-                    questions_per_category=questions_per_category,
-                    scale_id=scale_id,
-                    randomize_categories=randomize_categories,
-                    instructions=instructions,
-                    is_default=is_default
-                )
-                db.add(settings)
+                # Non-default settings - check by name
+                existing = db.query(PHQSettings).filter(PHQSettings.setting_name == setting_name).first()
+                if existing:
+                    # Update existing settings
+                    existing.questions_per_category = questions_per_category
+                    existing.scale_id = scale_id
+                    existing.randomize_categories = randomize_categories
+                    existing.instructions = final_instructions
+                    existing.is_active = True
+                    settings = existing
+                else:
+                    # Create new settings
+                    settings = PHQSettings(
+                        setting_name=setting_name.strip(),
+                        questions_per_category=questions_per_category,
+                        scale_id=scale_id,
+                        randomize_categories=randomize_categories,
+                        instructions=final_instructions,
+                        is_default=False
+                    )
+                    db.add(settings)
 
             db.commit()
 

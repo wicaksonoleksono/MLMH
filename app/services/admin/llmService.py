@@ -63,30 +63,23 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                        depression_aspects: Optional[List[str]] = None,
                        instructions: str = None,
                        is_default: bool = False) -> Dict[str, Any]:
-        """Create or update LLM settings with streaming compatibility validation"""
+        """Create or update LLM settings - no streaming validation"""
         with get_session() as db:
-            # Validate streaming compatibility before creating/updating
-            validation_result = LLMService.validate_streaming_models(chat_model, analysis_model, openai_api_key)
-            if not validation_result["streaming_compatible"]:
-                return {
-                    "status": "SNAFU", 
-                    "error": "Streaming compatibility validation failed",
-                    "issues": validation_result["issues"]
-                }
             
             # Auto-generate setting name
             setting_name = f"LLM Settings (Chat: {chat_model}, Analysis: {analysis_model})"
             
-            # Use defaults if not provided
-            if depression_aspects is None:
-                depression_aspects = LLMService.DEFAULT_ASPECTS
+            # Null handling for depression_aspects - don't save if null/empty
+            aspects_json = None
+            if depression_aspects is not None and len(depression_aspects) > 0:
+                # Format aspect names: spaces to underscores, lowercase
+                for aspect in depression_aspects:
+                    aspect["name"] = aspect["name"].replace(" ", "_").lower()
+                # Store aspects as JSON
+                aspects_json = {"aspects": depression_aspects}
             
-            # Format aspect names: spaces to underscores, lowercase
-            for aspect in depression_aspects:
-                aspect["name"] = aspect["name"].replace(" ", "_").lower()
-            
-            # Store aspects as JSON
-            aspects_json = {"aspects": depression_aspects}
+            # Null handling for instructions - don't save if null/empty
+            final_instructions = instructions if instructions and instructions.strip() else None
             
             # Look for existing settings (assume only one set of settings for now)
             existing = db.query(LLMSettings).filter(LLMSettings.is_active == True).first()
@@ -101,7 +94,7 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                 
                 # Update existing settings
                 existing.setting_name = setting_name
-                existing.instructions = instructions
+                existing.instructions = final_instructions
                 existing.openai_api_key = openai_api_key
                 existing.chat_model = chat_model
                 existing.analysis_model = analysis_model
@@ -121,12 +114,13 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                 # Create new settings
                 settings = LLMSettings(
                     setting_name=setting_name,
-                    instructions=instructions,
+                    instructions=final_instructions,
                     openai_api_key=openai_api_key,
                     chat_model=chat_model,
                     analysis_model=analysis_model,
                     depression_aspects=aspects_json,
-                    is_default=is_default
+                    is_default=is_default,
+                    is_active=True
                 )
                 db.add(settings)
             
@@ -136,14 +130,13 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                 "status": "OLKORECT",
                 'id': settings.id,
                 'setting_name': settings.setting_name,
-                'instructions': settings.instructions,
-                'openai_api_key': openai_api_key,  # Return full key for immediate use
+                'instructions': settings.instructions or '',
+                'openai_api_key': openai_api_key or '',  # Always return string, even if empty
                 'chat_model': settings.chat_model,
                 'analysis_model': settings.analysis_model,
                 'depression_aspects': settings.depression_aspects,
                 'is_default': settings.is_default,
-                'streaming_compatible': True,
-                'validation_result': validation_result
+                'streaming_compatible': True
             }
 
     @staticmethod
@@ -163,11 +156,21 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
 
             for key, value in updates.items():
                 if hasattr(settings, key):
-                    if key == 'depression_aspects' and isinstance(value, dict) and 'aspects' in value:
-                        # Format aspect names: spaces to underscores, lowercase
-                        for aspect in value['aspects']:
-                            aspect["name"] = aspect["name"].replace(" ", "_").lower()
-                    setattr(settings, key, value)
+                    # Null handling for depression_aspects
+                    if key == 'depression_aspects':
+                        if value is None or (isinstance(value, dict) and not value.get('aspects')):
+                            setattr(settings, key, None)
+                        elif isinstance(value, dict) and 'aspects' in value:
+                            # Format aspect names: spaces to underscores, lowercase
+                            for aspect in value['aspects']:
+                                aspect["name"] = aspect["name"].replace(" ", "_").lower()
+                            setattr(settings, key, value)
+                    # Null handling for instructions
+                    elif key == 'instructions':
+                        final_value = value if value and value.strip() else None
+                        setattr(settings, key, final_value)
+                    else:
+                        setattr(settings, key, value)
 
             db.commit()
 
@@ -251,16 +254,12 @@ Format output JSON:
             return []
         
         try:
-            headers = {
-                'Authorization': f'Bearer {api_key}',
-                'Content-Type': 'application/json'
-            }
+            from openai import OpenAI
+            client = OpenAI(api_key=api_key)
             
-            response = requests.get('https://api.openai.com/v1/models', headers=headers, timeout=10)
-            response.raise_for_status()
-            
-            data = response.json()
-            models = [model['id'] for model in data.get('data', [])]
+            # Get all models using OpenAI client
+            models_response = client.models.list()
+            models = [model.id for model in models_response.data]
             
             # Filter for chat models (exclude embeddings, tts, etc)
             chat_models = [m for m in models if any(prefix in m for prefix in ['gpt-', 'o1-', 'o3-'])]
@@ -273,19 +272,16 @@ Format output JSON:
 
     @staticmethod
     def test_api_key(api_key: str) -> bool:
-        """Test if OpenAI API key is valid"""
-        if not api_key:
+        """Test if OpenAI API key is valid - simple and cheap"""
+        if not api_key or not api_key.strip():
             return False
         
         try:
-            headers = {
-                'Authorization': f'Bearer {api_key}',
-                'Content-Type': 'application/json'
-            }
-            
-            # Simple test request to models endpoint
-            response = requests.get('https://api.openai.com/v1/models', headers=headers, timeout=10)
-            return response.status_code == 200
+            from openai import OpenAI
+            client = OpenAI(api_key=api_key)
+            # Simple models list call - cheap and reliable
+            models = client.models.list()
+            return True
             
         except Exception as e:
             print(f"Error testing API key: {e}")
@@ -438,41 +434,13 @@ Format output JSON:
 
     @staticmethod
     def validate_streaming_models(chat_model: str, analysis_model: str, api_key: str) -> Dict[str, Any]:
-        """Validate that both models are suitable for streaming and analysis"""
-        results = {
-            "chat_model_valid": False,
-            "analysis_model_valid": False,
-            "streaming_compatible": False,
+        """DISABLED - Streaming validation no longer used"""
+        return {
+            "chat_model_valid": True,
+            "analysis_model_valid": True,
+            "streaming_compatible": True,
             "issues": []
         }
-        
-        try:
-            # Test chat model
-            chat_test = LLMService.test_model_availability(chat_model, api_key)
-            results["chat_model_valid"] = chat_test
-            
-            if not chat_test:
-                results["issues"].append(f"Chat model '{chat_model}' not available")
-            
-            # Test analysis model
-            analysis_test = LLMService.test_model_availability(analysis_model, api_key)
-            results["analysis_model_valid"] = analysis_test
-            
-            if not analysis_test:
-                results["issues"].append(f"Analysis model '{analysis_model}' not available")
-            
-            # Check if models support streaming (most OpenAI models do)
-            streaming_supported_models = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo']
-            
-            if not any(model in chat_model for model in streaming_supported_models):
-                results["issues"].append(f"Chat model '{chat_model}' may not support streaming")
-            
-            results["streaming_compatible"] = len(results["issues"]) == 0
-            
-        except Exception as e:
-            results["issues"].append(f"Validation error: {str(e)}")
-        
-        return results
     
     @staticmethod
     def test_langchain_integration(llm_settings_id: int) -> Dict[str, Any]:

@@ -1,101 +1,112 @@
 {% extends "base.html" %}
 
-{% block title %}Chat dengan Anisa{% endblock %}
+{% block title %}LLM Assessment{% endblock %}
 
 {% block content %}
-<div class="min-h-screen bg-gray-50 py-8 px-4" x-data="llmAssessment()">
-    <div class="max-w-4xl mx-auto">
-        <!-- Header -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">
+<div class="min-h-screen bg-gray-50" x-data="llmAssessment()">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-4">
+                <h1 class="text-xl font-semibold text-gray-900">LLM Assessment</h1>
+                <div class="bg-indigo-600 rounded-lg px-3 py-1" x-show="!loading && currentTurn > 0">
+                    <span class="text-white font-medium text-sm" x-text="`Turn ${currentTurn}`"></span>
+                </div>
+            </div>
+            <a href="{{ url_for('auth.logout') }}" class="text-gray-500 hover:text-red-600 font-medium transition-colors">
+                Keluar
+            </a>
+        </div>
+    </nav>
+
+    <div class="max-w-4xl mx-auto px-4 py-8">
+        <!-- Loading State -->
+        <div x-show="loading" class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
             <div class="text-center">
-                <h1 class="text-3xl font-bold text-gray-900">Chat dengan Anisa</h1>
-                <p class="text-gray-600 mt-2">Percakapan dengan AI untuk Assessment Kesehatan Mental</p>
-                <p class="text-sm text-gray-500 mt-1">Sesi ID: {{ session.id }}</p>
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+                <p class="text-gray-600 mt-4">Memulai percakapan...</p>
             </div>
         </div>
 
-        <!-- Chat Container -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col h-96">
-            <!-- Chat Messages -->
-            <div class="flex-1 overflow-y-auto p-6 space-y-4" id="chatMessages">
-                <!-- Loading State -->
-                <div x-show="loading" class="text-center">
-                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-                    <p class="text-gray-600 mt-2">Memulai percakapan...</p>
-                </div>
-
-                <!-- Messages -->
-                <template x-for="message in messages" :key="message.id">
-                    <div class="flex" :class="message.type === 'user' ? 'justify-end' : 'justify-start'">
-                        <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg" 
-                             :class="message.type === 'user' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-900'">
-                            <p class="text-sm" x-text="message.content"></p>
-                            <p class="text-xs mt-1 opacity-75" x-text="message.timestamp"></p>
+        <!-- Conversation Turn Display -->
+        <div x-show="!loading && !completed && aiMessage" class="bg-white rounded-lg shadow-lg overflow-hidden">
+            <!-- Header -->
+            <div class="bg-gradient-to-r from-indigo-600 to-purple-600 px-8 py-8">
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center">
+                        <div class="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center mr-6">
+                            <span class="text-white font-bold text-xl" x-text="currentTurn"></span>
                         </div>
-                    </div>
-                </template>
-
-                <!-- Typing indicator -->
-                <div x-show="aiTyping" class="flex justify-start">
-                    <div class="bg-gray-200 text-gray-900 px-4 py-2 rounded-lg max-w-xs">
-                        <div class="flex space-x-1">
-                            <div class="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
-                            <div class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
-                            <div class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                        <div>
+                            <h2 class="text-3xl font-bold text-white mb-2">Percakapan dengan Anisa</h2>
+                            <p class="text-indigo-100">Turn ke-<span x-text="currentTurn"></span></p>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Input Area -->
-            <div class="border-t border-gray-200 p-4">
-                <div class="flex space-x-4">
-                    <input 
-                        type="text" 
-                        x-model="currentMessage"
-                        @keyup.enter="sendMessage()"
-                        :disabled="conversationEnded || sending"
-                        placeholder="Ketik pesan Anda..."
-                        class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100 disabled:cursor-not-allowed">
+            <!-- Conversation Form -->
+            <div class="p-8">
+                <!-- AI Message -->
+                <div class="mb-8">
+                    <div class="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                        <div class="flex items-start space-x-3 mb-3">
+                            <div class="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center">
+                                <span class="text-white text-sm font-medium">A</span>
+                            </div>
+                            <span class="font-medium text-gray-900">Anisa</span>
+                        </div>
+                        <p class="text-lg text-gray-900 leading-relaxed" x-text="aiMessage"></p>
+                    </div>
+                </div>
+
+                <!-- User Response Area -->
+                <div class="mb-8">
+                    <label class="block text-lg font-medium text-gray-900 mb-6">Jawaban Anda:</label>
+                    <textarea 
+                        x-model="userMessage"
+                        :disabled="submitting"
+                        placeholder="Ketik jawaban Anda di sini..."
+                        rows="5"
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base resize-none disabled:bg-gray-100"
+                        @keydown.ctrl.enter="sendMessage()"
+                    ></textarea>
+                    <p class="text-sm text-gray-500 mt-2">Tekan Ctrl+Enter untuk mengirim</p>
+                </div>
+
+                <!-- Navigation -->
+                <div class="flex justify-between items-center pt-6 border-t border-gray-200">
+                    <div class="text-gray-600">
+                        Turn <span x-text="currentTurn"></span>
+                    </div>
+                    
                     <button 
                         @click="sendMessage()"
-                        :disabled="!currentMessage.trim() || conversationEnded || sending"
-                        :class="(!currentMessage.trim() || conversationEnded || sending) ? 'bg-gray-300 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'"
-                        class="px-6 py-2 text-white font-medium rounded-lg transition-colors">
-                        <span x-show="!sending">Kirim</span>
-                        <span x-show="sending">...</span>
+                        :disabled="!userMessage.trim() || submitting"
+                        :class="userMessage.trim() && !submitting ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700' : 'bg-gray-300 cursor-not-allowed'"
+                        class="px-8 py-3 text-white rounded-lg font-medium transition-all duration-200 shadow-lg">
+                        <span x-show="!submitting">Kirim Jawaban</span>
+                        <span x-show="submitting">Mengirim...</span>
                     </button>
                 </div>
-                <p class="text-xs text-gray-500 mt-2" x-show="conversationEnded">
-                    Percakapan telah selesai. Menunggu analisis...
-                </p>
             </div>
         </div>
 
-        <!-- Conversation End State -->
-        <div x-show="conversationEnded && analysisComplete" class="bg-green-50 rounded-2xl p-6 mt-6">
-            <div class="text-center">
-                <div class="text-6xl mb-4">✅</div>
-                <h2 class="text-2xl font-bold text-gray-900 mb-3">Assessment Selesai</h2>
-                <p class="text-gray-600 mb-4">Percakapan telah selesai dan analisis telah diselesaikan.</p>
-                <div class="bg-white rounded-lg p-4 mb-6">
-                    <h3 class="font-semibold text-gray-900 mb-2">Hasil Analisis:</h3>
-                    <p class="text-lg font-bold text-indigo-600" x-text="`${analysisResult.total_aspects_detected} aspek terdeteksi`"></p>
-                    <p class="text-sm text-gray-600" x-text="`Rata-rata severity: ${analysisResult.average_severity.toFixed(2)}`"></p>
-                </div>
-                <button 
-                    @click="continueToNextStep()"
-                    class="bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-8 rounded-xl transition-colors">
-                    Lanjutkan ke Tahap Berikutnya
-                </button>
+        <!-- Success State -->
+        <div x-show="completed" class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center">
+            <div class="text-6xl mb-4">✅</div>
+            <h2 class="text-2xl font-bold text-gray-900 mb-3">LLM Assessment Selesai</h2>
+            <p class="text-gray-600 mb-4">Terima kasih! Percakapan telah selesai dan sedang dianalisis.</p>
+            <div class="bg-gray-50 rounded-lg p-4 mb-6" x-show="analysisResult">
+                <h3 class="font-semibold text-gray-900 mb-2">Hasil Analisis:</h3>
+                <p class="text-lg font-bold text-indigo-600" x-text="`${totalTurns} turn percakapan`"></p>
+                <p class="text-sm text-gray-600">Analisis sedang diproses...</p>
             </div>
-        </div>
-
-        <!-- Back Button -->
-        <div class="text-center mt-6">
-            <a href="/assessment" class="text-gray-500 hover:text-gray-700 font-medium">
-                ← Kembali ke Dashboard
-            </a>
+            <button 
+                @click="continueToNextStep()"
+                class="bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-8 rounded-xl transition-colors">
+                Lanjutkan ke Tahap Berikutnya
+            </button>
         </div>
     </div>
 </div>
@@ -107,124 +118,73 @@ function llmAssessment() {
     return {
         sessionId: {{ session.id }},
         loading: true,
-        sending: false,
-        aiTyping: false,
-        conversationEnded: false,
-        analysisComplete: false,
-        messages: [],
-        currentMessage: '',
-        eventSource: null,
-        analysisResult: {},
+        submitting: false,
+        completed: false,
+        currentTurn: 0,
+        totalTurns: 0,
+        aiMessage: '',
+        userMessage: '',
+        analysisResult: null,
         
         async init() {
-            await this.startConversation();
+            await this.loadCurrentTurn();
         },
         
-        async startConversation() {
+        async loadCurrentTurn() {
             try {
-                const result = await apiCall(`/assessment/llm/start/${this.sessionId}`, 'POST');
-                if (result.status === 'OLKORECT') {
-                    this.addMessage('ai', result.data.ai_response);
+                const result = await apiCall(`{{ url_for("llm_assessment.get_current_turn", session_id=0) }}`.replace('0', this.sessionId));
+                if (result && result.status === 'OLKORECT') {
+                    if (result.data.conversation_ended) {
+                        this.completed = true;
+                        this.totalTurns = result.data.total_turns;
+                        this.analysisResult = result.data.analysis;
+                    } else {
+                        this.currentTurn = result.data.turn_number;
+                        this.aiMessage = result.data.ai_message;
+                    }
                 } else {
-                    this.addMessage('system', 'Error starting conversation: ' + result.error);
+                    alert('Error loading conversation: ' + (result?.error || 'Unknown error'));
                 }
             } catch (error) {
-                this.addMessage('system', 'Error: ' + error.message);
+                alert('Error: ' + error.message);
             } finally {
                 this.loading = false;
             }
         },
         
         async sendMessage() {
-            if (!this.currentMessage.trim() || this.sending || this.conversationEnded) return;
+            if (!this.userMessage.trim() || this.submitting) return;
             
-            const message = this.currentMessage.trim();
-            this.currentMessage = '';
-            this.sending = true;
-            this.aiTyping = true;
-            
-            // Add user message
-            this.addMessage('user', message);
-            
-            // Start SSE stream
-            this.startMessageStream(message);
-        },
-        
-        startMessageStream(message) {
-            const url = `/assessment/llm/stream/${this.sessionId}?message=${encodeURIComponent(message)}`;
-            this.eventSource = new EventSource(url);
-            
-            let aiResponse = '';
-            
-            this.eventSource.onmessage = (event) => {
-                const data = JSON.parse(event.data);
+            this.submitting = true;
+            try {
+                const payload = {
+                    turn_number: this.currentTurn,
+                    user_message: this.userMessage.trim()
+                };
                 
-                if (data.type === 'status') {
-                    console.log('Status:', data.message);
-                } else if (data.type === 'chunk') {
-                    aiResponse += data.chunk;
-                    this.updateLastAiMessage(aiResponse);
-                } else if (data.type === 'complete') {
-                    this.aiTyping = false;
-                    this.sending = false;
-                    if (data.has_end_conversation) {
-                        this.conversationEnded = true;
+                const result = await apiCall(`{{ url_for("llm_assessment.submit_turn", session_id=0) }}`.replace('0', this.sessionId), 'POST', payload);
+                if (result && result.status === 'OLKORECT') {
+                    if (result.data.conversation_ended) {
+                        this.completed = true;
+                        this.totalTurns = result.data.total_turns;
+                        this.analysisResult = result.data.analysis;
+                    } else {
+                        // Load next turn
+                        this.currentTurn = result.data.next_turn;
+                        this.aiMessage = result.data.ai_message;
+                        this.userMessage = '';
                     }
-                    this.eventSource.close();
-                } else if (data.type === 'analysis_complete') {
-                    this.analysisComplete = true;
-                    this.analysisResult = data;
-                } else if (data.type === 'error') {
-                    this.aiTyping = false;
-                    this.sending = false;
-                    this.addMessage('system', 'Error: ' + data.message);
-                    this.eventSource.close();
+                } else {
+                    alert('Error submitting message: ' + (result?.error || 'Unknown error'));
                 }
-            };
-            
-            this.eventSource.onerror = () => {
-                this.aiTyping = false;
-                this.sending = false;
-                this.addMessage('system', 'Connection error occurred');
-                this.eventSource.close();
-            };
-            
-            // Add placeholder AI message for streaming
-            this.addMessage('ai', '');
-        },
-        
-        addMessage(type, content) {
-            this.messages.push({
-                id: Date.now() + Math.random(),
-                type: type,
-                content: content,
-                timestamp: new Date().toLocaleTimeString('id-ID', { 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                })
-            });
-            this.$nextTick(() => {
-                this.scrollToBottom();
-            });
-        },
-        
-        updateLastAiMessage(content) {
-            const lastMessage = this.messages[this.messages.length - 1];
-            if (lastMessage && lastMessage.type === 'ai') {
-                lastMessage.content = content;
-                this.$nextTick(() => {
-                    this.scrollToBottom();
-                });
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                this.submitting = false;
             }
         },
         
-        scrollToBottom() {
-            const chatMessages = document.getElementById('chatMessages');
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        },
-        
         continueToNextStep() {
-            // Redirect to dashboard or next assessment step
             window.location.href = '/assessment';
         }
     };

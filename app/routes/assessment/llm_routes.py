@@ -300,3 +300,104 @@ def check_conversation_complete(session_id):
         "analysis_available": analysis is not None,
         "analysis_id": analysis.id if analysis else None
     }
+
+
+@llm_assessment_bp.route('/current-turn/<int:session_id>', methods=['GET'])
+@user_required
+@api_response
+def get_current_turn(session_id):
+    """Get current conversation turn for simple UI flow"""
+    # Validate session belongs to current user
+    session = SessionService.get_session(session_id)
+    if not session or session.user_id != int(current_user.id):
+        return {"message": "Session not found or access denied"}, 403
+    
+    try:
+        # Check if conversation is complete
+        is_complete = LLMConversationService.check_conversation_complete(session_id)
+        if is_complete:
+            analysis = LLMConversationService.get_session_analysis(session_id)
+            total_turns = LLMConversationService.get_total_turns(session_id)
+            return {
+                "conversation_ended": True,
+                "total_turns": total_turns,
+                "analysis": {
+                    "total_aspects_detected": analysis.total_aspects_detected if analysis else 0,
+                    "average_severity": analysis.average_severity_score if analysis else 0.0
+                } if analysis else None
+            }
+        
+        # Get current turn or start new conversation
+        current_turn_data = LLMConversationService.get_current_turn_for_session(session_id)
+        if not current_turn_data:
+            # Start new conversation
+            result = start_conversation(session_id)
+            if result.get('status') != 'success':
+                return {"message": "Failed to start conversation"}, 500
+            
+            return {
+                "conversation_ended": False,
+                "turn_number": 1,
+                "ai_message": result['data']['ai_response']
+            }
+        
+        return {
+            "conversation_ended": False,
+            "turn_number": current_turn_data['turn_number'],
+            "ai_message": current_turn_data['ai_message']
+        }
+        
+    except Exception as e:
+        return {"message": str(e)}, 500
+
+
+@llm_assessment_bp.route('/submit-turn/<int:session_id>', methods=['POST'])
+@user_required
+@api_response
+def submit_turn(session_id):
+    """Submit user response and get next turn"""
+    # Validate session belongs to current user
+    session = SessionService.get_session(session_id)
+    if not session or session.user_id != int(current_user.id):
+        return {"message": "Session not found or access denied"}, 403
+    
+    data = request.get_json()
+    turn_number = data.get('turn_number')
+    user_message = data.get('user_message', '').strip()
+    
+    if not user_message:
+        return {"message": "User message is required"}, 400
+    
+    try:
+        # Send message and get response
+        result = send_message(session_id, user_message)
+        if result.get('status') != 'success':
+            return {"message": "Failed to send message"}, 500
+        
+        # Check if conversation ended
+        if result['data'].get('has_end_conversation'):
+            # Complete LLM assessment
+            SessionService.complete_llm_assessment(session_id)
+            
+            # Get analysis and total turns
+            analysis = LLMConversationService.get_session_analysis(session_id)
+            total_turns = LLMConversationService.get_total_turns(session_id)
+            
+            return {
+                "conversation_ended": True,
+                "total_turns": total_turns,
+                "analysis": {
+                    "total_aspects_detected": analysis.total_aspects_detected if analysis else 0,
+                    "average_severity": analysis.average_severity_score if analysis else 0.0
+                } if analysis else None
+            }
+        
+        # Return next turn
+        return {
+            "conversation_ended": False,
+            "next_turn": turn_number + 1,
+            "ai_message": result['data']['ai_response']
+        }
+        
+    except Exception as e:
+        return {"message": str(e)}, 500

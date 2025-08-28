@@ -83,12 +83,12 @@
                     >Profil</a
                   >
                   <hr class="my-1" />
-                  <button
-                    @click="logout()"
+                  <a
+                    href="{{ url_for('auth.logout') }}"
                     class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
                   >
                     Keluar
-                  </button>
+                  </a>
                 </div>
               </div>
             </div>
@@ -206,18 +206,6 @@
             return window.location.pathname === href;
           },
 
-          async logout() {
-            try {
-              const result = await apiCall("/auth/logout", "POST");
-              if (result && result.status === "OLKORECT") {
-                window.location.href = "/auth";
-              } else {
-                alert(result.error || "Gagal keluar");
-              }
-            } catch (error) {
-              alert("Kesalahan keluar: " + error.message);
-            }
-          },
         };
       }
     </script>

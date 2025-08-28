@@ -10,8 +10,12 @@ phq_bp = Blueprint('phq', __name__, url_prefix='/admin/phq')
 @raw_response
 def get_categories():
     if not current_user.is_authenticated or not current_user.is_admin():
-        return {"status": "SNAFU", "error": "Admin access required"}, 403
-    return jsonify(PHQService.get_categories())
+        return jsonify({"status": "SNAFU", "error": "Admin access required"}), 403
+    try:
+        result = PHQService.get_categories()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"status": "SNAFU", "error": str(e)}), 500
 
 
 
@@ -22,23 +26,31 @@ def get_categories():
 @raw_response
 def get_questions():
     if not current_user.is_authenticated or not current_user.is_admin():
-        return {"status": "SNAFU", "error": "Admin access required"}, 403
-    category_name_id = request.args.get('category_name_id')
-    return jsonify(PHQService.get_questions(category_name_id))
+        return jsonify({"status": "SNAFU", "error": "Admin access required"}), 403
+    try:
+        category_name_id = request.args.get('category_name_id')
+        result = PHQService.get_questions(category_name_id)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"status": "SNAFU", "error": str(e)}), 500
 
 
 @phq_bp.route('/questions', methods=['POST'])
 @raw_response
 def create_question():
     if not current_user.is_authenticated or not current_user.is_admin():
-        return {"status": "SNAFU", "error": "Admin access required"}, 403
-    data = request.get_json()
-    return jsonify(PHQService.create_question(
-        category_name_id=data['category_name_id'],
-        question_text_en=data['question_text_en'],
-        question_text_id=data['question_text_id'],
-        order_index=data.get('order_index', 0)
-    ))
+        return jsonify({"status": "SNAFU", "error": "Admin access required"}), 403
+    try:
+        data = request.get_json()
+        result = PHQService.create_question(
+            category_name_id=data['category_name_id'],
+            question_text_en=data['question_text_en'],
+            question_text_id=data['question_text_id'],
+            order_index=data.get('order_index', 0)
+        )
+        return jsonify({"status": "OLKORECT", "data": result})
+    except Exception as e:
+        return jsonify({"status": "SNAFU", "error": str(e)}), 500
 
 
 @phq_bp.route('/questions/<int:question_id>', methods=['PUT'])
@@ -63,23 +75,31 @@ def delete_question(question_id):
 @raw_response
 def get_scales():
     if not current_user.is_authenticated or not current_user.is_admin():
-        return {"status": "SNAFU", "error": "Admin access required"}, 403
-    return jsonify(PHQService.get_scales())
+        return jsonify({"status": "SNAFU", "error": "Admin access required"}), 403
+    try:
+        result = PHQService.get_scales()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"status": "SNAFU", "error": str(e)}), 500
 
 
 @phq_bp.route('/scales', methods=['POST'])
 @raw_response
 def create_scale():
     if not current_user.is_authenticated or not current_user.is_admin():
-        return {"status": "SNAFU", "error": "Admin access required"}, 403
-    data = request.get_json()
-    return jsonify(PHQService.create_scale(
-        scale_name=data['scale_name'],
-        min_value=data['min_value'],
-        max_value=data['max_value'],
-        scale_labels=data['scale_labels'],
-        is_default=data.get('is_default', False)
-    ))
+        return jsonify({"status": "SNAFU", "error": "Admin access required"}), 403
+    try:
+        data = request.get_json()
+        result = PHQService.create_scale(
+            scale_name=data['scale_name'],
+            min_value=data['min_value'],
+            max_value=data['max_value'],
+            scale_labels=data['scale_labels'],
+            is_default=data.get('is_default', False)
+        )
+        return jsonify({"status": "OLKORECT", "data": result})
+    except Exception as e:
+        return jsonify({"status": "SNAFU", "error": str(e)}), 500
 
 
 @phq_bp.route('/scales/<int:scale_id>', methods=['PUT'])
@@ -104,24 +124,32 @@ def delete_scale(scale_id):
 @raw_response
 def get_settings():
     if not current_user.is_authenticated or not current_user.is_admin():
-        return {"status": "SNAFU", "error": "Admin access required"}, 403
-    return jsonify(PHQService.get_settings())
+        return jsonify({"status": "SNAFU", "error": "Admin access required"}), 403
+    try:
+        result = PHQService.get_settings()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"status": "SNAFU", "error": str(e)}), 500
 
 
 @phq_bp.route('/settings', methods=['POST'])
 @raw_response
 def create_settings():
     if not current_user.is_authenticated or not current_user.is_admin():
-        return {"status": "SNAFU", "error": "Admin access required"}, 403
-    data = request.get_json()
-    return jsonify(PHQService.create_settings(
-        setting_name=data['setting_name'],
-        questions_per_category=data['questions_per_category'],
-        scale_id=data['scale_id'],
-        randomize_questions=data.get('randomize_questions', False),
-        instructions=data.get('instructions'),
-        is_default=data.get('is_default', False)
-    ))
+        return jsonify({"status": "SNAFU", "error": "Admin access required"}), 403
+    try:
+        data = request.get_json()
+        result = PHQService.create_settings(
+            setting_name=data['setting_name'],
+            questions_per_category=data['questions_per_category'],
+            scale_id=data['scale_id'],
+            randomize_categories=data.get('randomize_questions', False),
+            instructions=data.get('instructions'),
+            is_default=data.get('is_default', False)
+        )
+        return jsonify({"status": "OLKORECT", "data": result})
+    except Exception as e:
+        return jsonify({"status": "SNAFU", "error": str(e)}), 500
 
 
 @phq_bp.route('/settings/<int:settings_id>', methods=['PUT'])

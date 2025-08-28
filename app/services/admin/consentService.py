@@ -29,10 +29,20 @@ class ConsentService:
     @staticmethod
     def create_settings(title: str, content: str, 
                        require_signature: Optional[bool] = None, require_date: Optional[bool] = None,
-                       allow_withdrawal: bool = True, footer_text: str = None,
+                       allow_withdrawal: bool = False, footer_text: str = None,
                        is_default: bool = False) -> Dict[str, Any]:
         """Create or update consent settings"""
         with get_session() as db:
+            # Null handling - don't save if required fields are null/empty
+            if not title or not title.strip():
+                raise ValueError("Title cannot be null or empty")
+            
+            if not content or not content.strip():
+                raise ValueError("Content cannot be null or empty")
+            
+            # Null handling for optional fields - don't save if null/empty
+            final_footer_text = footer_text if footer_text and footer_text.strip() else None
+            
             # Auto-generate setting name
             setting_name = f"Consent Form - {title[:30]}"
             
@@ -46,12 +56,12 @@ class ConsentService:
             if existing:
                 # Update existing settings
                 existing.setting_name = setting_name
-                existing.title = title
-                existing.content = content
+                existing.title = title.strip()
+                existing.content = content.strip()
                 existing.require_signature = require_signature
                 existing.require_date = require_date
                 existing.allow_withdrawal = allow_withdrawal
-                existing.footer_text = footer_text
+                existing.footer_text = final_footer_text
                 existing.is_default = is_default
                 existing.is_active = True
                 settings = existing
@@ -59,12 +69,12 @@ class ConsentService:
                 # Create new settings
                 settings = ConsentSettings(
                     setting_name=setting_name,
-                    title=title,
-                    content=content,
+                    title=title.strip(),
+                    content=content.strip(),
                     require_signature=require_signature,
                     require_date=require_date,
                     allow_withdrawal=allow_withdrawal,
-                    footer_text=footer_text,
+                    footer_text=final_footer_text,
                     is_default=is_default
                 )
                 db.add(settings)

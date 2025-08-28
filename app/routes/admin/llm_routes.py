@@ -12,7 +12,16 @@ llm_bp = Blueprint('llm', __name__, url_prefix='/admin/llm')
 def llm_settings_page():
     if not current_user.is_authenticated or not current_user.is_admin():
         return {"status": "SNAFU", "error": "Admin access required"}, 403
-    return render_template('admin/settings/llm/index.html', user=current_user)
+    
+    # Provide empty llm_data to avoid template errors
+    llm_data = {
+        'settings': None,
+        'available_models': []
+    }
+    
+    return render_template('admin/settings/llm/index.html', 
+                         user=current_user,
+                         llm_data=llm_data)
 
 
 @llm_bp.route('/settings', methods=['GET'])
@@ -27,19 +36,20 @@ def get_settings():
 @raw_response
 def create_settings():
     if not current_user.is_authenticated or not current_user.is_admin():
-        return {"status": "SNAFU", "error": "Admin access required"}, 403
-    data = request.get_json()
-    
-
-    
-    return jsonify(LLMService.create_settings(
-        openai_api_key=data.get('openai_api_key', ''),
-        chat_model=data.get('chat_model', 'gpt-4o'),
-        analysis_model=data.get('analysis_model', 'gpt-4o-mini'),
-        depression_aspects=data.get('depression_aspects'),
-        instructions=data.get('instructions'),
-        is_default=True  # Always default since we removed the toggle
-    ))
+        return jsonify({"status": "SNAFU", "error": "Admin access required"}), 403
+    try:
+        data = request.get_json()
+        result = LLMService.create_settings(
+            openai_api_key=data.get('openai_api_key', ''),
+            chat_model=data.get('chat_model', 'gpt-4o'),
+            analysis_model=data.get('analysis_model', 'gpt-4o-mini'),
+            depression_aspects=data.get('depression_aspects'),
+            instructions=data.get('instructions'),
+            is_default=True
+        )
+        return jsonify({"status": "OLKORECT", "data": result})
+    except Exception as e:
+        return jsonify({"status": "SNAFU", "error": str(e)}), 500
 
 
 @llm_bp.route('/settings/<int:settings_id>', methods=['PUT'])

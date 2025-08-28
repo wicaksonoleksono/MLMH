@@ -27,6 +27,7 @@ def create_app():
         return None
     from .routes.auth_routes import auth_bp
     from .routes.main_routes import main_bp
+    from .routes.admin_routes import admin_bp
     from .commands import register_commands
     from app.routes.admin.phq_routes import phq_bp
     from app.routes.admin.camera_routes import camera_bp
@@ -36,6 +37,7 @@ def create_app():
     from app.routes.assessment_routes import assessment_bp
     from app.routes.assessment.llm_routes import llm_assessment_bp
     from app.routes.assessment.phq_routes import phq_assessment_bp
+    app.register_blueprint(admin_bp)
     app.register_blueprint(phq_bp)
     app.register_blueprint(camera_bp)
     app.register_blueprint(llm_bp)

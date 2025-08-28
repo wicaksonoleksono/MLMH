@@ -3,8 +3,20 @@
 {% block title %}Dasbor - Penilaian Kesehatan Mental{% endblock %}
 
 {% block content %}
-<div class="min-h-full bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-    <div class="max-w-4xl mx-auto space-y-8" x-data="dashboardManager()">
+<div class="min-h-screen bg-gray-50">
+    <!-- Simple Navigation -->
+    <nav class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
+            <h1 class="text-xl font-semibold text-gray-900">Dashboard</h1>
+            <a 
+                href="{{ url_for('auth.logout') }}"
+                class="text-gray-500 hover:text-red-600 font-medium transition-colors">
+                Keluar
+            </a>
+        </div>
+    </nav>
+
+    <div class="max-w-4xl mx-auto px-4 py-8 space-y-8" x-data="dashboardManager()" x-init="loadSessions()">
         <!-- Header -->
         <div class="text-center">
             <svg class="mx-auto h-16 w-auto text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -37,59 +49,97 @@
             </div>
         </div>
 
-        <!-- History Section -->
+        <!-- Assessment History -->
         <div class="rounded-2xl shadow-lg bg-white p-6">
-            <div class="text-center space-y-4">
-                <div class="mx-auto h-16 w-16 bg-gray-100 rounded-full flex items-center justify-center">
-                    <svg class="h-8 w-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="mb-6">
+                <h3 class="text-xl font-bold text-gray-900 mb-2">Riwayat Assessment</h3>
+                <p class="text-gray-600">Hasil assessment yang telah diselesaikan</p>
+            </div>
+
+            <div x-show="sessionsLoading" class="text-center py-8">
+                <div class="animate-spin rounded-full h-8 w-8 border-4 border-gray-200 border-t-indigo-600 mx-auto mb-4"></div>
+                <p class="text-gray-500">Memuat riwayat assessment...</p>
+            </div>
+
+            <div x-show="!sessionsLoading && sessions.length > 0" class="space-y-4">
+                <template x-for="session in sessions" :key="session.id">
+                    <div class="border border-gray-200 rounded-xl p-4 hover:bg-gray-50 transition-colors">
+                        <div class="flex items-center justify-between">
+                            <div class="flex-1">
+                                <div class="flex items-center space-x-3 mb-3">
+                                    <span class="text-2xl" x-text="session.status_indicator"></span>
+                                    <div>
+                                        <div class="flex items-center space-x-2">
+                                            <span class="font-medium text-gray-900" x-text="`Sesi #${session.id}`"></span>
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                                                  :class="session.status_class === 'success' ? 'bg-green-100 text-green-800' :
+                                                         session.status_class === 'failed' ? 'bg-red-100 text-red-800' :
+                                                         session.status_class === 'abandoned' ? 'bg-yellow-100 text-yellow-800' :
+                                                         session.status_class === 'in_progress' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'"
+                                                  x-text="session.status_text">
+                                            </span>
+                                        </div>
+                                        <div class="text-sm text-gray-600" x-text="formatDate(session.created_at)"></div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Progress bar -->
+                                <div class="mb-2">
+                                    <div class="flex justify-between text-sm text-gray-600 mb-1">
+                                        <span x-text="`Progress: ${session.completion_percentage}%`"></span>
+                                        <span x-show="session.duration_minutes" x-text="`${session.duration_minutes} menit`"></span>
+                                    </div>
+                                    <div class="w-full bg-gray-200 rounded-full h-2">
+                                        <div class="h-2 rounded-full transition-all duration-300"
+                                             :class="session.status_class === 'success' ? 'bg-green-500' :
+                                                    session.status_class === 'failed' ? 'bg-red-500' :
+                                                    session.status_class === 'abandoned' ? 'bg-yellow-500' : 'bg-blue-500'"
+                                             :style="`width: ${session.completion_percentage}%`">
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Assessment completion status -->
+                                <div class="flex items-center space-x-4 text-sm">
+                                    <span class="flex items-center" 
+                                          :class="session.consent_completed ? 'text-green-600' : 'text-gray-400'">
+                                        <span x-text="session.consent_completed ? '✓' : '○'"></span>
+                                        <span class="ml-1">Consent</span>
+                                    </span>
+                                    <span class="flex items-center" 
+                                          :class="session.phq_completed ? 'text-green-600' : 'text-gray-400'">
+                                        <span x-text="session.phq_completed ? '✓' : '○'"></span>
+                                        <span class="ml-1">PHQ</span>
+                                    </span>
+                                    <span class="flex items-center" 
+                                          :class="session.llm_completed ? 'text-green-600' : 'text-gray-400'">
+                                        <span x-text="session.llm_completed ? '✓' : '○'"></span>
+                                        <span class="ml-1">LLM</span>
+                                    </span>
+                                </div>
+                                
+                                <!-- Failure reason if any -->
+                                <div x-show="session.failure_reason" class="mt-2 text-sm text-red-600">
+                                    <span class="font-medium">Alasan gagal:</span> 
+                                    <span x-text="session.failure_reason"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div x-show="!sessionsLoading && sessions.length === 0" class="text-center py-8">
+                <div class="mx-auto h-16 w-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                    <svg class="h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
                     </svg>
                 </div>
-                <div>
-                    <h3 class="text-xl font-bold text-gray-900">Riwayat Assessment</h3>
-                    <p class="text-gray-600">Lihat hasil assessment sebelumnya</p>
-                </div>
-                <button 
-                    @click="viewHistory()"
-                    class="bg-gray-600 hover:bg-gray-700 text-white font-medium py-3 px-6 rounded-xl transition-colors duration-200">
-                    Lihat Riwayat
-                </button>
+                <p class="text-gray-500">Belum ada riwayat assessment</p>
+                <p class="text-sm text-gray-400 mt-1">Mulai assessment pertama Anda di atas</p>
             </div>
         </div>
 
-        <!-- Profile Section -->
-        <div class="rounded-3xl shadow-lg bg-white p-8">
-            <div class="flex items-center justify-between mb-6">
-                <h2 class="text-2xl font-bold text-gray-900">Profil</h2>
-                <button 
-                    @click="logout()"
-                    class="bg-red-100 hover:bg-red-200 text-red-700 font-medium py-2 px-4 rounded-xl transition-colors duration-200">
-                    Keluar
-                </button>
-            </div>
-            <div class="space-y-4">
-                <div class="grid md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Nama Pengguna</label>
-                        <div class="bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-gray-900">{{ user.uname }}</div>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                        <div class="bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-gray-900">{{ user.email or 'Tidak disediakan' }}</div>
-                    </div>
-                </div>
-                <div class="grid md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Peran</label>
-                        <div class="bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-gray-900">{{ user.user_type_name }}</div>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Anggota Sejak</label>
-                        <div class="bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-gray-900">{{ user.created_at[:10] if user.created_at else 'Tidak diketahui' }}</div>
-                    </div>
-                </div>
-            </div>
-        </div>
     </div>
 </div>
 {% endblock %}
@@ -99,6 +149,38 @@
 function dashboardManager() {
     return {
         loading: false,
+        sessions: [],
+        sessionsLoading: false,
+
+        async loadSessions() {
+            this.sessionsLoading = true;
+            try {
+                const result = await apiCall('{{ url_for("assessment.get_user_sessions") }}');
+                if (Array.isArray(result)) {
+                    this.sessions = result;
+                } else {
+                    console.error('Failed to load sessions:', result);
+                    this.sessions = [];
+                }
+            } catch (error) {
+                console.error('Error loading sessions:', error);
+                this.sessions = [];
+            } finally {
+                this.sessionsLoading = false;
+            }
+        },
+
+        formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            return date.toLocaleDateString('id-ID', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        },
 
         async startAssessment() {
             if (this.loading) return;
@@ -109,6 +191,9 @@ function dashboardManager() {
                 if (result && result.status === 'OLKORECT') {
                     // Redirect to assessment flow
                     window.location.href = '/assessment';
+                } else if (result && result.status === 'SETTINGS_NOT_CONFIGURED') {
+                    // Redirect to settings error page
+                    window.location.href = result.redirect_url;
                 } else {
                     alert(result.error || 'Gagal memulai assessment');
                 }
@@ -119,22 +204,7 @@ function dashboardManager() {
             }
         },
 
-        async viewHistory() {
-            window.location.href = '/history';
-        },
 
-        async logout() {
-            try {
-                const result = await apiCall('/auth/logout', 'POST');
-                if (result && result.status === 'OLKORECT') {
-                    window.location.href = '/auth';
-                } else {
-                    alert(result.error || 'Gagal keluar');
-                }
-            } catch (error) {
-                alert('Kesalahan keluar: ' + error.message);
-            }
-        }
     };
 }
 </script>

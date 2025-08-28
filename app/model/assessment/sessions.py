@@ -19,7 +19,7 @@ class AssessmentSession(BaseModel):
 
     # Session flow control (50:50 alternating PHQ/LLM first)
     is_first: Mapped[str] = mapped_column(String(10), nullable=False)  # 'phq' or 'llm'
-    status: Mapped[str] = mapped_column(String(20), default='STARTED')  # STARTED → CONSENT → PHQ → LLM → COMPLETED
+    status: Mapped[str] = mapped_column(String(20), default='CREATED')  # CREATED → CONSENT → CAMERA_CHECK → PHQ_IN_PROGRESS/LLM_IN_PROGRESS → BOTH_IN_PROGRESS → COMPLETED/INCOMPLETE/ABANDONED
 
     # Timestamps
     start_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -32,6 +32,14 @@ class AssessmentSession(BaseModel):
     # Session metadata
     session_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     consent_data: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    
+    # Session flow control
+    assessment_order: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)  # Store assessment order and generation status
+    
+    # Completion tracking
+    completion_percentage: Mapped[int] = mapped_column(Integer, default=0)  # 0-100%
+    failure_reason: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    auto_deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -56,6 +64,11 @@ class AssessmentSession(BaseModel):
         return f'<AssessmentSession {self.id}: {self.is_first} first, status={self.status} for user {self.user_id}>'
 
     @property
+    def completed_at(self) -> Optional[datetime]:
+        """Alias for end_time for consistency"""
+        return self.end_time
+
+    @property
     def is_expired(self) -> bool:
         """Check if session is expired (24 hours)"""
         if not self.created_at:
@@ -67,6 +80,7 @@ class AssessmentSession(BaseModel):
         """Mark session as completed"""
         self.is_completed = True
         self.status = 'COMPLETED'
+        self.completion_percentage = 100
         self.end_time = datetime.utcnow()
 
         if self.start_time and self.end_time:
@@ -74,32 +88,143 @@ class AssessmentSession(BaseModel):
 
         self.updated_at = datetime.utcnow()
 
+    def calculate_completion_percentage(self) -> int:
+        """Calculate completion percentage based on completed steps"""
+        if self.status == 'COMPLETED':
+            return 100
+        elif self.status == 'FAILED' or self.status == 'ABANDONED':
+            return 0
+        
+        progress = 0
+        # Consent completed: 25%
+        if self.consent_completed_at:
+            progress += 25
+        
+        # PHQ assessment: 35%
+        if self.phq_completed_at:
+            progress += 35
+        
+        # LLM assessment: 40% 
+        if self.llm_completed_at:
+            progress += 40
+            
+        return min(progress, 100)
+
+    def update_completion_percentage(self) -> None:
+        """Update the completion percentage field"""
+        self.completion_percentage = self.calculate_completion_percentage()
+
     def complete_phq(self) -> None:
         """Mark PHQ assessment as completed"""
         self.phq_completed_at = datetime.utcnow()
-        if self.status == 'STARTED' or self.status == 'CONSENT':
-            self.status = 'PHQ_COMPLETED'
-        elif self.status == 'LLM_COMPLETED':
+        if self.llm_completed_at:
+            # Both assessments are done
             self.status = 'COMPLETED'
             self.complete_session()
+        else:
+            # PHQ done, now need LLM
+            self.status = 'LLM_IN_PROGRESS'
+        self.update_completion_percentage()
         self.updated_at = datetime.utcnow()
 
     def complete_llm(self) -> None:
         """Mark LLM assessment as completed"""
         self.llm_completed_at = datetime.utcnow()
-        if self.status == 'STARTED' or self.status == 'CONSENT':
-            self.status = 'LLM_COMPLETED'
-        elif self.status == 'PHQ_COMPLETED':
+        if self.phq_completed_at:
+            # Both assessments are done
             self.status = 'COMPLETED'
             self.complete_session()
+        else:
+            # LLM done, now need PHQ
+            self.status = 'PHQ_IN_PROGRESS'
+        self.update_completion_percentage()
         self.updated_at = datetime.utcnow()
 
     def complete_consent(self, consent_data: Dict[str, Any]) -> None:
         """Mark consent as completed"""
         self.consent_data = consent_data
         self.consent_completed_at = datetime.utcnow()
-        self.status = 'CONSENT'
+        self.status = 'CAMERA_CHECK'
+        self.update_completion_percentage()
         self.updated_at = datetime.utcnow()
+
+    def complete_camera_check(self) -> None:
+        """Mark camera check as completed and start first assessment"""
+        # Add camera completion timestamp to metadata
+        self.session_metadata = self.session_metadata or {}
+        self.session_metadata['camera_completed_at'] = datetime.utcnow().isoformat()
+        
+        # Start first assessment based on is_first
+        if self.is_first == 'phq':
+            self.status = 'PHQ_IN_PROGRESS'
+        else:
+            self.status = 'LLM_IN_PROGRESS'
+        self.update_completion_percentage()
+        self.updated_at = datetime.utcnow()
+
+
+    def mark_failed(self, reason: str = None) -> None:
+        """Mark session as failed due to technical issues"""
+        self.status = 'FAILED'
+        self.is_active = False
+        self.can_recover = False
+        if reason:
+            self.failure_reason = reason
+        self.completion_percentage = 0
+        self.updated_at = datetime.utcnow()
+
+    def mark_incomplete(self, reason: str = None) -> None:
+        """Mark session as incomplete but recoverable"""
+        self.status = 'INCOMPLETE'
+        self.is_active = False
+        if reason:
+            self.failure_reason = reason
+        self.updated_at = datetime.utcnow()
+
+
+    @property
+    def camera_completed(self) -> bool:
+        """Check if camera check is completed"""
+        return self.session_metadata and self.session_metadata.get('camera_completed_at') is not None
+
+    @property
+    def can_start_assessment(self) -> bool:
+        """Check if session is ready to start assessments"""
+        return (self.consent_completed_at is not None and 
+                self.camera_completed and
+                self.status in ['PHQ_IN_PROGRESS', 'LLM_IN_PROGRESS', 'BOTH_IN_PROGRESS', 'CAMERA_CHECK'])
+
+    @property
+    def next_assessment_type(self) -> Optional[str]:
+        """Get the next assessment type that needs to be completed"""
+        # If camera check just completed, start with the first assessment
+        if self.status == 'CAMERA_CHECK' and self.camera_completed:
+            return self.is_first
+        
+        # If session is already in progress, determine based on current status
+        if self.status == 'PHQ_IN_PROGRESS':
+            return 'phq'
+        elif self.status == 'LLM_IN_PROGRESS':
+            return 'llm'
+        
+        # If we can't start assessments, return None
+        if not self.can_start_assessment:
+            return None
+            
+        # Determine next assessment based on completion status
+        if self.is_first == 'phq':
+            if not self.phq_completed_at:
+                return 'phq'
+            elif not self.llm_completed_at:
+                return 'llm'
+        else:
+            if not self.llm_completed_at:
+                return 'llm'
+            elif not self.phq_completed_at:
+                return 'phq'
+        
+        # Both completed
+        return None
 
 
 class PHQResponse(BaseModel):

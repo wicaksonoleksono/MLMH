@@ -1,0 +1,205 @@
+# app/services/session/sessionManager.py
+from typing import Optional, Dict, Any, List
+from datetime import datetime
+from sqlalchemy import func
+from ...model.assessment.sessions import AssessmentSession
+from ...model.admin.phq import PHQSettings
+from ...model.admin.llm import LLMSettings
+from ...model.admin.camera import CameraSettings
+from ...db import get_session
+import secrets
+
+
+class SessionManager:
+    """Core session lifecycle management with proper separation of concerns"""
+    
+    MAX_SESSIONS_PER_USER = 2
+    
+    @staticmethod
+    def check_assessment_settings_configured() -> Dict[str, Any]:
+        """Check if all required assessment settings are configured"""
+        with get_session() as db:
+            phq_settings = db.query(PHQSettings).filter_by(is_active=True).first()
+            llm_settings = db.query(LLMSettings).filter_by(is_active=True).first()
+            camera_settings = db.query(CameraSettings).filter_by(is_active=True).first()
+            
+            return {
+                'all_configured': all([phq_settings, llm_settings, camera_settings]),
+                'phq_configured': phq_settings is not None,
+                'llm_configured': llm_settings is not None,
+                'camera_configured': camera_settings is not None,
+                'missing_settings': [
+                    name for name, configured in {
+                        'PHQ': phq_settings is not None,
+                        'LLM': llm_settings is not None,
+                        'Camera': camera_settings is not None
+                    }.items() if not configured
+                ]
+            }
+    
+    @staticmethod
+    def can_create_session(user_id: int) -> bool:
+        """Check if user can create new session (considering active sessions only)"""
+        with get_session() as db:
+            active_sessions = db.query(AssessmentSession).filter(
+                AssessmentSession.user_id == user_id,
+                AssessmentSession.status.in_(['CREATED', 'CONSENT', 'CAMERA_CHECK', 'PHQ_IN_PROGRESS', 'LLM_IN_PROGRESS', 'BOTH_IN_PROGRESS'])
+            ).count()
+            return active_sessions < SessionManager.MAX_SESSIONS_PER_USER
+    
+    @staticmethod
+    def get_user_active_session(user_id: int) -> Optional[AssessmentSession]:
+        """Get user's active session if exists"""
+        with get_session() as db:
+            return db.query(AssessmentSession).filter(
+                AssessmentSession.user_id == user_id,
+                AssessmentSession.status.in_(['CREATED', 'CONSENT', 'CAMERA_CHECK', 'PHQ_IN_PROGRESS', 'LLM_IN_PROGRESS', 'BOTH_IN_PROGRESS'])
+            ).first()
+    
+    @staticmethod
+    def get_user_incomplete_session(user_id: int) -> Optional[AssessmentSession]:
+        """Get user's incomplete session that can be recovered"""
+        with get_session() as db:
+            return db.query(AssessmentSession).filter(
+                AssessmentSession.user_id == user_id,
+                AssessmentSession.status == 'INCOMPLETE',
+                AssessmentSession.can_recover == True
+            ).order_by(AssessmentSession.updated_at.desc()).first()
+    
+    @staticmethod
+    def create_new_session(user_id: int) -> AssessmentSession:
+        """Create a new assessment session with proper initialization"""
+        # Check if user can create session
+        if not SessionManager.can_create_session(user_id):
+            raise ValueError(f"User has reached maximum active sessions limit ({SessionManager.MAX_SESSIONS_PER_USER})")
+        
+        # Check if all assessment settings are configured
+        settings_check = SessionManager.check_assessment_settings_configured()
+        if not settings_check['all_configured']:
+            missing = ', '.join(settings_check['missing_settings'])
+            raise ValueError(f"Pengaturan assessment belum lengkap. Missing: {missing}")
+        
+        with get_session() as db:
+            # Get active admin settings
+            phq_settings = db.query(PHQSettings).filter_by(is_active=True).first()
+            llm_settings = db.query(LLMSettings).filter_by(is_active=True).first()
+            camera_settings = db.query(CameraSettings).filter_by(is_active=True).first()
+            
+            # Determine assessment order (50:50 alternating based on total sessions)
+            total_sessions = db.query(func.count(AssessmentSession.id)).scalar() or 0
+            is_first = 'phq' if total_sessions % 2 == 0 else 'llm'
+            
+            # Generate unique session token
+            session_token = secrets.token_urlsafe(32)
+            
+            # Create session with assessment order metadata
+            assessment_order = {
+                'first': is_first,
+                'second': 'llm' if is_first == 'phq' else 'phq',
+                'phq_questions_generated': False,
+                'llm_context_initialized': False
+            }
+            
+            session = AssessmentSession(
+                user_id=user_id,
+                session_token=session_token,
+                phq_settings_id=phq_settings.id,
+                llm_settings_id=llm_settings.id,
+                camera_settings_id=camera_settings.id,
+                is_first=is_first,
+                status='CREATED',
+                assessment_order=assessment_order
+            )
+            
+            db.add(session)
+            db.commit()
+            return session
+    
+    @staticmethod
+    def transition_session_status(session_id: int, new_status: str) -> AssessmentSession:
+        """Transition session to new status with proper validation"""
+        with get_session() as db:
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                raise ValueError("Session not found")
+            
+            # Validate status transition
+            valid_transitions = {
+                'CREATED': ['CONSENT', 'INCOMPLETE', 'ABANDONED'],
+                'CONSENT': ['CAMERA_CHECK', 'INCOMPLETE', 'ABANDONED'],
+                'CAMERA_CHECK': ['PHQ_IN_PROGRESS', 'LLM_IN_PROGRESS', 'INCOMPLETE', 'ABANDONED'],
+                'PHQ_IN_PROGRESS': ['LLM_IN_PROGRESS', 'BOTH_IN_PROGRESS', 'INCOMPLETE', 'ABANDONED'],
+                'LLM_IN_PROGRESS': ['PHQ_IN_PROGRESS', 'BOTH_IN_PROGRESS', 'INCOMPLETE', 'ABANDONED'],
+                'BOTH_IN_PROGRESS': ['COMPLETED', 'INCOMPLETE', 'ABANDONED'],
+                'INCOMPLETE': ['PHQ_IN_PROGRESS', 'LLM_IN_PROGRESS', 'ABANDONED'],
+                'COMPLETED': [],  # Final state
+                'ABANDONED': []   # Final state
+            }
+            
+            if new_status not in valid_transitions.get(session.status, []):
+                raise ValueError(f"Invalid status transition from {session.status} to {new_status}")
+            
+            session.status = new_status
+            session.updated_at = datetime.utcnow()
+            
+            # Update completion percentage
+            session.update_completion_percentage()
+            
+            # Handle final states
+            if new_status == 'COMPLETED':
+                session.complete_session()
+            elif new_status == 'INCOMPLETE':
+                session.mark_incomplete("Session marked incomplete")
+            elif new_status == 'ABANDONED':
+                session.mark_incomplete("Session abandoned")
+            
+            db.commit()
+            return session
+    
+    @staticmethod
+    def get_session_progress(session_id: int) -> Dict[str, Any]:
+        """Get detailed session progress information"""
+        with get_session() as db:
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                raise ValueError("Session not found")
+            
+            return {
+                'session_id': session.id,
+                'status': session.status,
+                'assessment_order': session.assessment_order,
+                'completion_percentage': session.completion_percentage,
+                'steps_completed': {
+                    'consent': session.consent_completed_at is not None,
+                    'camera_check': session.session_metadata and session.session_metadata.get('camera_completed_at') is not None,
+                    'phq': session.phq_completed_at is not None,
+                    'llm': session.llm_completed_at is not None
+                },
+                'next_step': SessionManager._determine_next_step(session),
+                'created_at': session.created_at,
+                'updated_at': session.updated_at
+            }
+    
+    @staticmethod
+    def _determine_next_step(session: AssessmentSession) -> str:
+        """Determine what the next step should be for the session"""
+        if session.status == 'CREATED':
+            return 'consent'
+        elif session.status == 'CONSENT':
+            return 'camera_check'
+        elif session.status == 'CAMERA_CHECK':
+            return session.is_first
+        elif session.status in ['PHQ_IN_PROGRESS', 'LLM_IN_PROGRESS']:
+            # Determine which assessment should be next
+            if session.phq_completed_at and not session.llm_completed_at:
+                return 'llm'
+            elif session.llm_completed_at and not session.phq_completed_at:
+                return 'phq'
+            else:
+                return session.is_first  # Continue current assessment
+        elif session.status == 'BOTH_IN_PROGRESS':
+            return 'finalize'
+        elif session.status == 'COMPLETED':
+            return 'completed'
+        else:
+            return 'unknown'

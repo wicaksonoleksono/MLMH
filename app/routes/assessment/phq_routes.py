@@ -16,7 +16,7 @@ def get_phq_questions(session_id):
     """Get randomized PHQ questions per category for assessment"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != current_user.id:
+    if not session or session.user_id != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     # Get randomized questions
@@ -36,7 +36,7 @@ def submit_phq_responses(session_id):
     """Submit PHQ responses for a session"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != current_user.id:
+    if not session or session.user_id != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     data = request.get_json()
@@ -85,7 +85,7 @@ def get_session_responses(session_id):
     """Get all PHQ responses for a session"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != current_user.id:
+    if not session or session.user_id != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     responses = PHQResponseService.get_session_responses(session_id)
@@ -122,7 +122,7 @@ def update_phq_response(response_id):
     
     # Validate session belongs to current user
     session = SessionService.get_session(response.session_id)
-    if not session or session.user_id != current_user.id:
+    if not session or session.user_id != int(current_user.id):
         return {"message": "Access denied"}, 403
     
     data = request.get_json()
@@ -161,7 +161,7 @@ def get_phq_score(session_id):
     """Get PHQ score and analysis for a session"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != current_user.id:
+    if not session or session.user_id != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     total_score = PHQResponseService.calculate_session_score(session_id)
@@ -185,7 +185,7 @@ def check_phq_completion(session_id):
     """Check if PHQ assessment is complete for session"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != current_user.id:
+    if not session or session.user_id != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     is_complete = PHQResponseService.is_assessment_complete(session_id)
@@ -199,3 +199,5 @@ def check_phq_completion(session_id):
         "responses_expected": expected_count,
         "completion_percentage": (response_count / expected_count * 100) if expected_count > 0 else 0
     }
+
+

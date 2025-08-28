@@ -66,13 +66,18 @@ def login():
     return {"status": "SNAFU", "error": "Nama pengguna atau kata sandi salah"}, 401
 
 
-@auth_bp.route('/logout', methods=['POST'])
+@auth_bp.route('/logout', methods=['GET', 'POST'])
 @login_required
-@api_response
 def logout():
     """User logout."""
     logout_user()
-    return {"message": "Logout berhasil"}
+    
+    # For GET requests (link clicks), redirect to auth page
+    if request.method == 'GET':
+        return redirect(url_for('main.auth_page'))
+    
+    # For POST requests (API calls), return JSON
+    return jsonify({"message": "Logout berhasil"})
 
 
 @auth_bp.route('/profile', methods=['GET'])

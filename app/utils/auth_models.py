@@ -29,6 +29,10 @@ class SimpleUser(UserMixin):
         """Check if user is admin."""
         return self.is_admin_user
     
+    def is_user(self) -> bool:
+        """Check if user is regular user type."""
+        return not self.is_admin_user
+    
     @property
     def is_active(self) -> bool:
         """Required by Flask-Login."""

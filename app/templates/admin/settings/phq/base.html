@@ -66,6 +66,7 @@ endblock %} {% block content %}
 
       config: {
         randomize: "false",
+        instructions: "",
       },
 
       scale: {
@@ -99,7 +100,7 @@ endblock %} {% block content %}
 
       async init() {
         this.updateScale();
-        await this.loadData();
+        this.loadDataFromTemplate();
       },
 
       updateScale() {
@@ -198,6 +199,40 @@ endblock %} {% block content %}
         };
       },
 
+      loadDataFromTemplate() {
+        // Load data from Jinja template context (passed via window.phqData)
+        const phqData = window.phqData || {};
+        
+        try {
+          // Load questions for predefined categories
+          if (phqData.questions_by_category) {
+            for (const category of this.categories) {
+              const questions = phqData.questions_by_category[category.name_id] || [];
+              category.questions = questions.length > 0 ? questions : [category.description_id];
+            }
+          }
+
+          // Load scale
+          if (phqData.scale) {
+            this.scale = {
+              id: phqData.scale.id,
+              minValue: phqData.scale.min_value,
+              maxValue: phqData.scale.max_value,
+              labels: phqData.scale.scale_labels,
+            };
+          }
+
+          // Load settings
+          if (phqData.settings) {
+            this.config.randomize = phqData.settings.randomize_categories ? "true" : "false";
+            this.config.instructions = phqData.settings.instructions || "";
+          }
+        } catch (error) {
+          console.error("Error loading data from template:", error);
+        }
+      },
+
+      // Keep the old async loadData method for fallback
       async loadData() {
         this.loading = true;
         try {
@@ -227,9 +262,9 @@ endblock %} {% block content %}
             }
           }
 
-          // Load scale
+          // Load scale (find default or first active scale)
           if (Array.isArray(scalesRes) && scalesRes.length > 0) {
-            const scale = scalesRes[0];
+            const scale = scalesRes.find(s => s.is_default) || scalesRes[0];
             this.scale = {
               id: scale.id,
               minValue: scale.min_value,
@@ -238,12 +273,13 @@ endblock %} {% block content %}
             };
           }
 
-          // Load settings
+          // Load settings (find default or first active setting)
           if (Array.isArray(settingsRes) && settingsRes.length > 0) {
-            const settings = settingsRes[0];
-            this.config.randomize = settings.randomize_questions
+            const settings = settingsRes.find(s => s.is_default) || settingsRes[0];
+            this.config.randomize = settings.randomize_categories
               ? "true"
               : "false";
+            this.config.instructions = settings.instructions || "";
           }
         } catch (error) {
           console.error("Error loading data:", error);
@@ -335,6 +371,7 @@ endblock %} {% block content %}
               questions_per_category: 1,
               scale_id: scaleResult.data ? scaleResult.data.id : scaleResult.id,
               randomize_questions: this.config.randomize === "true",
+              instructions: this.config.instructions,
               is_default: true,
             };
 
@@ -375,5 +412,10 @@ endblock %} {% block content %}
       },
     };
   }
+</script>
+
+<!-- Pass PHQ data from Jinja to JavaScript -->
+<script>
+  window.phqData = {{ phq_data | tojson | safe }};
 </script>
 {% endblock %}

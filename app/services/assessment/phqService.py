@@ -55,6 +55,8 @@ class PHQResponseService:
                 raise ValueError(f"Session {session_id} not found")
 
             phq_settings = session.phq_settings
+            if not phq_settings:
+                raise ValueError(f"Session {session_id} has no PHQ settings configured")
             questions_per_category = phq_settings.questions_per_category
 
             # Get all predefined categories
@@ -72,6 +74,7 @@ class PHQResponseService:
                 ).all()
 
                 if not category_questions:
+                    print(f"Warning: No questions found for category {category['name_id']}")
                     continue  # Skip empty categories
 
                 # Randomize questions (always true as per requirement)
@@ -83,6 +86,11 @@ class PHQResponseService:
 
                 # Add to selected questions with metadata
                 for question in selected_from_category:
+                    if not question:
+                        raise ValueError(f"Found None question in category {category['name_id']}")
+                    if not hasattr(question, 'id') or question.id is None:
+                        raise ValueError(f"Question missing ID in category {category['name_id']}: {question}")
+                    
                     selected_questions.append({
                         "question_id": question.id,
                         "question_number": question_number,
@@ -95,8 +103,14 @@ class PHQResponseService:
                     })
                     question_number += 1
 
+            if not selected_questions:
+                raise ValueError(f"No questions found for any category. Total categories checked: {len(categories)}")
+
             # Get scale information
             scale = phq_settings.scale
+            if not scale:
+                raise ValueError(f"PHQ settings {phq_settings.id} has no scale configured (scale_id: {phq_settings.scale_id})")
+            
             scale_labels = scale.scale_labels if scale else {
                 0: "Tidak sama sekali",
                 1: "Beberapa hari",

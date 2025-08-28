@@ -137,6 +137,15 @@ class AssessmentOrchestrator:
             if llm_settings.depression_aspects and 'aspects' in llm_settings.depression_aspects:
                 aspects = llm_settings.depression_aspects['aspects']
 
+            # Format aspects for the prompt
+            formatted_aspects = '\n'.join([f"{aspect['name']} ({aspect['description']})" for aspect in aspects])
+
+            # Create the proper Indonesian system prompt
+            system_prompt = f"""Anda adalah Anisa, seorang mahasiswa psikologi yang supportive dan senang hati mendengarkan curhatan orang lain. Teman anda kemungkinan mengalami gejala depresi, atau bisa jadi tidak.
+Buatlah beberapa pertanyaan dengan gaya non formal kepada rekan anda tentang aktivitas sehari-hari atau tentang kejadian yang akhir-akhir ini dialami. Tindak lanjuti setiap jawaban dengan pertanyaan yang lebih dalam. Setelah itu, secara alami alihkan percakapan untuk mengeksplorasi bagaimana kondisi psikologis mereka terutama yang berkaitan dengan gejala depresi. Berikut adalah indikator-indikator dari gejala depresi:
+{formatted_aspects}
+Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya dengan menutup. Percakapan dengan "gak papa kamu pasti bisa kok, semangat yaa ! Kalau memang darurat deh Hubungi psikolog terdekat mu !!" Tidak perlu bilang secara eksplisit menyebutkan mengenai depresi atau sejenisnya. Kemudian tulis </end_conversation> pada akhir kalimat"""
+
             # Store in session metadata
             if not session.session_metadata:
                 session.session_metadata = {}
@@ -155,7 +164,7 @@ class AssessmentOrchestrator:
                 'conversation_active': False,
                 'started_at': None,
                 'completed_at': None,
-                'system_prompt': f"You are Anisa, a mental health assistant focusing on: {', '.join(aspects)}. Conduct a natural conversation to understand the user's mental state.",
+                'system_prompt': system_prompt,
                 'total_turns': 0
             }
 

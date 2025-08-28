@@ -317,7 +317,7 @@ def reset_session_to_new_attempt(session_token):
             return jsonify({"status": "SNAFU", "error": "Session not found"}), 404
         
         # Verify session belongs to current user
-        if session.user_id != current_user.id:
+        if int(session.user_id) != int(current_user.id):
             return jsonify({"status": "SNAFU", "error": "Access denied"}), 403
         
         data = request.get_json() or {}
@@ -404,7 +404,7 @@ def recover_session(session_id):
 
         # Verify session belongs to current user
         session = SessionManager.get_session(session_id)
-        if not session or session.user_id != current_user.id:
+        if not session or int(session.user_id) != int(current_user.id):
             return jsonify({"status": "SNAFU", "error": "Session not found or access denied"}), 403
 
         # Recover the session
@@ -438,7 +438,7 @@ def abandon_session(session_id):
 
         # Verify session belongs to current user
         session = SessionManager.get_session(session_id)
-        if not session or session.user_id != current_user.id:
+        if not session or int(session.user_id) != int(current_user.id):
             return jsonify({"status": "SNAFU", "error": "Session not found or access denied"}), 403
 
         # Abandon the session

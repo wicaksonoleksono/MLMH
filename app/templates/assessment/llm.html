@@ -290,6 +290,9 @@ endblock %} {% block content %}
                       });
                   }
 
+                  // Load existing chat history if available
+                  await this.loadChatHistory();
+
                   this.loading = false;
                   this.scrollToBottom();
 
@@ -297,6 +300,39 @@ endblock %} {% block content %}
                   console.error('❌ Error initializing chat:', error);
                   this.loading = false;
                   alert('Error starting conversation. Please refresh the page.');
+              }
+          },
+
+          async loadChatHistory() {
+              try {
+                  // Load chat history from server
+                  const response = await fetch(`/assessment/llm/chat-history/{{ session.id }}`, {
+                      method: 'GET',
+                      headers: {'Content-Type': 'application/json'}
+                  });
+
+                  const result = await response.json();
+                  console.log('📜 Chat history loaded:', result);
+
+                  if (result.status === 'success' && result.chat_history && result.chat_history.messages) {
+                      // Add existing messages to UI
+                      result.chat_history.messages.forEach((msg, index) => {
+                          this.messages.push({
+                              id: this.messageId++,
+                              type: msg.type,
+                              content: msg.content,
+                              streaming: false,
+                              timestamp: new Date()
+                          });
+                      });
+                      
+                      // Update exchange count
+                      this.exchangeCount = result.chat_history.exchange_count || 0;
+                  }
+
+                  this.scrollToBottom();
+              } catch (error) {
+                  console.error('❌ Error loading chat history:', error);
               }
           },
 
@@ -341,7 +377,8 @@ endblock %} {% block content %}
                       const data = JSON.parse(event.data);
                       
                       if (data.type === 'chunk') {
-                          botMessage.content += data.content;
+                          // Use data.data format from new SSE implementation
+                          botMessage.content += data.data;
                           this.scrollToBottom();
                       } else if (data.type === 'complete') {
                           botMessage.streaming = false;
@@ -358,6 +395,9 @@ endblock %} {% block content %}
                           botMessage.streaming = false;
                           this.isTyping = false;
                           eventSource.close();
+                      } else if (data.type === 'stream_start') {
+                          // Handle stream start signal
+                          console.log('🚀 Stream started');
                       }
                   } catch (e) {
                       console.error('Error parsing SSE data:', e);

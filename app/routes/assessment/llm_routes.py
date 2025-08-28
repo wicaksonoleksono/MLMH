@@ -26,7 +26,7 @@ def start_conversation_route(session_id):
     """Initialize LLM conversation for a session"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != current_user.id:
+    if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
 
     # Start conversation
@@ -40,7 +40,7 @@ def stream_conversation(session_id):
     """SSE endpoint for streaming LLM responses"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != current_user.id:
+    if not session or int(session.user_id) != int(current_user.id):
         return jsonify({"error": "Session not found or access denied"}), 403
 
     def generate():
@@ -72,37 +72,44 @@ def stream_conversation(session_id):
 
 
 @llm_assessment_bp.route('/chat-stream/<session_token>/<path:message>')
-@user_required  
+@user_required
 def chat_stream(session_token, message):
-    """SSE endpoint for streaming chat responses (secure token version)"""
+    """SSE endpoint for streaming chat responses using new LangChain service"""
     from ...services.sessionService import SessionService
+    
     # Get session using secure token
     session = SessionService.get_session_by_token(session_token)
     if not session:
-        return Response("Session not found", status=404)
+        return Response("data: " + json.dumps({'type': 'error', 'message': 'Session not found'}) + "\n\n", 
+                       mimetype='text/event-stream'), 404
     
-    session_id = session.id  # Use internal ID for service calls
+    # Verify session belongs to current user
+    if int(session.user_id) != int(current_user.id):
+        return Response("data: " + json.dumps({'type': 'error', 'message': 'Access denied'}) + "\n\n", 
+                       mimetype='text/event-stream'), 403
 
     def generate():
         try:
-            # Import URL decode
+            # URL decode the message
             from urllib.parse import unquote
             decoded_message = unquote(message)
 
-            # Stream the conversation using existing service
-            for chunk_data in send_message_stream(session_id, decoded_message):
-                if chunk_data.get('type') == 'chunk':
-                    # Send chunk in reference format
-                    yield f"data: {json.dumps({'type': 'chunk', 'content': chunk_data['chunk']})}\n\n"
-                elif chunk_data.get('type') == 'complete':
-                    # Get exchange count from chat history
-                    chat_history = session.session_metadata.get('chat_history', {}) if session.session_metadata else {}
-                    exchange_count = chat_history.get('exchange_count', 0)
-
-                    # Send completion signal
-                    yield f"data: {json.dumps({'type': 'complete', 'exchange_count': exchange_count})}\n\n"
-                elif chunk_data.get('type') == 'error':
-                    yield f"data: {json.dumps({'type': 'error', 'message': chunk_data.get('error', 'Unknown error')})}\n\n"
+            # Initialize the chat service
+            chat_service = LLMChatService()
+            
+            # Send stream start signal
+            yield f"data: {json.dumps({'type': 'stream_start'})}\n\n"
+            
+            # Stream AI response using new service
+            for chunk in chat_service.stream_ai_response(session.id, decoded_message):
+                # Send chunk in your preferred SSE format
+                yield f"data: {json.dumps({'type': 'chunk', 'data': chunk})}\n\n"
+            
+            # Check if conversation ended and send completion signal
+            if chat_service.is_conversation_complete(session.id):
+                yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': True})}\n\n"
+            else:
+                yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': False})}\n\n"
 
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
@@ -126,7 +133,7 @@ def send_message_route(session_id):
     """Send user message and get AI response (non-streaming)"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != current_user.id:
+    if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     data = request.get_json()
     user_message = data.get('message', '')
@@ -143,7 +150,7 @@ def get_session_conversations(session_id):
     """Get all conversation turns for a session"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != current_user.id:
+    if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
 
     conversations = LLMConversationService.get_session_conversations(session_id)
@@ -178,8 +185,8 @@ def get_conversation_turn(turn_id):
         return {"message": "Conversation turn not found"}, 404
 
     # Validate session belongs to current user
-    session = SessionService.get_session_by_id(turn.session_id)
-    if not session or session.user_id != current_user.id:
+    session = SessionService.get_session(turn.session_id)
+    if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Access denied"}, 403
 
     return {
@@ -207,8 +214,8 @@ def update_conversation_turn(turn_id):
         return {"message": "Conversation turn not found"}, 404
 
     # Validate session belongs to current user
-    session = SessionService.get_session_by_id(turn.session_id)
-    if not session or session.user_id != current_user.id:
+    session = SessionService.get_session(turn.session_id)
+    if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Access denied"}, 403
 
     data = request.get_json()
@@ -252,8 +259,8 @@ def delete_conversation_turn(turn_id):
         return {"message": "Conversation turn not found"}, 404
 
     # Validate session belongs to current user
-    session = SessionService.get_session_by_id(turn.session_id)
-    if not session or session.user_id != current_user.id:
+    session = SessionService.get_session(turn.session_id)
+    if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Access denied"}, 403
 
     try:
@@ -270,7 +277,7 @@ def get_conversation_status_route(session_id):
     """Get conversation status for a session"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != current_user.id:
+    if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
 
     # Get status from streaming service
@@ -305,7 +312,7 @@ def cleanup_session_route(session_id):
     """Cleanup session resources"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != current_user.id:
+    if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
 
     result = cleanup_session(session_id)
@@ -319,7 +326,7 @@ def force_refresh_settings_route(session_id):
     """Force refresh LLM settings for a session"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != current_user.id:
+    if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
 
     result = force_refresh_settings(session_id)
@@ -333,7 +340,7 @@ def check_conversation_complete(session_id):
     """Check if conversation has ended"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != current_user.id:
+    if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
 
     is_complete = LLMConversationService.check_conversation_complete(session_id)
@@ -454,7 +461,7 @@ def save_conversation(session_id):
     """Save conversation to database (matches reference pattern)"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != current_user.id:
+    if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
 
     try:
@@ -496,7 +503,7 @@ def debug_session_status(session_id):
     """Debug endpoint to check session status"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != current_user.id:
+    if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
 
     return {
@@ -522,10 +529,10 @@ def debug_session_status(session_id):
 @user_required
 @api_response
 def start_chat(session_token):
-    """Initialize LLM chat using AssessmentOrchestrator"""
+    """Initialize LLM chat using new LangChain service"""
     # Validate session belongs to current user
     session = SessionService.get_session_by_token(session_token)
-    if not session or session.user_id != current_user.id:
+    if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     try:
@@ -541,7 +548,7 @@ def chat_stream_new(session_id):
     """SSE streaming endpoint for real-time chat"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != current_user.id:
+    if not session or int(session.user_id) != int(current_user.id):
         return Response("data: " + json.dumps({'type': 'error', 'message': 'Session not found or access denied'}) + "\n\n",
                        mimetype='text/event-stream'), 403
     
@@ -583,7 +590,7 @@ def finish_chat(session_token):
     """Finish conversation and prepare for completion handler"""
     # Validate session belongs to current user
     session = SessionService.get_session_by_token(session_token)
-    if not session or session.user_id != current_user.id:
+    if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     try:
@@ -600,7 +607,7 @@ def get_chat_history(session_id):
     """Get chat history for session"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != current_user.id:
+    if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     try:

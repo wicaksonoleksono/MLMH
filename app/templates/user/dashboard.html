@@ -397,7 +397,12 @@ endblock %} {% block content %}
 
         this.loading = true;
         try {
-          const result = await apiCall("/assessment/start", "POST");
+          const startUrl = "{{ url_for('assessment.start_assessment') }}";
+          const response = await fetch(startUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          const result = await response.json();
           if (result && result.status === "OLKORECT") {
             // Redirect to assessment flow
             window.location.href = "/assessment";
@@ -420,9 +425,13 @@ endblock %} {% block content %}
         }
 
         try {
-          const result = await apiCall(`/assessment/reset-session/${sessionToken}`, 'POST', {
-            reason: 'USER_INITIATED_RESET'
+          const resetUrl = `{{ url_for("assessment.reset_session_to_new_attempt", session_token="TOKEN") }}`.replace('TOKEN', sessionToken);
+          const response = await fetch(resetUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason: 'USER_INITIATED_RESET' })
           });
+          const result = await response.json();
           
           if (result && result.status === 'OLKORECT') {
             alert(result.message || 'Session berhasil direset');

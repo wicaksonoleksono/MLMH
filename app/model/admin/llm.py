@@ -28,4 +28,4 @@ class LLMSettings(BaseModel, StatusMixin):
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     
     def __repr__(self) -> str:
-        return f"<LLMSettings {self.setting_name} (Chat:{self.chat_model}, Analysis:{self.analysis_model})>"
+        return f"<OpenQuestionSettings {self.setting_name} (Chat:{self.chat_model}, Analysis:{self.analysis_model})>"

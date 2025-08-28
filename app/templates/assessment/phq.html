@@ -203,8 +203,9 @@ content %}
 
           setupAbandonTracking() {
               // Track when user leaves the page
+              let assessmentCompleted = false;
               window.addEventListener('beforeunload', () => {
-                  if (!this.submitted) {
+                  if (!assessmentCompleted && !this.submitted) {
                       // Use sendBeacon for reliable tracking when page unloads
                       navigator.sendBeacon(`/assessment/abandon/${this.sessionId}`,
                         JSON.stringify({ reason: 'User left PHQ assessment page' }));
@@ -213,7 +214,7 @@ content %}
 
               // Track when user navigates away
               window.addEventListener('pagehide', () => {
-                  if (!this.submitted) {
+                  if (!assessmentCompleted && !this.submitted) {
                       fetch(`/assessment/abandon/${this.sessionId}`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
@@ -222,6 +223,11 @@ content %}
                       }).catch(() => {}); // Ignore errors
                   }
               });
+              
+              // Set completion flag to prevent abandon calls on successful redirect
+              this.markAsCompleted = () => {
+                  assessmentCompleted = true;
+              };
           },
 
           async loadQuestions() {
@@ -310,6 +316,8 @@ content %}
                       if (result.data.completion_redirect) {
                           const completionResult = await apiCall(result.data.completion_redirect, 'POST', {});
                           if (completionResult && completionResult.status === 'OLKORECT') {
+                              // Mark as completed before redirect to prevent abandon call
+                              this.markAsCompleted();
                               // Immediate redirect to next assessment - no results display
                               window.location.href = completionResult.data.next_redirect;
                               return;

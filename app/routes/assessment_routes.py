@@ -285,7 +285,16 @@ def complete_assessment(assessment_type, session_token):
 
     # Determine next redirect based on pre-planned flow
     next_redirect_key = f'{assessment_type}_complete_redirect'
-    next_redirect = flow_plan.get(next_redirect_key, '/assessment/')
+    next_redirect = flow_plan.get(next_redirect_key)
+    
+    # If no flow plan, determine next step based on session status
+    if not next_redirect:
+        if updated_session.status == 'PHQ_IN_PROGRESS':
+            next_redirect = '/assessment/phq'
+        elif updated_session.status == 'LLM_IN_PROGRESS':  
+            next_redirect = '/assessment/llm'
+        else:
+            next_redirect = '/assessment/'
 
     # Check if both assessments are complete
     if updated_session.status == 'COMPLETED':

@@ -21,6 +21,16 @@ def get_phq_questions(session_id):
     
     # Get randomized questions
     questions = PHQResponseService.get_session_questions(session_id)
+    
+    # If no questions found, try initializing assessments
+    if not questions:
+        from ...services.session.assessmentOrchestrator import AssessmentOrchestrator
+        try:
+            AssessmentOrchestrator.initialize_session_assessments(session_id)
+            questions = PHQResponseService.get_session_questions(session_id)
+        except Exception as e:
+            return {"message": f"Failed to initialize PHQ questions: {str(e)}"}, 500
+    
     return {
         "session_id": session_id,
         "questions": questions,

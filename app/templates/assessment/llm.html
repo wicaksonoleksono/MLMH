@@ -399,11 +399,12 @@ endblock %} {% block content %}
           );
 
           const postResult = await postResponse.json();
-          console.log("📦 POST Result:", postResult);
-          
+          <!-- console.log("📦 POST Result:", postResult); -->
+
           // Check if the API response wrapper has the success data
-          const actualResult = postResult.status === "OLKORECT" ? postResult.data : postResult;
-          
+          const actualResult =
+            postResult.status === "OLKORECT" ? postResult.data : postResult;
+
           if (actualResult.status !== "success") {
             throw new Error(actualResult.message || "Failed to send message");
           }
@@ -484,22 +485,32 @@ endblock %} {% block content %}
 
           const result = await response.json();
           console.log("✅ Conversation finished:", result);
-          
-          // Handle API response wrapper
-          const actualResult = result.status === "OLKORECT" ? result.data : result;
 
-          if (actualResult.status === "success" && actualResult.completion_redirect) {
+          // Handle API response wrapper
+          const actualResult =
+            result.status === "OLKORECT" ? result.data : result;
+
+          if (
+            actualResult.status === "success" &&
+            actualResult.completion_redirect
+          ) {
             // Call universal completion handler
-            const completionResponse = await fetch(actualResult.completion_redirect, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-            });
+            const completionResponse = await fetch(
+              actualResult.completion_redirect,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+              }
+            );
 
             const completionResult = await completionResponse.json();
+            console.log("🎯 Completion result:", completionResult);
 
             if (completionResult.status === "OLKORECT") {
-              // Redirect to next step
-              window.location.href = completionResult.next_redirect;
+              // Redirect to next step  
+              const completionData = completionResult.data;
+              console.log("📍 Redirecting to:", completionData.next_redirect);
+              window.location.href = completionData.next_redirect;
             } else {
               alert(
                 "Error completing assessment: " +
@@ -508,7 +519,10 @@ endblock %} {% block content %}
               this.isFinishing = false;
             }
           } else {
-            alert("Error finishing conversation: " + (actualResult.message || "Unknown error"));
+            alert(
+              "Error finishing conversation: " +
+                (actualResult.message || "Unknown error")
+            );
             this.isFinishing = false;
           }
         } catch (error) {

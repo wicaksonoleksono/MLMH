@@ -65,9 +65,7 @@ class AssessmentSession(BaseModel):
 
     # Response data relationships
     phq_responses = relationship("PHQResponse", back_populates="session", cascade="all, delete-orphan")
-    llm_conversations = relationship("LLMConversationTurn", back_populates="session", cascade="all, delete-orphan")
-    open_question_responses = relationship(
-        "OpenQuestionResponse", back_populates="session", cascade="all, delete-orphan")
+    llm_conversations = relationship("LLMConversation", back_populates="session", cascade="all, delete-orphan")
     llm_analysis = relationship("LLMAnalysisResult", back_populates="session", cascade="all, delete-orphan")
     camera_captures = relationship("CameraCapture", back_populates="session", cascade="all, delete-orphan")
 
@@ -331,12 +329,9 @@ class AssessmentSession(BaseModel):
 class PHQResponse(BaseModel):
     __tablename__ = 'phq_responses'
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
     question_id: Mapped[int] = mapped_column(Integer, ForeignKey('phq_questions.id'), nullable=False)
-    
-    # UUID for camera capture linking
-    session_uuid: Mapped[str] = mapped_column(String(36), nullable=False, unique=True, default=lambda: str(uuid.uuid4()))
 
     # Question metadata (snapshot at response time)
     question_number: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -344,7 +339,7 @@ class PHQResponse(BaseModel):
     category_name: Mapped[str] = mapped_column(String(50), nullable=False)  # ANHEDONIA, DEPRESSED_MOOD, etc.
 
     # Response data
-    response_value: Mapped[int] = mapped_column(Integer, nullable=False)  # 0-3 scale value
+    response_value: Mapped[int] = mapped_column(Integer, nullable=False) 
     response_text: Mapped[str] = mapped_column(String(255), nullable=False)  # Human-readable answer
     response_time_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
@@ -359,125 +354,70 @@ class PHQResponse(BaseModel):
         return f'<PHQResponse {self.id}: Q{self.question_number} = {self.response_value}>'
 
 
-class LLMConversationTurn(BaseModel):
-    __tablename__ = 'llm_conversation_turns'
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+class LLMConversation(BaseModel):
+    __tablename__ = 'llm_conversations'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
-    turn_number: Mapped[int] = mapped_column(Integer, nullable=False)  # 1, 2, 3... conversation flow
     
-    # UUID for camera capture linking
-    session_uuid: Mapped[str] = mapped_column(String(36), nullable=False, unique=True, default=lambda: str(uuid.uuid4()))
-
-    # Conversation data
-    ai_message: Mapped[str] = mapped_column(Text, nullable=False)  # Anisa's question/response
-    user_message: Mapped[str] = mapped_column(Text, nullable=False)  # User's answer
-
-    # Detection flags
-    has_end_conversation: Mapped[bool] = mapped_column(Boolean, default=False)  # </end_conversation> detected
-
-    # Conversation metadata
-    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    user_message_length: Mapped[int] = mapped_column(Integer, nullable=False)  # For analysis
-    ai_model_used: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # Track which model was used
-
-    # Optional audio/transcription support
+    # Individual turn fields (for service compatibility)
+    turn_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    ai_message: Mapped[str] = mapped_column(Text, nullable=False)
+    user_message: Mapped[str] = mapped_column(Text, nullable=False)
+    has_end_conversation: Mapped[bool] = mapped_column(Boolean, default=False)
+    user_message_length: Mapped[int] = mapped_column(Integer, default=0)
+    ai_model_used: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     response_audio_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     transcription: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    audio_quality_score: Mapped[Optional[float]] = mapped_column(nullable=True)
-
+    
+    # Legacy field (can be removed later if not needed)
+    conversation_data: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     session = relationship("AssessmentSession", back_populates="llm_conversations")
-
     def __repr__(self):
-        return f'<LLMConversationTurn {self.id}: Turn {self.turn_number} (Session {self.session_id})>'
+        return f'<LLMConversation {self.id}: Session {self.session_id}>'
 
 
 class CameraCapture(BaseModel):
     __tablename__ = 'camera_captures'
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    
-    # Core identification - proper foreign keys with cascade delete
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     assessment_session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id', ondelete='CASCADE'), nullable=False)
-    phq_session_uuid: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey('phq_responses.session_uuid', ondelete='CASCADE'), nullable=True)
-    llm_session_uuid: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey('llm_conversation_turns.session_uuid', ondelete='CASCADE'), nullable=True)
-    
-    # File info - just filename, no paths
+    phq_response_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey('phq_responses.id', ondelete='CASCADE'), nullable=True)
+    llm_conversation_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey('llm_conversations.id', ondelete='CASCADE'), nullable=True)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    
-    # Capture metadata
     capture_trigger: Mapped[str] = mapped_column(String(50), nullable=False)  # INTERVAL, BUTTON_CLICK, MESSAGE_SEND, QUESTION_START
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     camera_settings_snapshot: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
-    
-    # Relationships
     session = relationship("AssessmentSession", back_populates="camera_captures")
-
     def __repr__(self):
         return f'<CameraCapture {self.id}: {self.filename} ({self.capture_trigger})>'
 
 
-class OpenQuestionResponse(BaseModel):
-    __tablename__ = 'open_question_responses'
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
-    sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
-
-    question_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    response_text: Mapped[str] = mapped_column(Text, nullable=False)
-    response_audio_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    transcription: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-    duration_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    audio_quality_score: Mapped[Optional[float]] = mapped_column(nullable=True)
-    sentiment_analysis: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
-
-    is_conversation_end: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-
-    session = relationship("AssessmentSession", back_populates="open_question_responses")
-
-    def __repr__(self):
-        return f'<OpenQuestionResponse {self.id}: Seq {self.sequence_number}>'
-
-
+# LATER ON.. 
 
 class LLMAnalysisResult(BaseModel):
     __tablename__ = 'llm_analysis_results'
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
-
-    # Analysis metadata
     analysis_model_used: Mapped[str] = mapped_column(String(50), nullable=False)  # gpt-4o-mini, etc.
     conversation_turns_analyzed: Mapped[int] = mapped_column(Integer, nullable=False)  # How many turns were analyzed
-
-    # Raw analysis results (JSON with standardized aspect keys)
     raw_analysis_result: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
-
     # Processed individual aspect scores
     # {"anhedonia": {"score": 2, "explanation": "..."}, ...}
     aspect_scores: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
-
     # Overall analysis summary
     total_aspects_detected: Mapped[int] = mapped_column(Integer, nullable=False)
     average_severity_score: Mapped[float] = mapped_column(nullable=False)  # 0-3 average
     analysis_confidence: Mapped[Optional[float]] = mapped_column(nullable=True)  # AI confidence in analysis
-
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-
     session = relationship("AssessmentSession")
-
     def __repr__(self):
         return f'<LLMAnalysisResult {self.id}: {self.total_aspects_detected} aspects for session {self.session_id}>'
-
-
 class SessionExport(BaseModel):
     __tablename__ = 'session_exports'
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
     export_type: Mapped[str] = mapped_column(String(50), nullable=False)
 

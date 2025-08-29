@@ -500,8 +500,8 @@ def upload_camera_captures():
                     
                     # Get capture details
                     trigger = metadata.get('trigger', 'MANUAL')
-                    phq_session_uuid = metadata.get('phq_session_uuid')
-                    llm_session_uuid = metadata.get('llm_session_uuid')
+                    phq_response_id = metadata.get('phq_response_id')
+                    llm_conversation_id = metadata.get('llm_conversation_id')
                     
                     # Check if we should capture based on settings
                     if camera_settings and not CameraCaptureService.should_capture_on_trigger(camera_settings, trigger):
@@ -513,8 +513,8 @@ def upload_camera_captures():
                         assessment_session_id=session_id,
                         file_data=file_data,
                         capture_trigger=trigger,
-                        phq_session_uuid=phq_session_uuid,
-                        llm_session_uuid=llm_session_uuid,
+                        phq_response_id=phq_response_id,
+                        llm_conversation_id=llm_conversation_id,
                         camera_settings_snapshot=settings_snapshot
                     )
                     

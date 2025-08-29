@@ -39,19 +39,19 @@ class CameraCaptureService:
             return False
 
     @staticmethod
-    def generate_filename(timestamp: datetime, assessment_type: str, session_uuid: str) -> str:
-        """Generate filename: {timestamp}_{type}_{session_uuid_short}.jpg"""
+    def generate_filename(timestamp: datetime, assessment_type: str, target_id: str) -> str:
+        """Generate filename: {timestamp}_{type}_{target_id_short}.jpg"""
         timestamp_str = timestamp.strftime('%Y%m%d_%H%M%S')
-        short_uuid = session_uuid[:8]
-        return f"{timestamp_str}_{assessment_type}_{short_uuid}.jpg"
+        short_id = target_id[:8]
+        return f"{timestamp_str}_{assessment_type}_{short_id}.jpg"
 
     @staticmethod
     def save_capture(
         assessment_session_id: str,
         file_data: bytes,
         capture_trigger: str,
-        phq_session_uuid: Optional[str] = None,
-        llm_session_uuid: Optional[str] = None,
+        phq_response_id: Optional[str] = None,
+        llm_conversation_id: Optional[str] = None,
         camera_settings_snapshot: Optional[Dict[str, Any]] = None
     ) -> CameraCapture:
         """Save camera capture file and database record"""
@@ -61,10 +61,10 @@ class CameraCaptureService:
         
         # Generate filename based on context
         timestamp = datetime.utcnow()
-        assessment_type = 'phq' if phq_session_uuid else 'llm' if llm_session_uuid else 'general'
-        target_uuid = phq_session_uuid or llm_session_uuid or assessment_session_id
+        assessment_type = 'phq' if phq_response_id else 'llm' if llm_conversation_id else 'general'
+        target_id = phq_response_id or llm_conversation_id or assessment_session_id
         
-        filename = CameraCaptureService.generate_filename(timestamp, assessment_type, target_uuid)
+        filename = CameraCaptureService.generate_filename(timestamp, assessment_type, target_id)
         full_path = os.path.join(upload_path, filename)
         
         # Save file to disk
@@ -77,8 +77,8 @@ class CameraCaptureService:
         with get_session() as db:
             capture = CameraCapture(
                 assessment_session_id=assessment_session_id,
-                phq_session_uuid=phq_session_uuid,
-                llm_session_uuid=llm_session_uuid,
+                phq_response_id=phq_response_id,
+                llm_conversation_id=llm_conversation_id,
                 filename=filename,
                 file_size_bytes=file_size,
                 capture_trigger=capture_trigger,
@@ -108,25 +108,25 @@ class CameraCaptureService:
                 'timestamp': capture.timestamp,
                 'capture_trigger': capture.capture_trigger,
                 'file_size_bytes': capture.file_size_bytes,
-                'phq_session_uuid': capture.phq_session_uuid,
-                'llm_session_uuid': capture.llm_session_uuid,
-                'assessment_type': 'phq' if capture.phq_session_uuid else 'llm' if capture.llm_session_uuid else 'general'
+                'phq_response_id': capture.phq_response_id,
+                'llm_conversation_id': capture.llm_conversation_id,
+                'assessment_type': 'phq' if capture.phq_response_id else 'llm' if capture.llm_conversation_id else 'general'
             } for capture in captures]
 
     @staticmethod
-    def get_captures_by_phq_session(phq_session_uuid: str) -> List[CameraCapture]:
-        """Get captures linked to specific PHQ session"""
+    def get_captures_by_phq_response(phq_response_id: str) -> List[CameraCapture]:
+        """Get captures linked to specific PHQ response"""
         with get_session() as db:
             return db.query(CameraCapture).filter_by(
-                phq_session_uuid=phq_session_uuid
+                phq_response_id=phq_response_id
             ).order_by(CameraCapture.timestamp).all()
 
     @staticmethod
-    def get_captures_by_llm_session(llm_session_uuid: str) -> List[CameraCapture]:
-        """Get captures linked to specific LLM session"""
+    def get_captures_by_llm_conversation(llm_conversation_id: str) -> List[CameraCapture]:
+        """Get captures linked to specific LLM conversation"""
         with get_session() as db:
             return db.query(CameraCapture).filter_by(
-                llm_session_uuid=llm_session_uuid
+                llm_conversation_id=llm_conversation_id
             ).order_by(CameraCapture.timestamp).all()
 
     @staticmethod
@@ -163,20 +163,31 @@ class CameraCaptureService:
 
     @staticmethod
     def should_capture_on_trigger(settings: CameraSettings, trigger: str) -> bool:
-        """Check if capture should happen based on settings and trigger"""
+        """Check if capture should happen based on settings and trigger - MUTUALLY EXCLUSIVE ENFORCEMENT"""
         if not settings:
             return False
+        
+        # 🔒 ENFORCE MUTUALLY EXCLUSIVE MODES - NO MIXED MODE BULLSHIT!
+        if settings.recording_mode not in ['INTERVAL', 'EVENT_DRIVEN']:
+            return False  # Invalid mode = no capture
             
         if settings.recording_mode == 'INTERVAL':
+            # INTERVAL mode: ONLY respond to INTERVAL triggers, ignore all events
             return trigger == 'INTERVAL'
+            
         elif settings.recording_mode == 'EVENT_DRIVEN':
+            # EVENT_DRIVEN mode: ONLY respond to enabled event triggers, ignore intervals
+            if trigger == 'INTERVAL':
+                return False  # Reject interval triggers in event mode
+            
             trigger_map = {
                 'BUTTON_CLICK': settings.capture_on_button_click,
-                'MESSAGE_SEND': settings.capture_on_message_send
+                'MESSAGE_SEND': settings.capture_on_message_send,
+                'QUESTION_START': settings.capture_on_question_start
             }
             return trigger_map.get(trigger, False)
         
-        return False
+        return False  # Default: no capture
 
     @staticmethod
     def cleanup_old_captures(retention_days: int = 30):
@@ -224,13 +235,13 @@ class CameraCaptureService:
             return len(session_captures)
 
     @staticmethod
-    def cleanup_phq_captures(phq_session_uuid: str):
-        """Clean up captures for a specific PHQ session UUID"""
+    def cleanup_phq_captures(phq_response_id: str):
+        """Clean up captures for a specific PHQ response ID"""
         upload_path = CameraCaptureService.get_upload_path()
         
         with get_session() as db:
             phq_captures = db.query(CameraCapture).filter_by(
-                phq_session_uuid=phq_session_uuid
+                phq_response_id=phq_response_id
             ).all()
             
             for capture in phq_captures:
@@ -242,13 +253,13 @@ class CameraCaptureService:
             return len(phq_captures)
 
     @staticmethod
-    def cleanup_llm_captures(llm_session_uuid: str):
-        """Clean up captures for a specific LLM session UUID"""  
+    def cleanup_llm_captures(llm_conversation_id: str):
+        """Clean up captures for a specific LLM conversation ID"""  
         upload_path = CameraCaptureService.get_upload_path()
         
         with get_session() as db:
             llm_captures = db.query(CameraCapture).filter_by(
-                llm_session_uuid=llm_session_uuid
+                llm_conversation_id=llm_conversation_id
             ).all()
             
             for capture in llm_captures:

@@ -34,7 +34,28 @@ class CameraService:
                        interval_seconds: Optional[int] = None, resolution: str = "1280x720",
                        capture_on_button_click: bool = True, capture_on_message_send: bool = False,
                        capture_on_question_start: bool = False, is_default: bool = False) -> Dict[str, Any]:
-        """Create or update camera settings"""
+        """Create or update camera settings with mutually exclusive mode enforcement"""
+        
+        # 🔒 ENFORCE MUTUALLY EXCLUSIVE MODES - NO FUCKED UP DATA!
+        if recording_mode not in ['INTERVAL', 'EVENT_DRIVEN']:
+            raise ValueError(f"Invalid recording_mode: {recording_mode}. Must be 'INTERVAL' or 'EVENT_DRIVEN'")
+        
+        # INTERVAL mode validation
+        if recording_mode == 'INTERVAL':
+            if interval_seconds is None or interval_seconds < 1 or interval_seconds > 60:
+                raise ValueError("INTERVAL mode requires interval_seconds between 1-60")
+            # Force event-driven settings to False for INTERVAL mode
+            capture_on_button_click = False
+            capture_on_message_send = False
+            capture_on_question_start = False
+        
+        # EVENT_DRIVEN mode validation  
+        elif recording_mode == 'EVENT_DRIVEN':
+            if not any([capture_on_button_click, capture_on_message_send, capture_on_question_start]):
+                raise ValueError("EVENT_DRIVEN mode requires at least one capture trigger enabled")
+            # Force interval to None for EVENT_DRIVEN mode
+            interval_seconds = None
+        
         with get_session() as db:
             # Convert relative storage path to absolute using app root
             if not os.path.isabs(storage_path):
@@ -45,12 +66,17 @@ class CameraService:
             # Auto-generate setting name based on mode
             setting_name = f"Camera {recording_mode.title()} Settings"
             
-            # Look for existing settings (assume only one set of settings for now)
-            existing = db.query(CameraSettings).filter(CameraSettings.is_active == True).first()
+            # Look for existing settings by name to avoid duplicates
+            existing = db.query(CameraSettings).filter(CameraSettings.setting_name == setting_name).first()
             
+            # 🎯 MUTUALLY EXCLUSIVE: Only one mode can be default at a time
             if is_default:
-                # Remove default from other settings
+                # Remove default from ALL other settings (ensures only one default)
                 db.query(CameraSettings).filter(CameraSettings.is_default == True).update({'is_default': False})
+                # Also disable any other active settings to enforce single active mode
+                db.query(CameraSettings).filter(
+                    CameraSettings.setting_name != setting_name
+                ).update({'is_active': False})
             
             if existing:
                 # Update existing settings
@@ -79,14 +105,30 @@ class CameraService:
                 )
                 db.add(settings)
 
-            # Auto-set is_active based on field completeness
-            all_fields_valid = (
-                settings.setting_name and settings.setting_name.strip() != '' and
-                settings.recording_mode and settings.recording_mode.strip() != '' and
-                settings.resolution and settings.resolution.strip() != '' and
-                settings.storage_path and settings.storage_path.strip() != '' and
-                settings.interval_seconds is not None  # 0 is valid for interval_seconds
-            )
+            # 🔍 VALIDATE MUTUALLY EXCLUSIVE MODES BEFORE SAVING!
+            try:
+                settings.validate_mutually_exclusive_modes()
+            except ValueError as e:
+                raise ValueError(f"Camera settings validation failed: {e}")
+            
+            # Auto-set is_active based on field completeness and mode-specific validation
+            if settings.recording_mode == 'INTERVAL':
+                all_fields_valid = (
+                    settings.setting_name and settings.setting_name.strip() != '' and
+                    settings.recording_mode and settings.recording_mode.strip() != '' and
+                    settings.resolution and settings.resolution.strip() != '' and
+                    settings.storage_path and settings.storage_path.strip() != '' and
+                    settings.interval_seconds is not None and settings.interval_seconds >= 1
+                )
+            else:  # EVENT_DRIVEN
+                all_fields_valid = (
+                    settings.setting_name and settings.setting_name.strip() != '' and
+                    settings.recording_mode and settings.recording_mode.strip() != '' and
+                    settings.resolution and settings.resolution.strip() != '' and
+                    settings.storage_path and settings.storage_path.strip() != '' and
+                    any([settings.capture_on_button_click, settings.capture_on_message_send, settings.capture_on_question_start])
+                )
+            
             settings.is_active = all_fields_valid
             
             db.commit()

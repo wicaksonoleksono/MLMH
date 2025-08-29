@@ -1,9 +1,101 @@
 # app/route/admin/phq_routes.py
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, render_template, redirect, url_for, flash
 from flask_login import current_user
 from ...services.admin.phqService import PHQService
 from ...decorators import raw_response
 phq_bp = Blueprint('phq', __name__, url_prefix='/admin/phq')
+
+
+# ===== MAIN SETTINGS PAGE =====
+@phq_bp.route('/settings', methods=['GET'])
+@raw_response  
+def phq_settings_page():
+    """PHQ Settings page with proper Flask forms instead of apiCall bullshit"""
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return redirect(url_for('main.auth_page'))
+    return render_template('admin/settings/phq/index.html', user=current_user)
+
+
+@phq_bp.route('/settings/save', methods=['POST'])
+@raw_response
+def save_all_settings():
+    """Save all PHQ settings in one clean server-side operation - NO MORE AJAX HELL!"""
+    if not current_user.is_authenticated or not current_user.is_admin():
+        flash('Admin access required', 'error')
+        return redirect(url_for('main.auth_page'))
+    
+    try:
+        # Extract form data
+        scale_name = request.form.get('scale_name', 'PHQ-9 Default')
+        min_value = int(request.form.get('min_value', 0))
+        max_value = int(request.form.get('max_value', 3))
+        
+        # Build scale_labels from form data
+        scale_labels = {}
+        for i in range(min_value, max_value + 1):
+            label_key = f'scale_label_{i}'
+            scale_labels[str(i)] = request.form.get(label_key, f'Label {i}')
+        
+        # Save scale (this will update existing default)
+        scale_result = PHQService.create_scale(
+            scale_name=scale_name,
+            min_value=min_value,
+            max_value=max_value,
+            scale_labels=scale_labels,
+            is_default=True
+        )
+        
+        # Process questions for each category
+        categories = ['ANHEDONIA', 'DEPRESSED_MOOD', 'SLEEP_DISTURBANCE', 'FATIGUE', 
+                     'APPETITE_CHANGE', 'GUILT', 'CONCENTRATION', 'PSYCHOMOTOR', 'SUICIDAL_IDEATION']
+        
+        for category in categories:
+            # Get questions for this category from form
+            questions = []
+            i = 0
+            while True:
+                question_key = f'question_{category}_{i}'
+                question_text = request.form.get(question_key)
+                if not question_text or not question_text.strip():
+                    break
+                questions.append(question_text.strip())
+                i += 1
+            
+            # Delete existing questions for category
+            existing = PHQService.get_questions(category)
+            for q in existing:
+                PHQService.delete_question(q['id'])
+            
+            # Create new questions
+            for idx, question_text in enumerate(questions):
+                PHQService.create_question(
+                    category_name_id=category,
+                    question_text_en=question_text,
+                    question_text_id=question_text,
+                    order_index=idx
+                )
+        
+        # Create/update settings
+        settings_name = request.form.get('settings_name', 'PHQ-9 Default Settings')
+        questions_per_category = int(request.form.get('questions_per_category', 1))
+        randomize = request.form.get('randomize_questions') == 'on'
+        instructions = request.form.get('instructions', '')
+        
+        PHQService.create_settings(
+            setting_name=settings_name,
+            questions_per_category=questions_per_category,
+            scale_id=scale_result['id'],
+            randomize_categories=randomize,
+            instructions=instructions,
+            is_default=True
+        )
+        
+        flash('PHQ settings saved successfully! ✅', 'success')
+        return redirect(url_for('phq.phq_settings_page'))
+        
+    except Exception as e:
+        flash(f'Error saving PHQ settings: {str(e)}', 'error')
+        return redirect(url_for('phq.phq_settings_page'))
 
 
 @phq_bp.route('/categories', methods=['GET'])

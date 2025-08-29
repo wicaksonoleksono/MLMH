@@ -263,6 +263,7 @@ Format output JSON:
             
             # Get all models using OpenAI client
             models_response = client.models.list()
+            # langsung lihat 
             models = [model.id for model in models_response.data]
             
             # Filter for chat models (exclude embeddings, tts, etc)
@@ -283,7 +284,7 @@ Format output JSON:
         try:
             from openai import OpenAI
             client = OpenAI(api_key=api_key)
-            # Simple models list call - cheap and reliable
+            # via list hehe 
             models = client.models.list()
             return True
             

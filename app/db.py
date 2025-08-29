@@ -65,6 +65,6 @@ def create_all_tables():
     from .model.admin.camera import CameraSettings
     from .model.admin.llm import LLMSettings
     from .model.admin.consent import ConsentSettings
-    from .model.assessment.sessions import AssessmentSession, PHQResponse, LLMConversationTurn, LLMAnalysisResult, OpenQuestionResponse, CameraCapture, SessionExport
+    from .model.assessment.sessions import AssessmentSession, PHQResponse, LLMConversation, LLMAnalysisResult, CameraCapture, SessionExport
     engine = get_engine()
     Base.metadata.create_all(bind=engine)

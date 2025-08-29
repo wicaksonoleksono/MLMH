@@ -261,7 +261,7 @@ def register_commands(app):
         from .model.admin.camera import CameraSettings
         from .model.admin.llm import LLMSettings
         from .model.admin.consent import ConsentSettings
-        from .model.assessment.sessions import AssessmentSession, PHQResponse, LLMConversationTurn, LLMAnalysisResult, OpenQuestionResponse, CameraCapture, SessionExport
+        from .model.assessment.sessions import AssessmentSession, PHQResponse, LLMConversation, LLMAnalysisResult, CameraCapture, SessionExport
 
         Base.metadata.create_all(bind=engine)
         click.echo("[OLKORECT] Database tables recreated.")

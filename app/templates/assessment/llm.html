@@ -231,11 +231,11 @@ endblock %} {% block content %}
           // Get camera settings from backend
           const cameraSettings = {{ camera_settings | tojson | safe }} || {};
           
-          // Initialize camera manager without session UUID initially
+          // Initialize camera manager without response ID initially
           this.cameraManager = new CameraManager(this.sessionId, 'llm', cameraSettings);
           await this.cameraManager.initialize();
           
-          // Don't set session UUID yet - will be set after first LLM response
+          // Don't set response ID yet - will be set after conversation responses are saved
           
           console.log('📹 Camera initialized for LLM assessment');
         } catch (error) {

@@ -1,4 +1,4 @@
-from app.model.assessment.sessions import AssessmentSession, PHQResponse, LLMConversationTurn
+from app.model.assessment.sessions import AssessmentSession
 from app.db import get_session
 from datetime import datetime
 from sqlalchemy import desc, func
@@ -77,14 +77,11 @@ class SessionService:
             # If user has 2 completed sessions, they've reached the limit
             if completed_sessions >= SessionService.MAX_SESSIONS_PER_USER:
                 return False
-                
             # Note: We removed the recoverable session blocking here because 
             # the /assessment/start route now handles recoverable sessions intelligently
             # by auto-resetting them instead of blocking with errors
-            
             # Count all sessions to enforce total limit
             total_sessions = db.query(AssessmentSession).filter_by(user_id=user_id).count()
-            
             return total_sessions < SessionService.MAX_SESSIONS_PER_USER
 
     @staticmethod
@@ -283,16 +280,16 @@ class SessionService:
             if updated_session.status == 'LLM_IN_PROGRESS':
                 next_redirect = '/assessment/llm'
                 message = "PHQ selesai! Lanjut ke LLM assessment..."
-                print(f"✅ PHQ → LLM: Redirecting to {next_redirect}")
+                print(f" PHQ → LLM: Redirecting to {next_redirect}")
             elif updated_session.status == 'COMPLETED':
                 next_redirect = '/assessment/'
-                message = "Semua assessment selesai! 🎉"
-                print(f"🎉 Both Complete: Redirecting to {next_redirect}")
+                message = "Semua assessment selesai!"
+                print(f" Both Complete: Redirecting to {next_redirect}")
             else:
                 # Fallback
                 next_redirect = '/assessment/'
                 message = "PHQ assessment selesai!"
-                print(f"⚠️ Unexpected status {updated_session.status}: Fallback to {next_redirect}")
+                print(f" Unexpected status {updated_session.status}: Fallback to {next_redirect}")
             
             return {
                 "session_id": session_id,
@@ -363,7 +360,7 @@ class SessionService:
                 raise RuntimeError("Failed to reset session to new attempt")
             
             # Clear related data (PHQ responses, LLM conversations, etc.)
-            from ..model.assessment.sessions import PHQResponse, LLMConversationTurn, LLMAnalysisResult, CameraCapture
+            from ..model.assessment.sessions import PHQResponse, LLMConversation, LLMAnalysisResult, CameraCapture
             
             # Get camera capture filenames BEFORE reset (tied to session_id)
             camera_filenames = [capture.filename for capture in db.query(CameraCapture).filter_by(assessment_session_id=session_id).all()]
@@ -381,7 +378,7 @@ class SessionService:
             db.query(PHQResponse).filter_by(session_id=session_id).delete()
             
             # Delete LLM conversations for this session
-            db.query(LLMConversationTurn).filter_by(session_id=session_id).delete()
+            db.query(LLMConversation).filter_by(session_id=session_id).delete()
             
             # Delete LLM analysis results for this session
             db.query(LLMAnalysisResult).filter_by(session_id=session_id).delete()

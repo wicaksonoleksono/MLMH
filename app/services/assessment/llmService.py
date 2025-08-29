@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Optional
 import re
 import requests
 from datetime import datetime
-from ...model.assessment.sessions import AssessmentSession, LLMConversationTurn, LLMAnalysisResult
+from ...model.assessment.sessions import AssessmentSession, LLMConversation, LLMAnalysisResult
 from ...db import get_session
 from ...services.admin.llmService import LLMService as AdminLLMService
 
@@ -28,13 +28,13 @@ class LLMConversationService:
         ai_model_used: Optional[str] = None,
         response_audio_path: Optional[str] = None,
         transcription: Optional[str] = None
-    ) -> LLMConversationTurn:
+    ) -> LLMConversation:
         """Create a new conversation turn"""
         with get_session() as db:
             # Check for </end_conversation> in AI message
             has_end_conversation = "</end_conversation>" in ai_message.lower()
             
-            turn = LLMConversationTurn(
+            turn = LLMConversation(
                 session_id=session_id,
                 turn_number=turn_number,
                 ai_message=ai_message,
@@ -56,22 +56,22 @@ class LLMConversationService:
             return turn
     
     @staticmethod
-    def get_session_conversations(session_id: int) -> List[LLMConversationTurn]:
+    def get_session_conversations(session_id: int) -> List[LLMConversation]:
         """Get all conversation turns for a session"""
         with get_session() as db:
-            return db.query(LLMConversationTurn).filter_by(session_id=session_id).order_by(LLMConversationTurn.turn_number).all()
+            return db.query(LLMConversation).filter_by(session_id=session_id).order_by(LLMConversation.turn_number).all()
     
     @staticmethod
-    def get_conversation_by_id(turn_id: int) -> Optional[LLMConversationTurn]:
+    def get_conversation_by_id(turn_id: int) -> Optional[LLMConversation]:
         """Get a specific conversation turn by ID"""
         with get_session() as db:
-            return db.query(LLMConversationTurn).filter_by(id=turn_id).first()
+            return db.query(LLMConversation).filter_by(id=turn_id).first()
     
     @staticmethod
-    def update_conversation_turn(turn_id: int, updates: Dict[str, Any]) -> LLMConversationTurn:
+    def update_conversation_turn(turn_id: int, updates: Dict[str, Any]) -> LLMConversation:
         """Update a conversation turn"""
         with get_session() as db:
-            turn = db.query(LLMConversationTurn).filter_by(id=turn_id).first()
+            turn = db.query(LLMConversation).filter_by(id=turn_id).first()
             if not turn:
                 raise ValueError(f"Conversation turn with ID {turn_id} not found")
             
@@ -94,7 +94,7 @@ class LLMConversationService:
     def delete_conversation_turn(turn_id: int) -> bool:
         """Delete a conversation turn"""
         with get_session() as db:
-            turn = db.query(LLMConversationTurn).filter_by(id=turn_id).first()
+            turn = db.query(LLMConversation).filter_by(id=turn_id).first()
             if not turn:
                 raise ValueError(f"Conversation turn with ID {turn_id} not found")
             
@@ -112,7 +112,7 @@ class LLMConversationService:
                 raise ValueError(f"Session {session_id} not found")
             
             # Get all conversation turns
-            conversations = db.query(LLMConversationTurn).filter_by(session_id=session_id).order_by(LLMConversationTurn.turn_number).all()
+            conversations = db.query(LLMConversation).filter_by(session_id=session_id).order_by(LLMConversation.turn_number).all()
             if not conversations:
                 raise ValueError("No conversation turns found for analysis")
             
@@ -170,7 +170,7 @@ class LLMConversationService:
             return analysis_record
     
     @staticmethod
-    def _build_conversation_text(conversations: List[LLMConversationTurn]) -> str:
+    def _build_conversation_text(conversations: List[LLMConversation]) -> str:
         """Build conversation text for analysis"""
         conversation_parts = []
         
@@ -261,7 +261,7 @@ class LLMConversationService:
     def check_conversation_complete(session_id: int) -> bool:
         """Check if conversation has ended (contains </end_conversation>)"""
         with get_session() as db:
-            end_turn = db.query(LLMConversationTurn).filter_by(
+            end_turn = db.query(LLMConversation).filter_by(
                 session_id=session_id,
                 has_end_conversation=True
             ).first()
@@ -272,7 +272,7 @@ class LLMConversationService:
     def get_conversation_summary(session_id: int) -> Dict[str, Any]:
         """Get summary of conversation for a session"""
         with get_session() as db:
-            conversations = db.query(LLMConversationTurn).filter_by(session_id=session_id).all()
+            conversations = db.query(LLMConversation).filter_by(session_id=session_id).all()
             analysis = db.query(LLMAnalysisResult).filter_by(session_id=session_id).first()
             
             total_turns = len(conversations)

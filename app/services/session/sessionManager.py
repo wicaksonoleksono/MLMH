@@ -272,11 +272,11 @@ class SessionManager:
 
             if clear_data:
                 # Clear all assessment data to restart fresh
-                from ...model.assessment.sessions import PHQResponse, LLMConversationTurn
+                from ...model.assessment.sessions import PHQResponse, LLMConversation
 
                 # Delete existing responses
                 db.query(PHQResponse).filter_by(session_id=session_id).delete()
-                db.query(LLMConversationTurn).filter_by(session_id=session_id).delete()
+                db.query(LLMConversation).filter_by(session_id=session_id).delete()
 
                 # Clear session assessment data
                 session.clear_assessment_data()

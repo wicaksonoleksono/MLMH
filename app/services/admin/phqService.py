@@ -199,14 +199,14 @@ class PHQService:
                     )
                     db.add(scale)
 
-            # Auto-set is_active based on field completeness
+            # Auto-set is_active based on field completeness (avoid Proxy object confusion)
             all_fields_valid = (
                 scale.scale_name and scale.scale_name.strip() != '' and
                 scale.min_value is not None and
                 scale.max_value is not None and
-                scale.scale_labels
+                scale.scale_labels is not None and len(scale.scale_labels) > 0
             )
-            scale.is_active = all_fields_valid
+            scale.is_active = bool(all_fields_valid)  # Explicit boolean conversion
             
             db.commit()
 
@@ -220,6 +220,20 @@ class PHQService:
     @staticmethod
     def update_scale(scale_id: int, updates: Dict[str, Any]) -> Dict[str, Any]:
         """Update PHQ scale"""
+        # 🐛 DEBUG: Log what frontend is sending to catch field mapping bugs
+        print(f"🔍 DEBUG update_scale received: {updates}")
+        for key, value in updates.items():
+            print(f"  {key}: {type(value).__name__} = {value}")
+        
+        # 🚨 DETECT FIELD MAPPING BUG: is_active should never be a dict
+        if 'is_active' in updates and isinstance(updates['is_active'], dict):
+            print(f"🚨 BUG DETECTED: is_active is a dict! Frontend is sending wrong field mapping.")
+            print(f"   is_active value: {updates['is_active']}")
+            print(f"   This looks like scale_labels data!")
+            # Remove the incorrect field
+            del updates['is_active']
+            print(f"   Removed is_active from updates to prevent crash.")
+        
         with get_session() as db:
             scale = db.query(PHQScale).filter(
                 and_(PHQScale.id == scale_id, PHQScale.is_active == True)
@@ -232,8 +246,10 @@ class PHQService:
                 # Remove default from other scales
                 db.query(PHQScale).filter(PHQScale.is_default == True).update({'is_default': False})
 
+            # Only update allowed fields to prevent field confusion
+            allowed_fields = ['scale_name', 'min_value', 'max_value', 'scale_labels', 'is_default']
             for key, value in updates.items():
-                if hasattr(scale, key):
+                if key in allowed_fields and hasattr(scale, key):
                     setattr(scale, key, value)
 
             db.commit()

@@ -10,7 +10,7 @@ class CameraManager {
         this.stream = null;
         this.isInitialized = false;
         this.intervalTimer = null;
-        this.currentSessionUUID = null; // PHQ or LLM session UUID
+        this.currentResponseId = null; // PHQ response ID or LLM conversation ID
         
         // Bind methods to preserve context
         this.captureImage = this.captureImage.bind(this);
@@ -158,7 +158,7 @@ class CameraManager {
                 trigger: trigger,
                 size: blob.size,
                 queueLength: this.captures.length,
-                sessionUUID: this.currentSessionUUID
+                responseId: this.currentResponseId
             });
 
             return capture;
@@ -185,9 +185,9 @@ class CameraManager {
         return false;
     }
 
-    setCurrentSessionUUID(uuid) {
-        this.currentSessionUUID = uuid;
-        console.log('📋 Set current session UUID:', uuid);
+    setCurrentResponseId(responseId) {
+        this.currentResponseId = responseId;
+        console.log('📋 Set current response ID:', responseId);
     }
 
     // Trigger methods for specific events
@@ -200,7 +200,7 @@ class CameraManager {
     }
 
 
-    async uploadBatch(responseUUIDs = null) {
+    async uploadBatch(responseIds = null) {
         if (this.captures.length === 0) {
             console.log('📤 No captures to upload');
             return;
@@ -213,9 +213,13 @@ class CameraManager {
             formData.append('session_id', this.sessionId);
             formData.append('assessment_type', this.assessmentType);
             
-            // Add response UUIDs if provided
-            if (responseUUIDs) {
-                formData.append('response_uuids', JSON.stringify(responseUUIDs));
+            // Add response IDs if provided
+            if (responseIds) {
+                if (this.assessmentType === 'phq') {
+                    formData.append('phq_response_ids', JSON.stringify(responseIds));
+                } else if (this.assessmentType === 'llm') {
+                    formData.append('llm_conversation_ids', JSON.stringify(responseIds));
+                }
             }
 
             // Add each capture with metadata
@@ -228,10 +232,21 @@ class CameraManager {
                 const filename = `capture_${timestamp}_${index}.jpg`;
                 
                 formData.append(fileKey, capture.blob, filename);
-                formData.append(metadataKey, JSON.stringify({
+                const metadata = {
                     trigger: capture.trigger,
                     timestamp: capture.timestamp
-                }));
+                };
+                
+                // Add response ID to metadata if available
+                if (this.currentResponseId) {
+                    if (this.assessmentType === 'phq') {
+                        metadata.phq_response_id = this.currentResponseId;
+                    } else if (this.assessmentType === 'llm') {
+                        metadata.llm_conversation_id = this.currentResponseId;
+                    }
+                }
+                
+                formData.append(metadataKey, JSON.stringify(metadata));
             });
 
             const response = await fetch('/assessment/camera/upload', {
@@ -298,7 +313,7 @@ class CameraManager {
             queueLength: this.captures.length,
             totalSize: this.captures.reduce((sum, capture) => sum + capture.file_size, 0),
             isInitialized: this.isInitialized,
-            currentSessionUUID: this.currentSessionUUID,
+            currentResponseId: this.currentResponseId,
             cameraSettings: this.cameraSettings
         };
     }

@@ -15,7 +15,9 @@ def create_app():
         init_database(app.config['SQLALCHEMY_DATABASE_URI'])
         create_all_tables()
     login_manager.init_app(app)
-    login_manager.login_view = 'auth.login'
+    login_manager.login_view = 'main.auth_page'
+    login_manager.login_message = "Silakan login untuk mengakses halaman ini."
+    login_manager.login_message_category = "info"
 
     @login_manager.user_loader
     def load_user(user_id):  # pylint: disable=unused-variable
@@ -25,6 +27,47 @@ def create_app():
         if user_data:
             return SimpleUser(user_data)
         return None
+
+    @app.before_request
+    def require_login():
+        from flask import request, redirect, url_for
+        from flask_login import current_user
+        
+        # Public routes that don't require authentication
+        public_routes = [
+            'main.auth_page',
+            'auth.login', 
+            'auth.register',
+            'static'
+        ]
+        
+        # Skip authentication check for public routes
+        if request.endpoint in public_routes:
+            return
+            
+        # Skip authentication for static files
+        if request.endpoint and request.endpoint.startswith('static'):
+            return
+            
+        # Redirect non-authenticated users to auth page
+        if not current_user.is_authenticated:
+            return redirect(url_for('main.auth_page'))
+            
+        # Admin-only route protection
+        admin_routes = [
+            'admin', 'phq', 'camera', 'llm', 'consent'  # Admin blueprint prefixes
+        ]
+        
+        if request.endpoint:
+            # Check if this is an admin route
+            for admin_prefix in admin_routes:
+                if request.endpoint.startswith(admin_prefix + '.'):
+                    if not current_user.is_admin():
+                        # Redirect non-admin users to their dashboard
+                        from flask import flash
+                        flash('Akses admin diperlukan untuk halaman ini.', 'error')
+                        return redirect(url_for('main.serve_index'))
+                    break
     from .routes.auth_routes import auth_bp
     from .routes.main_routes import main_bp
     from .routes.admin_routes import admin_bp

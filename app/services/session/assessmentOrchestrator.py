@@ -310,11 +310,11 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                 raise ValueError("Session not found")
 
             # Clear all assessment data due to coupling
-            from ...model.assessment.sessions import PHQResponse, LLMConversationTurn
+            from ...model.assessment.sessions import PHQResponse, LLMConversation
 
             # Delete existing responses
             db.query(PHQResponse).filter_by(session_id=session_id).delete()
-            db.query(LLMConversationTurn).filter_by(session_id=session_id).delete()
+            db.query(LLMConversation).filter_by(session_id=session_id).delete()
 
             # Reset completion timestamps
             session.phq_completed_at = None

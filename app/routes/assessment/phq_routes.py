@@ -57,7 +57,7 @@ def submit_phq_responses(session_id):
     
     # Process responses
     results = []
-    response_uuids = []
+    response_ids = []
     for response_data in responses:
         try:
             response = PHQResponseService.create_response(
@@ -73,7 +73,7 @@ def submit_phq_responses(session_id):
                 "category": response.category_name,
                 "score": response.response_value
             })
-            response_uuids.append(response.session_uuid)
+            response_ids.append(response.id)
         except Exception as e:
             return {"message": f"Error processing response: {str(e)}"}, 400
     
@@ -87,7 +87,7 @@ def submit_phq_responses(session_id):
         "session_id": session_id,
         "responses_saved": len(results),
         "total_score": total_score,
-        "response_uuids": response_uuids,
+        "response_ids": response_ids,
         "assessment_completed": True,
         "next_redirect": completion_result["next_redirect"],
         "session_status": completion_result["session_status"],

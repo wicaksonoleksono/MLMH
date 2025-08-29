@@ -209,11 +209,11 @@ content %}
                   // Get camera settings from backend
                   const cameraSettings = {{ camera_settings | tojson | safe }} || {};
                   
-                  // Initialize camera manager without session UUID initially
+                  // Initialize camera manager without response ID initially
                   this.cameraManager = new CameraManager(this.sessionId, 'phq', cameraSettings);
                   await this.cameraManager.initialize();
                   
-                  // Don't set session UUID yet - will be set after first PHQ response
+                  // Don't set response ID yet - will be set after responses are saved
                   
                   console.log('📹 Camera initialized for PHQ assessment');
               } catch (error) {
@@ -349,9 +349,9 @@ content %}
                   if (result && result.status === 'OLKORECT') {
                       this.totalScore = result.data.total_score;
 
-                      // Upload camera captures with the actual response UUIDs
-                      if (this.cameraManager && result.data.response_uuids) {
-                          await this.cameraManager.uploadBatch(result.data.response_uuids);
+                      // Upload camera captures with the actual response IDs
+                      if (this.cameraManager && result.data.response_ids) {
+                          await this.cameraManager.uploadBatch(result.data.response_ids);
                       }
 
                       // Direct redirect - no second API call needed

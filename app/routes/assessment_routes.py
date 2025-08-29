@@ -64,28 +64,42 @@ def assessment_dashboard():
         return redirect(url_for('main.serve_index'))
 
     session = active_session
+    
+    print(f"🏠 Dashboard - session_id={session.id}, status={session.status}, phq_completed={session.phq_completed_at}, llm_completed={session.llm_completed_at}, is_first={session.is_first}")
 
     # Direct redirect logic based on session flow
     if not session.consent_completed_at:
+        print("❌ No consent - redirecting to consent")
         return redirect(url_for('assessment.consent_page'))
 
     if session.status == 'CONSENT' and not session.camera_completed:
+        print("❌ No camera check - redirecting to camera")
         return redirect(url_for('assessment.camera_check'))
 
     # Direct redirect logic for assessments - automatic flow
     if session.status in ['PHQ_IN_PROGRESS', 'LLM_IN_PROGRESS', 'BOTH_IN_PROGRESS']:
         next_assessment = session.next_assessment_type
+        print(f"📋 Session in progress - next_assessment: {next_assessment}")
         if next_assessment == 'phq':
+            print("➡️ Redirecting to PHQ")
             return redirect(url_for('assessment.phq_assessment'))
         elif next_assessment == 'llm':
+            print("➡️ Redirecting to LLM")
             return redirect(url_for('assessment.llm_assessment'))
 
     # If camera check is done but no assessment started, start first assessment
     if session.status == 'CAMERA_CHECK' and session.camera_completed:
+        print(f"📷 Camera check done - starting first assessment: {session.is_first}")
         if session.is_first == 'phq':
             return redirect(url_for('assessment.phq_assessment'))
         else:
             return redirect(url_for('assessment.llm_assessment'))
+    
+    # If session is completed, show completed dashboard
+    if session.status == 'COMPLETED':
+        print("🎉 Session completed - showing dashboard")
+    else:
+        print(f"⚠️ Unexpected dashboard state - status: {session.status}")
 
     return render_template('assessment/dashboard.html',
                            user=current_user,

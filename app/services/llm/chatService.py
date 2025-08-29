@@ -242,15 +242,15 @@ class LLMChatService:
         """
         # Check if conversation is complete
         if LLMChatService.is_conversation_complete(session_id):
-            # Get session for token
-            session = SessionService.get_session(session_id)
-            if not session:
-                raise ValueError('Session not found')
+            # Complete LLM assessment and get next step directly
+            completion_result = SessionService.complete_llm_and_get_next_step(session_id)
             
             return {
                 'status': 'success',
                 'conversation_completed': True,
-                'completion_redirect': f'/assessment/complete/llm/{session.session_token}'
+                'next_redirect': completion_result["next_redirect"],
+                'session_status': completion_result["session_status"],
+                'message': completion_result["message"]
             }
         else:
             return {

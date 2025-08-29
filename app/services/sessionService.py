@@ -214,6 +214,88 @@ class SessionService:
             return session
     
     @staticmethod
+    def complete_phq_and_get_next_step(session_id: int) -> Dict[str, Any]:
+        """Complete PHQ assessment and determine next step directly"""
+        with get_session() as db:
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                raise ValueError("Session not found")
+            
+            print(f"🔍 PHQ Completion - Before: session_id={session_id}, status={session.status}, phq_completed={session.phq_completed_at}, llm_completed={session.llm_completed_at}")
+            
+            # Complete PHQ assessment
+            session.complete_phq()
+            db.commit()
+            
+            # Get updated session to check status
+            updated_session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            print(f"🔍 PHQ Completion - After: session_id={session_id}, status={updated_session.status}, phq_completed={updated_session.phq_completed_at}, llm_completed={updated_session.llm_completed_at}")
+            
+            # Determine next redirect based on session status
+            if updated_session.status == 'LLM_IN_PROGRESS':
+                next_redirect = '/assessment/llm'
+                message = "PHQ selesai! Lanjut ke LLM assessment..."
+                print(f"✅ PHQ → LLM: Redirecting to {next_redirect}")
+            elif updated_session.status == 'COMPLETED':
+                next_redirect = '/assessment/'
+                message = "Semua assessment selesai! 🎉"
+                print(f"🎉 Both Complete: Redirecting to {next_redirect}")
+            else:
+                # Fallback
+                next_redirect = '/assessment/'
+                message = "PHQ assessment selesai!"
+                print(f"⚠️ Unexpected status {updated_session.status}: Fallback to {next_redirect}")
+            
+            return {
+                "session_id": session_id,
+                "assessment_completed": "phq",
+                "session_status": updated_session.status,
+                "next_redirect": next_redirect,
+                "message": message
+            }
+    
+    @staticmethod
+    def complete_llm_and_get_next_step(session_id: int) -> Dict[str, Any]:
+        """Complete LLM assessment and determine next step directly"""
+        with get_session() as db:
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                raise ValueError("Session not found")
+            
+            print(f"🔍 LLM Completion - Before: session_id={session_id}, status={session.status}, phq_completed={session.phq_completed_at}, llm_completed={session.llm_completed_at}")
+            
+            # Complete LLM assessment
+            session.complete_llm()
+            db.commit()
+            
+            # Get updated session to check status
+            updated_session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            print(f"🔍 LLM Completion - After: session_id={session_id}, status={updated_session.status}, phq_completed={updated_session.phq_completed_at}, llm_completed={updated_session.llm_completed_at}")
+            
+            # Determine next redirect based on session status
+            if updated_session.status == 'PHQ_IN_PROGRESS':
+                next_redirect = '/assessment/phq'
+                message = "LLM selesai! Lanjut ke PHQ assessment..."
+                print(f"✅ LLM → PHQ: Redirecting to {next_redirect}")
+            elif updated_session.status == 'COMPLETED':
+                next_redirect = '/assessment/'
+                message = "Semua assessment selesai! 🎉"
+                print(f"🎉 Both Complete: Redirecting to {next_redirect}")
+            else:
+                # Fallback
+                next_redirect = '/assessment/'
+                message = "LLM assessment selesai!"
+                print(f"⚠️ Unexpected status {updated_session.status}: Fallback to {next_redirect}")
+            
+            return {
+                "session_id": session_id,
+                "assessment_completed": "llm", 
+                "session_status": updated_session.status,
+                "next_redirect": next_redirect,
+                "message": message
+            }
+    
+    @staticmethod
     def reset_session_to_new_attempt(session_id: int, reason: str = "MANUAL_RESET") -> Dict[str, Any]:
         """Reset session to new attempt with version increment"""
         with get_session() as db:

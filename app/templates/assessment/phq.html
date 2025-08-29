@@ -307,21 +307,18 @@ content %}
                       responses: Object.values(this.responses)
                   };
 
-                  // Submit responses first
+                  // Submit responses and get direct redirect
                   const result = await apiCall(`{{ url_for("phq_assessment.submit_phq_responses", session_id=0) }}`.replace('0', this.sessionId), 'POST', payload);
                   if (result && result.status === 'OLKORECT') {
                       this.totalScore = result.data.total_score;
 
-                      // Call completion handler for seamless flow
-                      if (result.data.completion_redirect) {
-                          const completionResult = await apiCall(result.data.completion_redirect, 'POST', {});
-                          if (completionResult && completionResult.status === 'OLKORECT') {
-                              // Mark as completed before redirect to prevent abandon call
-                              this.markAsCompleted();
-                              // Immediate redirect to next assessment - no results display
-                              window.location.href = completionResult.data.next_redirect;
-                              return;
-                          }
+                      // Direct redirect - no second API call needed
+                      if (result.data.next_redirect) {
+                          // Mark as completed before redirect to prevent abandon call
+                          this.markAsCompleted();
+                          // Immediate redirect to next step
+                          window.location.href = result.data.next_redirect;
+                          return;
                       }
 
                       // Fallback - show completed state

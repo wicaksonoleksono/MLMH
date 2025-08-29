@@ -259,17 +259,12 @@ endblock %} {% block content %}
 
       // Initialize
       init() {
-        console.log("🚀 Initializing LLM Chat Interface");
-        console.log("📝 Session Token:", this.sessionToken);
-
         this.startConversationTimer();
         this.initializeChat();
       },
 
       async initializeChat() {
         try {
-          console.log("🔧 Starting chat session...");
-
           // Start chat session
           const response = await fetch(
             `{{ url_for("llm_assessment.start_chat", session_token='TOKEN') }}`.replace(
@@ -283,7 +278,6 @@ endblock %} {% block content %}
           );
 
           const result = await response.json();
-          console.log("✅ Chat session started:", result);
 
           if (result.status === "success" && result.initial_message) {
             // Add initial AI greeting
@@ -320,7 +314,6 @@ endblock %} {% block content %}
           );
 
           const result = await response.json();
-          console.log("📜 Chat history loaded:", result);
 
           if (
             result.status === "success" &&
@@ -358,8 +351,6 @@ endblock %} {% block content %}
 
         const userMessage = this.currentMessage.trim();
         this.currentMessage = "";
-
-        console.log("📤 Sending message:", userMessage);
 
         // Add user message to UI
         this.messages.push({
@@ -399,7 +390,6 @@ endblock %} {% block content %}
           );
 
           const postResult = await postResponse.json();
-          <!-- console.log("📦 POST Result:", postResult); -->
 
           // Check if the API response wrapper has the success data
           const actualResult =
@@ -411,7 +401,6 @@ endblock %} {% block content %}
 
           // Step 2: Stream response using EventSource with message_id
           const eventSource = new EventSource(actualResult.stream_url);
-          console.log("🔄 Starting EventSource:", actualResult.stream_url);
 
           // Get reference to the bot message we just added
           const botMessage = this.messages[this.messages.length - 1];
@@ -431,7 +420,6 @@ endblock %} {% block content %}
                 eventSource.close();
 
                 if (data.conversation_ended) {
-                  console.log("🏁 Conversation ended automatically");
                   this.handleConversationEnd();
                 }
               } else if (data.type === "error") {
@@ -442,7 +430,6 @@ endblock %} {% block content %}
                 eventSource.close();
               } else if (data.type === "stream_start") {
                 // Handle stream start signal
-                console.log("🚀 Stream started");
               }
             } catch (e) {
               console.error("Error parsing SSE data:", e);
@@ -469,7 +456,6 @@ endblock %} {% block content %}
         if (this.isFinishing || this.isTyping) return;
 
         this.isFinishing = true;
-        console.log("🏁 Manually finishing conversation");
 
         try {
           const response = await fetch(
@@ -484,40 +470,14 @@ endblock %} {% block content %}
           );
 
           const result = await response.json();
-          console.log("✅ Conversation finished:", result);
 
           // Handle API response wrapper
           const actualResult =
             result.status === "OLKORECT" ? result.data : result;
 
-          if (
-            actualResult.status === "success" &&
-            actualResult.completion_redirect
-          ) {
-            // Call universal completion handler
-            const completionResponse = await fetch(
-              actualResult.completion_redirect,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-              }
-            );
-
-            const completionResult = await completionResponse.json();
-            console.log("🎯 Completion result:", completionResult);
-
-            if (completionResult.status === "OLKORECT") {
-              // Redirect to next step  
-              const completionData = completionResult.data;
-              console.log("📍 Redirecting to:", completionData.next_redirect);
-              window.location.href = completionData.next_redirect;
-            } else {
-              alert(
-                "Error completing assessment: " +
-                  (completionResult.error || "Unknown error")
-              );
-              this.isFinishing = false;
-            }
+          if (actualResult.status === "success" && actualResult.next_redirect) {
+            // Direct redirect - no second API call needed
+            window.location.href = actualResult.next_redirect;
           } else {
             alert(
               "Error finishing conversation: " +

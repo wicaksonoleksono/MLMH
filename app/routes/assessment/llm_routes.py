@@ -489,6 +489,10 @@ def submit_turn(session_id):
             # Get analysis and total turns for reference
             analysis = LLMConversationService.get_session_analysis(session_id)
             total_turns = LLMConversationService.get_total_turns(session_id)
+            
+            # Complete LLM assessment and get next step directly
+            from ...services.sessionService import SessionService
+            completion_result = SessionService.complete_llm_and_get_next_step(session_id)
 
             return {
                 "conversation_ended": True,
@@ -497,8 +501,9 @@ def submit_turn(session_id):
                     "total_aspects_detected": analysis.total_aspects_detected if analysis else 0,
                     "average_severity": analysis.average_severity_score if analysis else 0.0
                 } if analysis else None,
-                "completion_redirect": f"/assessment/complete/llm/{session_id}",
-                "message": "LLM conversation ended! Completing assessment..."
+                "next_redirect": completion_result["next_redirect"],
+                "session_status": completion_result["session_status"],
+                "message": completion_result["message"]
             }
 
         # Return next turn

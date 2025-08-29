@@ -1,4 +1,4 @@
-{% extends "base.html" %} {% block title %}LLM Assessment - Chat dengan Anisa{%
+{% extends "base.html" %} {% block title %}Open Question Assessment - Chat dengan Anisa{%
 endblock %} {% block content %}
 <div class="min-h-screen bg-gray-50" x-data="chatInterface()">
   <!-- Navigation -->
@@ -9,7 +9,7 @@ endblock %} {% block content %}
         <div
           class="bg-gradient-to-r from-green-500 to-teal-500 rounded-lg px-3 py-1"
         >
-          <span class="text-white font-medium text-sm">LLM Assessment</span>
+          <span class="text-white font-medium text-sm">Open Question Assessment</span>
         </div>
       </div>
       <div class="flex items-center space-x-4">
@@ -186,46 +186,6 @@ endblock %} {% block content %}
             ></span>
           </div>
 
-          <!-- Finish Button -->
-          <button
-            @click="finishConversation()"
-            :disabled="isTyping || isFinishing || messages.length < 2"
-            x-show="!conversationEnded"
-            class="px-6 py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-lg font-medium hover:from-orange-600 hover:to-red-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
-          >
-            <span x-show="!isFinishing" class="flex items-center">
-              <span>Selesaikan Percakapan</span>
-              <svg
-                class="ml-2 w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-            </span>
-            <span x-show="isFinishing" class="flex items-center">
-              <svg
-                class="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-              Menyelesaikan...
-            </span>
-          </button>
 
           <!-- Conversation Ended Message -->
           <div x-show="conversationEnded" class="text-green-600 font-medium">
@@ -253,7 +213,7 @@ endblock %} {% block content %}
       loading: true,
 
       // Session data
-      sessionToken: "{{ session.session_token }}",
+      sessionId: "{{ session.id }}",
       exchangeCount: 0,
       messageId: 1,
 
@@ -267,9 +227,9 @@ endblock %} {% block content %}
         try {
           // Start chat session
           const response = await fetch(
-            `{{ url_for("llm_assessment.start_chat", session_token='TOKEN') }}`.replace(
+            `{{ url_for("llm_assessment.start_chat", session_id='TOKEN') }}`.replace(
               "TOKEN",
-              this.sessionToken
+              this.sessionId
             ),
             {
               method: "POST",
@@ -376,9 +336,9 @@ endblock %} {% block content %}
         // Step 1: POST message with proper headers/auth
         try {
           const postResponse = await fetch(
-            `{{ url_for("llm_assessment.send_message_proper", session_token='TOKEN') }}`.replace(
+            `{{ url_for("llm_assessment.send_message_proper", session_id='TOKEN') }}`.replace(
               "TOKEN",
-              this.sessionToken
+              this.sessionId
             ),
             {
               method: "POST",
@@ -459,9 +419,9 @@ endblock %} {% block content %}
 
         try {
           const response = await fetch(
-            `{{ url_for("llm_assessment.finish_chat", session_token='TOKEN') }}`.replace(
+            `{{ url_for("llm_assessment.finish_chat", session_id='TOKEN') }}`.replace(
               "TOKEN",
-              this.sessionToken
+              this.sessionId
             ),
             {
               method: "POST",

@@ -71,22 +71,25 @@ endblock %} {% block content %}
             melanjutkan atau memulai ulang.
           </p>
           <div class="flex flex-col sm:flex-row gap-3">
-            <button
-              @click="recoverSession(false)"
-              x-bind:disabled="loading"
-              class="bg-white text-yellow-600 hover:bg-yellow-50 font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
-            >
-              <span x-show="!loading">Lanjutkan Assessment</span>
-              <span x-show="loading">Memproses...</span>
-            </button>
-            <button
-              @click="recoverSession(true)"
-              x-bind:disabled="loading"
-              class="bg-yellow-700 hover:bg-yellow-800 text-white font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
-            >
-              <span x-show="!loading">Mulai Ulang</span>
-              <span x-show="loading">Memproses...</span>
-            </button>
+            <form method="POST" :action="`{{ url_for('assessment.recover_session', session_id='TOKEN') }}`.replace('TOKEN', recoverableSession.id)" style="display: inline;">
+              <input type="hidden" name="clear_data" value="false">
+              <button
+                type="submit"
+                class="bg-white text-yellow-600 hover:bg-yellow-50 font-medium py-2 px-4 rounded-lg transition-colors"
+              >
+                Lanjutkan Assessment
+              </button>
+            </form>
+            <form method="POST" :action="`{{ url_for('assessment.recover_session', session_id='TOKEN') }}`.replace('TOKEN', recoverableSession.id)" style="display: inline;">
+              <input type="hidden" name="clear_data" value="true">
+              <button
+                type="submit"
+                onclick="return confirm('Mulai sesi baru? Semua progress akan dihapus dan dimulai dari awal.')"
+                class="bg-yellow-700 hover:bg-yellow-800 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+              >
+                Mulai Ulang
+              </button>
+            </form>
             <button
               @click="dismissRecovery()"
               class="text-yellow-100 hover:text-white font-medium py-2 px-4 transition-colors"
@@ -131,14 +134,15 @@ endblock %} {% block content %}
             Assessment akan dimulai secara otomatis sesuai distribusi sistem
           </p>
         </div>
-        <button
-          @click="startAssessment()"
-          x-bind:disabled="loading"
-          class="bg-white text-indigo-600 hover:bg-indigo-50 font-bold py-4 px-8 rounded-xl transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:transform-none"
-        >
-          <span x-show="!loading">Mulai Sekarang</span>
-          <span x-show="loading">Memproses...</span>
-        </button>
+        <form method="POST" action="{{ url_for('assessment.start_assessment') }}">
+          <button
+            type="submit"
+            class="bg-white text-indigo-600 hover:bg-indigo-50 font-bold py-4 px-8 rounded-xl transition-all duration-200 transform hover:scale-105"
+          >
+            <span x-show="!dismissedRecoverableSession">Mulai Sekarang</span>
+            <span x-show="dismissedRecoverableSession">Mulai Ulang Assessment</span>
+          </button>
+        </form>
       </div>
     </div>
 
@@ -234,7 +238,7 @@ endblock %} {% block content %}
                     :class="session.llm_completed ? 'text-green-600' : 'text-gray-400'"
                   >
                     <span x-text="session.llm_completed ? '✓' : '○'"></span>
-                    <span class="ml-1">LLM</span>
+                    <span class="ml-1">Open Question</span>
                   </span>
                 </div>
 
@@ -252,12 +256,16 @@ endblock %} {% block content %}
                   x-show="session.status_class === 'failed' && session.can_reset"
                   class="mt-3"
                 >
-                  <button
-                    @click="resetSession(session.session_token)"
-                    class="bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors"
-                  >
-                    Coba Lagi
-                  </button>
+                  <form method="POST" :action="`{{ url_for('assessment.reset_session_to_new_attempt', session_id='TOKEN') }}`.replace('TOKEN', session.id)" style="display: inline;">
+                    <input type="hidden" name="reason" value="USER_INITIATED_RESET">
+                    <button
+                      type="submit"
+                      onclick="return confirm('Mulai sesi baru? Semua progress akan dihapus dan dimulai dari awal.')"
+                      class="bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors"
+                    >
+                      Coba Lagi
+                    </button>
+                  </form>
                 </div>
               </div>
             </div>
@@ -298,10 +306,10 @@ endblock %} {% block content %}
 <script>
   function dashboardManager() {
     return {
-      loading: false,
       sessions: [],
       sessionsLoading: false,
       recoverableSession: null,
+      dismissedRecoverableSession: null, // Track dismissed recoverable session for reset flow
 
       async init() {
         await this.checkRecoverableSession();
@@ -348,36 +356,46 @@ endblock %} {% block content %}
         }
       },
 
-      async recoverSession(clearData = false) {
-        if (this.loading || !this.recoverableSession) return;
-
-        this.loading = true;
-        try {
-          const result = await apiCall(
-            `/assessment/recover/${this.recoverableSession.id}`,
-            "POST",
-            {
-              clear_data: clearData,
-            }
-          );
-
-          if (result && result.status === "OLKORECT") {
-            // Show success message
-            alert(result.message);
-            // Redirect to assessment
-            window.location.href = result.redirect_url;
-          } else {
-            alert(result.error || "Gagal memulihkan session");
-          }
-        } catch (error) {
-          alert("Kesalahan: " + error.message);
-        } finally {
-          this.loading = false;
-        }
-      },
 
       dismissRecovery() {
+        // Store the dismissed recoverable session for potential reset flow
+        this.dismissedRecoverableSession = this.recoverableSession;
         this.recoverableSession = null;
+      },
+
+      async resetRecoverableSession() {
+        if (!this.dismissedRecoverableSession) {
+          throw new Error('No dismissed recoverable session to reset');
+        }
+        
+        try {
+          console.log('🔄 Resetting dismissed recoverable session:', this.dismissedRecoverableSession.id);
+          
+          const resetUrl = `{{ url_for("assessment.reset_session_to_new_attempt", session_id="TOKEN") }}`.replace('TOKEN', this.dismissedRecoverableSession.id);
+          const response = await fetch(resetUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              reason: 'USER_CANCELLATION_RECOVERY',
+              clear_data: true
+            })
+          });
+          
+          const result = await response.json();
+          
+          if (result && result.status === 'OLKORECT') {
+            console.log('✅ Recoverable session reset successfully, redirecting to assessment');
+            // Clear the dismissed session since we've reset it
+            this.dismissedRecoverableSession = null;
+            // Redirect to assessment flow
+            window.location.href = "/assessment";
+          } else {
+            throw new Error(result.error || 'Failed to reset recoverable session');
+          }
+        } catch (error) {
+          console.error('❌ Error resetting recoverable session:', error);
+          throw error; // Let parent catch handle this
+        }
       },
 
       formatDate(dateString) {
@@ -392,63 +410,7 @@ endblock %} {% block content %}
         });
       },
 
-      async startAssessment() {
-        if (this.loading) return;
 
-        this.loading = true;
-        try {
-          const startUrl = "{{ url_for('assessment.start_assessment') }}";
-          const response = await fetch(startUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-          });
-          const result = await response.json();
-          if (result && result.status === "OLKORECT") {
-            // Redirect to assessment flow
-            window.location.href = "/assessment";
-          } else if (result && result.status === "SETTINGS_NOT_CONFIGURED") {
-            // Redirect to settings error page
-            window.location.href = result.redirect_url;
-          } else {
-            alert(result.error || "Gagal memulai assessment");
-          }
-        } catch (error) {
-          alert("Kesalahan: " + error.message);
-        } finally {
-          this.loading = false;
-        }
-      },
-
-      async resetSession(sessionToken) {
-        if (!confirm('Mulai sesi baru? Semua progress akan dihapus dan dimulai dari awal.')) {
-          return;
-        }
-
-        try {
-          const resetUrl = `{{ url_for("assessment.reset_session_to_new_attempt", session_token="TOKEN") }}`.replace('TOKEN', sessionToken);
-          const response = await fetch(resetUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ reason: 'USER_INITIATED_RESET' })
-          });
-          const result = await response.json();
-          
-          if (result && result.status === 'OLKORECT') {
-            alert(result.message || 'Session berhasil direset');
-            // Reload sessions to show updated status
-            await this.loadSessions();
-            // Redirect to assessment flow
-            window.location.href = result.next_redirect || '/assessment/';
-          } else if (result && result.status === 'SETTINGS_NOT_CONFIGURED') {
-            // Redirect to settings error page
-            window.location.href = result.redirect_url || '/error/settings-not-configured';
-          } else {
-            alert(result.error || 'Gagal mereset session');
-          }
-        } catch (error) {
-          alert('Kesalahan: ' + error.message);
-        }
-      },
     };
   }
 </script>

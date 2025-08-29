@@ -1,5 +1,5 @@
 # app/routes/assessment_routes.py
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
 from flask_login import current_user, login_required
 from ..decorators import raw_response
 from ..services.sessionService import SessionService
@@ -9,42 +9,55 @@ assessment_bp = Blueprint('assessment', __name__, url_prefix='/assessment')
 
 @assessment_bp.route('/start', methods=['POST'])
 @login_required
-@raw_response
 def start_assessment():
-    """Create new assessment session with recovery options"""
+    """Create new assessment session with intelligent recovery handling"""
     try:
+        # Smart session creation - check for recoverable sessions first
+        from ..services.session.sessionManager import SessionManager
+        
+        recoverable_session = SessionManager.get_user_recoverable_session(current_user.id)
+        
+        if recoverable_session:
+            # User has recoverable session - reset it instead of creating new one
+            print(f"🔄 Found recoverable session {recoverable_session.id}, resetting instead of creating new")
+            reset_result = SessionService.reset_session_to_new_attempt(
+                recoverable_session.id, 
+                "AUTO_RECOVERY_ON_NEW_START"
+            )
+            
+            if reset_result['success']:
+                print(f"✅ Successfully reset recoverable session to new attempt")
+                flash('Sesi sebelumnya telah direset. Memulai assessment baru.', 'success')
+                return redirect(url_for('assessment.assessment_dashboard'))
+            else:
+                print(f"❌ Failed to reset recoverable session: {reset_result.get('message')}")
+                flash('Gagal mereset sesi sebelumnya.', 'error')
+                return redirect(url_for('main.serve_index'))
 
-        # Check if user can create new session (max 2 sessions total)
+        # Check if user can create new session
         if not SessionService.can_create_new_session(current_user.id):
-            return jsonify({
-                "status": "SNAFU", 
-                "error": "Anda sudah mencapai maksimum 2 sesi assessment"
-            }), 400
+            flash('Anda sudah mencapai maksimum 2 sesi assessment.', 'error')
+            return redirect(url_for('main.serve_index'))
 
         # Create new session with improved system
         session = SessionService.create_session(current_user.id)
-
-        return jsonify({
-            "status": "OLKORECT",
-            "session_id": session.id,
-            "session_token": session.session_token,
-            "is_first": session.is_first,
-            "assessment_order": session.assessment_order,
-            "next_step": "consent"
-        })
+        print(f"✅ Created new session {session.id}")
+        
+        flash('Assessment baru berhasil dibuat!', 'success')
+        return redirect(url_for('assessment.assessment_dashboard'))
 
     except ValueError as e:
         error_message = str(e)
         if "Pengaturan assessment belum lengkap" in error_message:
-            return jsonify({
-                "status": "SETTINGS_NOT_CONFIGURED",
-                "error": "Pengaturan assessment belum dikonfigurasi. Silakan menghubungi penyelenggara.",
-                "redirect_url": url_for('main.settings_not_configured')
-            }), 400
+            flash('Pengaturan assessment belum dikonfigurasi. Silakan menghubungi penyelenggara.', 'error')
+            return redirect(url_for('main.settings_not_configured'))
         else:
-            return jsonify({"status": "SNAFU", "error": error_message}), 400
+            flash(error_message, 'error')
+            return redirect(url_for('main.serve_index'))
     except Exception as e:
-        return jsonify({"status": "SNAFU", "error": str(e)}), 500
+        print(f"❌ Error creating session: {str(e)}")
+        flash('Terjadi kesalahan sistem. Silakan coba lagi.', 'error')
+        return redirect(url_for('main.serve_index'))
 
 
 @assessment_bp.route('/')
@@ -69,11 +82,16 @@ def assessment_dashboard():
 
     # Direct redirect logic based on session flow
     if not session.consent_completed_at:
-        print("❌ No consent - redirecting to consent")
+        print(" No consent - redirecting to consent")
         return redirect(url_for('assessment.consent_page'))
 
     if session.status == 'CONSENT' and not session.camera_completed:
-        print("❌ No camera check - redirecting to camera")
+        print(" No camera check - redirecting to camera")
+        return redirect(url_for('assessment.camera_check'))
+    
+    # Handle CAMERA_CHECK status properly
+    if session.status == 'CAMERA_CHECK' and not session.camera_completed:
+        print("📷 Camera check incomplete - redirecting to camera check")
         return redirect(url_for('assessment.camera_check'))
 
     # Direct redirect logic for assessments - automatic flow
@@ -278,12 +296,12 @@ def llm_assessment():
                            session=session)
 
 
-@assessment_bp.route('/complete/<assessment_type>/<session_token>', methods=['POST'])
+@assessment_bp.route('/complete/<assessment_type>/<session_id>', methods=['POST'])
 @login_required
 @raw_response
-def complete_assessment(assessment_type, session_token):
+def complete_assessment(assessment_type, session_id):
     """Universal completion handler for any assessment type"""
-    session = SessionService.get_session_by_token(session_token)
+    session = SessionService.get_session(session_id)
 
     # Complete the specified assessment
     if assessment_type == 'phq':
@@ -329,34 +347,71 @@ def complete_assessment(assessment_type, session_token):
     })
 
 
-@assessment_bp.route('/reset-session/<session_token>', methods=['POST'])
+@assessment_bp.route('/reset-session/<session_id>', methods=['POST'])
 @login_required
-@raw_response
-def reset_session_to_new_attempt(session_token):
-    """Reset session to new attempt with version increment (using secure token)"""
+def reset_session_to_new_attempt(session_id):
+    """Reset session to new attempt with version increment (using UUID)"""
     try:
-        session = SessionService.get_session_by_token(session_token)
+        session = SessionService.get_session(session_id)
         if not session:
-            return jsonify({"status": "SNAFU", "error": "Session not found"}), 404
+            flash('Session tidak ditemukan.', 'error')
+            return redirect(url_for('main.serve_index'))
         
         # Verify session belongs to current user
         if int(session.user_id) != int(current_user.id):
-            return jsonify({"status": "SNAFU", "error": "Access denied"}), 403
+            flash('Akses ditolak.', 'error')
+            return redirect(url_for('main.serve_index'))
         
-        data = request.get_json() or {}
-        reason = data.get('reason', 'PHQ_COMPLETED_LLM_INCOMPLETE')
+        reason = request.form.get('reason', 'USER_INITIATED_RESET')
         result = SessionService.reset_session_to_new_attempt(session.id, reason)
         
-        return jsonify({
-            "status": "OLKORECT",
-            "data": result,
-            "next_redirect": "/assessment/",
-            "message": f"Session berhasil direset ke {result['current_attempt']} dari {result['previous_attempt']}"
-        })
+        flash(f'Session berhasil direset. Memulai assessment baru.', 'success')
+        return redirect(url_for('assessment.assessment_dashboard'))
+        
     except ValueError as e:
-        return jsonify({"status": "SNAFU", "error": str(e)}), 400
+        flash(str(e), 'error')
+        return redirect(url_for('main.serve_index'))
     except Exception as e:
-        return jsonify({"status": "SNAFU", "error": str(e)}), 500
+        print(f"❌ Error resetting session: {str(e)}")
+        flash('Terjadi kesalahan sistem. Silakan coba lagi.', 'error')
+        return redirect(url_for('main.serve_index'))
+
+
+@assessment_bp.route('/recover/<session_id>', methods=['POST'])
+@login_required
+def recover_session(session_id):
+    """Continue or reset a recoverable session"""
+    try:
+        session = SessionService.get_session(session_id)
+        if not session:
+            flash('Session tidak ditemukan.', 'error')
+            return redirect(url_for('main.serve_index'))
+        
+        # Verify session belongs to current user
+        if int(session.user_id) != int(current_user.id):
+            flash('Akses ditolak.', 'error')
+            return redirect(url_for('main.serve_index'))
+        
+        clear_data = request.form.get('clear_data', 'false').lower() == 'true'
+        
+        if clear_data:
+            # Reset the session (clear data and start fresh)
+            result = SessionService.reset_session_to_new_attempt(session.id, "USER_RECOVERY_RESET")
+            flash('Session direset. Memulai assessment baru.', 'success')
+        else:
+            # Continue the session (just reactivate)
+            session = SessionService.recover_session(session.id, clear_data=False)
+            flash('Melanjutkan assessment sebelumnya.', 'info')
+        
+        return redirect(url_for('assessment.assessment_dashboard'))
+        
+    except ValueError as e:
+        flash(str(e), 'error')
+        return redirect(url_for('main.serve_index'))
+    except Exception as e:
+        print(f"❌ Error recovering session: {str(e)}")
+        flash('Terjadi kesalahan sistem. Silakan coba lagi.', 'error')
+        return redirect(url_for('main.serve_index'))
 
 @assessment_bp.route('/sessions', methods=['GET'])
 @login_required
@@ -414,7 +469,7 @@ def check_recoverable_session():
         return jsonify({"status": "SNAFU", "error": str(e)}), 500
 
 
-@assessment_bp.route('/recover/<int:session_id>', methods=['POST'])
+@assessment_bp.route('/recover/<session_id>', methods=['POST'])
 @login_required
 @raw_response
 def recover_session(session_id):
@@ -448,7 +503,7 @@ def recover_session(session_id):
         return jsonify({"status": "SNAFU", "error": str(e)}), 500
 
 
-@assessment_bp.route('/abandon/<int:session_id>', methods=['POST'])
+@assessment_bp.route('/abandon/<session_id>', methods=['POST'])
 @login_required
 @raw_response
 def abandon_session(session_id):

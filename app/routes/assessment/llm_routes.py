@@ -66,14 +66,14 @@ def stream_conversation(session_id):
     )
 
 
-@llm_assessment_bp.route('/send-message/<session_token>', methods=['POST'])
+@llm_assessment_bp.route('/send-message/<session_id>', methods=['POST'])
 @user_required
 @api_response
-def send_message_proper(session_token):
+def send_message_proper(session_id):
     """POST endpoint for sending message with proper headers/auth"""
-    # Get session using secure token
-    session = SessionService.get_session_by_token(session_token)
-    if not session or int(session.user_id) != int(current_user.id):
+    # Get session using UUID
+    session = SessionService.get_session(session_id)
+    if not session or str(session.user_id) != str(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     # Get message from JSON body
@@ -588,14 +588,14 @@ def debug_session_status(session_id):
 # NEW SSE STREAMING ENDPOINTS (AssessmentOrchestrator Integration)
 # ============================================================================
 
-@llm_assessment_bp.route('/start-chat/<session_token>', methods=['POST'])
+@llm_assessment_bp.route('/start-chat/<session_id>', methods=['POST'])
 @user_required
 @api_response
-def start_chat(session_token):
+def start_chat(session_id):
     """Initialize LLM chat using new LangChain service"""
     # Validate session belongs to current user
-    session = SessionService.get_session_by_token(session_token)
-    if not session or int(session.user_id) != int(current_user.id):
+    session = SessionService.get_session(session_id)
+    if not session or str(session.user_id) != str(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     try:
@@ -646,14 +646,14 @@ def chat_stream_new(session_id):
     return response
 
 
-@llm_assessment_bp.route('/finish-chat/<session_token>', methods=['POST'])
+@llm_assessment_bp.route('/finish-chat/<session_id>', methods=['POST'])
 @user_required
 @api_response
-def finish_chat(session_token):
+def finish_chat(session_id):
     """Finish conversation and prepare for completion handler"""
     # Validate session belongs to current user
-    session = SessionService.get_session_by_token(session_token)
-    if not session or int(session.user_id) != int(current_user.id):
+    session = SessionService.get_session(session_id)
+    if not session or str(session.user_id) != str(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     try:

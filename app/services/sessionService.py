@@ -55,15 +55,68 @@ class SessionService:
     
     @staticmethod
     def can_create_new_session(user_id: int) -> bool:
-        """Check if user can create a new session (max 2 sessions)"""
-        return SessionService.get_user_session_count(user_id) < 2
+        """Check if user can create a new session (max 2 sessions, smart about incomplete)"""
+        with get_session() as db:
+            # Check for active sessions first
+            active_sessions = db.query(AssessmentSession).filter(
+                AssessmentSession.user_id == user_id,
+                AssessmentSession.status.in_(['CREATED', 'CONSENT', 'CAMERA_CHECK',
+                                             'PHQ_IN_PROGRESS', 'LLM_IN_PROGRESS', 'BOTH_IN_PROGRESS'])
+            ).count()
+            
+            # If there are active sessions, cannot create new one
+            if active_sessions > 0:
+                return False
+            
+            # Count meaningful sessions (completed + recoverable incomplete)
+            completed_sessions = db.query(AssessmentSession).filter(
+                AssessmentSession.user_id == user_id,
+                AssessmentSession.status == 'COMPLETED'
+            ).count()
+            
+            # If user has 2 completed sessions, they've reached the limit
+            if completed_sessions >= SessionService.MAX_SESSIONS_PER_USER:
+                return False
+                
+            # Note: We removed the recoverable session blocking here because 
+            # the /assessment/start route now handles recoverable sessions intelligently
+            # by auto-resetting them instead of blocking with errors
+            
+            # Count all sessions to enforce total limit
+            total_sessions = db.query(AssessmentSession).filter_by(user_id=user_id).count()
+            
+            return total_sessions < SessionService.MAX_SESSIONS_PER_USER
 
     @staticmethod
     def create_session(user_id: int) -> AssessmentSession:
-        """Create new session with improved recovery handling - NO MORE NUCLEAR CLEANUP"""
-        # Check session limit first
-        if not SessionService.can_create_new_session(user_id):
-            raise ValueError("User sudah mencapai maksimum 2 session")
+        """Create new session with atomic validation to prevent race conditions"""
+        # Double-check session limit with database lock to prevent race conditions
+        with get_session() as db:
+            # Check for active sessions
+            active_sessions = db.query(AssessmentSession).filter(
+                AssessmentSession.user_id == user_id,
+                AssessmentSession.status.in_(['CREATED', 'CONSENT', 'CAMERA_CHECK',
+                                             'PHQ_IN_PROGRESS', 'LLM_IN_PROGRESS', 'BOTH_IN_PROGRESS'])
+            ).count()
+            
+            if active_sessions > 0:
+                raise ValueError("Anda sudah memiliki sesi aktif. Selesaikan sesi yang ada terlebih dahulu.")
+            
+            # Note: Recoverable session check removed - handled at route level by auto-reset
+            
+            # Check completed sessions limit
+            completed_sessions = db.query(AssessmentSession).filter(
+                AssessmentSession.user_id == user_id,
+                AssessmentSession.status == 'COMPLETED'
+            ).count()
+            
+            if completed_sessions >= SessionService.MAX_SESSIONS_PER_USER:
+                raise ValueError("Anda sudah mencapai maksimum 2 sesi assessment yang telah diselesaikan.")
+            
+            # Final total check
+            total_sessions = db.query(AssessmentSession).filter_by(user_id=user_id).count()
+            if total_sessions >= SessionService.MAX_SESSIONS_PER_USER:
+                raise ValueError("Anda sudah mencapai maksimum 2 sesi assessment.")
         
         # Use new SessionManager for clean session creation
         session = SessionManager.create_new_session(user_id)
@@ -81,16 +134,12 @@ class SessionService:
     
     
     @staticmethod
-    def get_session(session_id: int) -> Optional[AssessmentSession]:
+    def get_session(session_id: str) -> Optional[AssessmentSession]:
         """Get session by ID"""
         with get_session() as db:
             return db.query(AssessmentSession).filter_by(id=session_id).first()
     
-    @staticmethod
-    def get_session_by_token(session_token: str) -> Optional[AssessmentSession]:
-        """Get session by secure token"""
-        with get_session() as db:
-            return db.query(AssessmentSession).filter_by(session_token=session_token).first()
+    # Remove get_session_by_token - UUID serves as both ID and token
     
     @staticmethod
     def get_user_sessions(user_id: int) -> list[AssessmentSession]:
@@ -125,8 +174,7 @@ class SessionService:
                     completed_assessments.append('LLM')
                 
                 result.append({
-                    'id': session.id,
-                    'session_token': session.session_token,  # Add secure token for operations
+                    'id': session.id,  # UUID serves as both ID and secure token
                     'status': session.status,
                     'status_indicator': status_indicator,
                     'status_text': status_text,
@@ -153,20 +201,20 @@ class SessionService:
     
     @staticmethod
     def get_active_session(user_id: int) -> Optional[AssessmentSession]:
-        """Get user's active/incomplete session if exists"""
+        """Get user's truly active session (not incomplete/abandoned)"""
         with get_session() as db:
             return db.query(AssessmentSession).filter(
                 AssessmentSession.user_id == user_id,
                 AssessmentSession.status.in_([
                     'CREATED', 'CONSENT', 'CAMERA_CHECK', 
-                    'PHQ_IN_PROGRESS', 'LLM_IN_PROGRESS', 'BOTH_IN_PROGRESS',
-                    'INCOMPLETE'  # Include incomplete for recovery scenarios
+                    'PHQ_IN_PROGRESS', 'LLM_IN_PROGRESS', 'BOTH_IN_PROGRESS'
+                    # Removed 'INCOMPLETE' - incomplete sessions should not block new session creation
                 ]),
                 AssessmentSession.is_active == True
-            ).first()
+            ).order_by(AssessmentSession.created_at.desc()).first()
     
     @staticmethod
-    def update_consent_data(session_id: int, consent_data: Dict[str, Any]) -> AssessmentSession:
+    def update_consent_data(session_id: str, consent_data: Dict[str, Any]) -> AssessmentSession:
         """Update session with consent data"""
         with get_session() as db:
             session = db.query(AssessmentSession).filter_by(id=session_id).first()
@@ -178,7 +226,7 @@ class SessionService:
             return session
     
     @staticmethod
-    def complete_phq_assessment(session_id: int) -> AssessmentSession:
+    def complete_phq_assessment(session_id: str) -> AssessmentSession:
         """Mark PHQ assessment as completed"""
         with get_session() as db:
             session = db.query(AssessmentSession).filter_by(id=session_id).first()
@@ -190,7 +238,7 @@ class SessionService:
             return session
     
     @staticmethod
-    def complete_camera_check(session_id: int) -> AssessmentSession:
+    def complete_camera_check(session_id: str) -> AssessmentSession:
         """Mark camera check as completed and start first assessment"""
         with get_session() as db:
             session = db.query(AssessmentSession).filter_by(id=session_id).first()
@@ -202,7 +250,7 @@ class SessionService:
             return session
     
     @staticmethod
-    def complete_llm_assessment(session_id: int) -> AssessmentSession:
+    def complete_llm_assessment(session_id: str) -> AssessmentSession:
         """Mark LLM assessment as completed"""
         with get_session() as db:
             session = db.query(AssessmentSession).filter_by(id=session_id).first()
@@ -214,7 +262,7 @@ class SessionService:
             return session
     
     @staticmethod
-    def complete_phq_and_get_next_step(session_id: int) -> Dict[str, Any]:
+    def complete_phq_and_get_next_step(session_id: str) -> Dict[str, Any]:
         """Complete PHQ assessment and determine next step directly"""
         with get_session() as db:
             session = db.query(AssessmentSession).filter_by(id=session_id).first()
@@ -255,7 +303,7 @@ class SessionService:
             }
     
     @staticmethod
-    def complete_llm_and_get_next_step(session_id: int) -> Dict[str, Any]:
+    def complete_llm_and_get_next_step(session_id: str) -> Dict[str, Any]:
         """Complete LLM assessment and determine next step directly"""
         with get_session() as db:
             session = db.query(AssessmentSession).filter_by(id=session_id).first()
@@ -296,7 +344,7 @@ class SessionService:
             }
     
     @staticmethod
-    def reset_session_to_new_attempt(session_id: int, reason: str = "MANUAL_RESET") -> Dict[str, Any]:
+    def reset_session_to_new_attempt(session_id: str, reason: str = "MANUAL_RESET") -> Dict[str, Any]:
         """Reset session to new attempt with version increment"""
         with get_session() as db:
             session = db.query(AssessmentSession).filter_by(id=session_id).first()
@@ -315,8 +363,7 @@ class SessionService:
                 raise RuntimeError("Failed to reset session to new attempt")
             
             # Clear related data (PHQ responses, LLM conversations, etc.)
-            from ..model.assessment.phq import PHQResponse
-            from ..model.assessment.llm import LLMConversationTurn, LLMAnalysisResult
+            from ..model.assessment.sessions import PHQResponse, LLMConversationTurn, LLMAnalysisResult
             
             # Delete PHQ responses for this session
             db.query(PHQResponse).filter_by(session_id=session_id).delete()
@@ -343,7 +390,7 @@ class SessionService:
             }
 
     @staticmethod
-    def delete_session(session_id: int) -> bool:
+    def delete_session(session_id: str) -> bool:
         """Delete session"""
         with get_session() as db:
             session = db.query(AssessmentSession).filter_by(id=session_id).first()

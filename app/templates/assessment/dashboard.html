@@ -107,7 +107,7 @@ block content %}
               %H:%M') if session.phq_completed_at else '-' }}
             </p>
             <p>
-              LLM selesai: {{ session.llm_completed_at.strftime('%d/%m/%Y
+              Open Question selesai: {{ session.llm_completed_at.strftime('%d/%m/%Y
               %H:%M') if session.llm_completed_at else '-' }}
             </p>
             <p>
@@ -123,14 +123,13 @@ block content %}
         <div class="text-6xl mb-4">📝</div>
         <h2 class="text-2xl font-bold text-gray-900 mb-3">Mulai Assessment</h2>
         <p class="text-gray-600 mb-6">
-          Semua persiapan selesai. Assessment akan dimulai dengan {{
-          session.is_first.upper() }} terlebih dahulu.
+          Semua persiapan selesai. Assessment akan dimulai dengan {% if session.is_first == 'llm' %}Open Question{% else %}{{ session.is_first.upper() }}{% endif %} terlebih dahulu.
         </p>
         <button
           @click="startFirstAssessment()"
           class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-8 rounded-xl transition-colors mr-4"
         >
-          Mulai {{ session.is_first.upper() }} Assessment
+          Mulai {% if session.is_first == 'llm' %}Open Question{% else %}{{ session.is_first.upper() }}{% endif %} Assessment
         </button>
       </div>
 
@@ -156,7 +155,7 @@ block content %}
 <script>
   function assessmentDashboard() {
       return {
-          sessionId: {{ session.id }},
+          sessionId: "{{ session.id }}",
           sessionType: '{{ session.is_first }}',
 
           goToConsent() {

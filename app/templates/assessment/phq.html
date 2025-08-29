@@ -181,7 +181,7 @@ content %}
 <script>
   function phqAssessment() {
       return {
-          sessionId: {{ session.id }},
+          sessionId: "{{ session.id }}",
           loading: true,
           submitting: false,
           submitted: false,
@@ -232,7 +232,7 @@ content %}
 
           async loadQuestions() {
               try {
-                  const result = await apiCall(`{{ url_for("phq_assessment.get_phq_questions", session_id=0) }}`.replace('0', this.sessionId));
+                  const result = await apiCall(`{{ url_for("phq_assessment.get_phq_questions", session_id='PLACEHOLDER') }}`.replace('PLACEHOLDER', this.sessionId));
                   if (result && result.status === 'OLKORECT') {
                       this.questions = result.data.questions;
                       this.loadCurrentResponse();
@@ -308,7 +308,7 @@ content %}
                   };
 
                   // Submit responses and get direct redirect
-                  const result = await apiCall(`{{ url_for("phq_assessment.submit_phq_responses", session_id=0) }}`.replace('0', this.sessionId), 'POST', payload);
+                  const result = await apiCall(`{{ url_for("phq_assessment.submit_phq_responses", session_id='PLACEHOLDER') }}`.replace('PLACEHOLDER', this.sessionId), 'POST', payload);
                   if (result && result.status === 'OLKORECT') {
                       this.totalScore = result.data.total_score;
 

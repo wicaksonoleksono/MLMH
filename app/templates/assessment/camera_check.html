@@ -115,7 +115,7 @@
 <script>
 function cameraCheck() {
     return {
-        sessionId: {{ session.id }},
+        sessionId: "{{ session.id }}",
         cameraActive: false,
         cameraStatus: 'checking', // checking, active, error
         errorMessage: '',

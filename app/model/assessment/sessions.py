@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Optional, Dict, Any, List
+import uuid
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..base import BaseModel
@@ -8,9 +9,8 @@ from ..base import BaseModel
 class AssessmentSession(BaseModel):
     __tablename__ = 'assessment_sessions'
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
-    session_token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
 
     # FK references to admin settings used for this session
     phq_settings_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey('phq_settings.id'), nullable=True)
@@ -72,7 +72,7 @@ class AssessmentSession(BaseModel):
     camera_captures = relationship("CameraCapture", back_populates="session", cascade="all, delete-orphan")
 
     def __repr__(self):
-        return f'<AssessmentSession {self.id}: {self.is_first} first, status={self.status} for user {self.user_id}>'
+        return f'<AssessmentSession {self.id[:8]}: {self.is_first} first, status={self.status} for user {self.user_id}>'
 
     @property
     def completed_at(self) -> Optional[datetime]:
@@ -332,7 +332,7 @@ class PHQResponse(BaseModel):
     __tablename__ = 'phq_responses'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    session_id: Mapped[int] = mapped_column(Integer, ForeignKey('assessment_sessions.id'), nullable=False)
+    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
     question_id: Mapped[int] = mapped_column(Integer, ForeignKey('phq_questions.id'), nullable=False)
 
     # Question metadata (snapshot at response time)
@@ -360,7 +360,7 @@ class LLMConversationTurn(BaseModel):
     __tablename__ = 'llm_conversation_turns'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    session_id: Mapped[int] = mapped_column(Integer, ForeignKey('assessment_sessions.id'), nullable=False)
+    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
     turn_number: Mapped[int] = mapped_column(Integer, nullable=False)  # 1, 2, 3... conversation flow
 
     # Conversation data
@@ -390,7 +390,7 @@ class OpenQuestionResponse(BaseModel):
     __tablename__ = 'open_question_responses'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    session_id: Mapped[int] = mapped_column(Integer, ForeignKey('assessment_sessions.id'), nullable=False)
+    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
     sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
 
     question_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -415,7 +415,7 @@ class CameraCapture(BaseModel):
     __tablename__ = 'camera_captures'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    session_id: Mapped[int] = mapped_column(Integer, ForeignKey('assessment_sessions.id'), nullable=False)
+    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
     capture_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
 
     image_path: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -449,7 +449,7 @@ class LLMAnalysisResult(BaseModel):
     __tablename__ = 'llm_analysis_results'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    session_id: Mapped[int] = mapped_column(Integer, ForeignKey('assessment_sessions.id'), nullable=False)
+    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
 
     # Analysis metadata
     analysis_model_used: Mapped[str] = mapped_column(String(50), nullable=False)  # gpt-4o-mini, etc.
@@ -479,7 +479,7 @@ class SessionExport(BaseModel):
     __tablename__ = 'session_exports'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    session_id: Mapped[int] = mapped_column(Integer, ForeignKey('assessment_sessions.id'), nullable=False)
+    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
     export_type: Mapped[str] = mapped_column(String(50), nullable=False)
 
     export_data: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)

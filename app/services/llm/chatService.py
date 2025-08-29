@@ -118,7 +118,7 @@ class LLMChatService:
         except Exception as e:
             raise ValueError(f"Failed to initialize LangChain: {str(e)}")
     
-    def stream_ai_response(self, session_id: int, user_message: str) -> Generator[str, None, None]:
+    def stream_ai_response(self, session_id: str, user_message: str) -> Generator[str, None, None]:
         """
         Stream AI response using session's system prompt from database settings
         """
@@ -135,7 +135,7 @@ class LLMChatService:
         
         # Stream response using Langchain
         response_content = ""
-        config = {"configurable": {"session_id": str(session_id)}}
+        config = {"configurable": {"session_id": session_id}}
         
         for chunk in self.chain_with_history.stream(
             {"input": user_message},
@@ -149,7 +149,7 @@ class LLMChatService:
         # After streaming completes, save turn to database immediately
         self._save_conversation_turn(session_id, user_message, response_content, settings)
     
-    def _save_conversation_turn(self, session_id: int, user_message: str, ai_response: str, settings: Dict[str, Any]) -> None:
+    def _save_conversation_turn(self, session_id: str, user_message: str, ai_response: str, settings: Dict[str, Any]) -> None:
         """Save conversation turn immediately using LLMConversationService"""
         # Get current turn number
         existing_turns = LLMConversationService.get_session_conversations(session_id)
@@ -168,11 +168,11 @@ class LLMChatService:
         if "</end_conversation>" in ai_response.lower():
             history = get_by_session_id(str(session_id))
             history.clear()
-            if str(session_id) in store:
+            if session_id in store:
                 del store[str(session_id)]
     
     @staticmethod
-    def get_session_chat_history(session_id: int) -> Dict[str, Any]:
+    def get_session_chat_history(session_id: str) -> Dict[str, Any]:
         """Get chat history using LLMConversationService"""
         conversations = LLMConversationService.get_session_conversations(session_id)
         if not conversations:
@@ -194,12 +194,12 @@ class LLMChatService:
         }
     
     @staticmethod
-    def is_conversation_complete(session_id: int) -> bool:
+    def is_conversation_complete(session_id: str) -> bool:
         """Check if conversation ended using LLMConversationService"""
         return LLMConversationService.check_conversation_complete(session_id)
     
     @staticmethod
-    def start_conversation(session_id: int) -> Dict[str, Any]:
+    def start_conversation(session_id: str) -> Dict[str, Any]:
         """
         Start a new conversation with initial AI greeting from database settings
         """
@@ -236,7 +236,7 @@ class LLMChatService:
             }
     
     @staticmethod
-    def finish_conversation(session_id: int) -> Dict[str, Any]:
+    def finish_conversation(session_id: str) -> Dict[str, Any]:
         """
         Finish conversation and prepare for completion handler
         """

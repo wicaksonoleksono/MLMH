@@ -9,14 +9,14 @@ import random
 phq_assessment_bp = Blueprint('phq_assessment', __name__, url_prefix='/assessment/phq')
 
 
-@phq_assessment_bp.route('/start/<int:session_id>', methods=['GET'])
+@phq_assessment_bp.route('/start/<session_id>', methods=['GET'])
 @user_required
 @api_response
 def get_phq_questions(session_id):
     """Get randomized PHQ questions per category for assessment"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != int(current_user.id):
+    if not session or str(session.user_id) != str(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     # Get randomized questions
@@ -39,14 +39,14 @@ def get_phq_questions(session_id):
     }
 
 
-@phq_assessment_bp.route('/submit/<int:session_id>', methods=['POST'])
+@phq_assessment_bp.route('/submit/<session_id>', methods=['POST'])
 @user_required
 @api_response
 def submit_phq_responses(session_id):
     """Submit PHQ responses for a session"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != int(current_user.id):
+    if not session or str(session.user_id) != str(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     data = request.get_json()
@@ -92,14 +92,14 @@ def submit_phq_responses(session_id):
     }
 
 
-@phq_assessment_bp.route('/responses/<int:session_id>', methods=['GET'])
+@phq_assessment_bp.route('/responses/<session_id>', methods=['GET'])
 @user_required
 @api_response
 def get_session_responses(session_id):
     """Get all PHQ responses for a session"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != int(current_user.id):
+    if not session or str(session.user_id) != str(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     responses = PHQResponseService.get_session_responses(session_id)
@@ -136,7 +136,7 @@ def update_phq_response(response_id):
     
     # Validate session belongs to current user
     session = SessionService.get_session(response.session_id)
-    if not session or session.user_id != int(current_user.id):
+    if not session or str(session.user_id) != str(current_user.id):
         return {"message": "Access denied"}, 403
     
     data = request.get_json()
@@ -168,14 +168,14 @@ def update_phq_response(response_id):
         return {"message": str(e)}, 404
 
 
-@phq_assessment_bp.route('/score/<int:session_id>', methods=['GET'])
+@phq_assessment_bp.route('/score/<session_id>', methods=['GET'])
 @user_required
 @api_response
 def get_phq_score(session_id):
     """Get PHQ score and analysis for a session"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != int(current_user.id):
+    if not session or str(session.user_id) != str(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     total_score = PHQResponseService.calculate_session_score(session_id)
@@ -192,14 +192,14 @@ def get_phq_score(session_id):
     }
 
 
-@phq_assessment_bp.route('/check/<int:session_id>', methods=['GET'])
+@phq_assessment_bp.route('/check/<session_id>', methods=['GET'])
 @user_required
 @api_response
 def check_phq_completion(session_id):
     """Check if PHQ assessment is complete for session"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or session.user_id != int(current_user.id):
+    if not session or str(session.user_id) != str(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     is_complete = PHQResponseService.is_assessment_complete(session_id)

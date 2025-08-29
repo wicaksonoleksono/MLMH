@@ -7,7 +7,8 @@ from ...model.admin.phq import PHQSettings
 from ...model.admin.llm import LLMSettings
 from ...model.admin.camera import CameraSettings
 from ...db import get_session
-import secrets
+import uuid
+import hashlib
 
 
 class SessionManager:
@@ -133,16 +134,17 @@ class SessionManager:
             llm_settings = db.query(LLMSettings).filter_by(is_active=True).first()
             camera_settings = db.query(CameraSettings).filter_by(is_active=True).first()
 
-            # Determine assessment order (50:50 alternating based on total sessions)
-            total_sessions = db.query(func.count(AssessmentSession.id)).scalar() or 0
-            is_first = 'phq' if total_sessions % 2 == 0 else 'llm'
-            
             # Get session number for this user (1 or 2)
             user_session_count = db.query(func.count(AssessmentSession.id)).filter_by(user_id=user_id).scalar() or 0
             session_number = user_session_count + 1
 
-            # Generate unique session token
-            session_token = secrets.token_urlsafe(32)
+            # Generate unique UUID for session
+            session_id = str(uuid.uuid4())
+            
+            # Determine assessment order (50:50 deterministic based on user_id hash)
+            # This ensures same user gets same pattern but overall distribution is 50:50
+            user_hash = hashlib.md5(str(user_id).encode()).hexdigest()
+            is_first = 'phq' if int(user_hash[-1], 16) % 2 == 0 else 'llm'
 
             # Create session with assessment order metadata
             assessment_order = {
@@ -153,8 +155,8 @@ class SessionManager:
             }
 
             session = AssessmentSession(
+                id=session_id,
                 user_id=user_id,
-                session_token=session_token,
                 phq_settings_id=phq_settings.id,
                 llm_settings_id=llm_settings.id,
                 camera_settings_id=camera_settings.id,
@@ -210,7 +212,7 @@ class SessionManager:
             return session
 
     @staticmethod
-    def get_session_progress(session_id: int) -> Dict[str, Any]:
+    def get_session_progress(session_id: str) -> Dict[str, Any]:
         """Get detailed session progress information"""
         with get_session() as db:
             session = db.query(AssessmentSession).filter_by(id=session_id).first()
@@ -258,7 +260,7 @@ class SessionManager:
             return 'unknown'
 
     @staticmethod
-    def recover_session(session_id: int, clear_data: bool = True) -> AssessmentSession:
+    def recover_session(session_id: str, clear_data: bool = True) -> AssessmentSession:
         """Recover an abandoned/incomplete session"""
         with get_session() as db:
             session = db.query(AssessmentSession).filter_by(id=session_id).first()
@@ -288,7 +290,7 @@ class SessionManager:
             return session
 
     @staticmethod
-    def abandon_session(session_id: int, reason: str = None) -> AssessmentSession:
+    def abandon_session(session_id: str, reason: str = None) -> AssessmentSession:
         """Mark session as abandoned (user quit)"""
         with get_session() as db:
             session = db.query(AssessmentSession).filter_by(id=session_id).first()
@@ -300,7 +302,7 @@ class SessionManager:
             return session
 
     @staticmethod
-    def get_session(session_id: int) -> Optional[AssessmentSession]:
+    def get_session(session_id: str) -> Optional[AssessmentSession]:
         """Get session by ID"""
         with get_session() as db:
             return db.query(AssessmentSession).filter_by(id=session_id).first()

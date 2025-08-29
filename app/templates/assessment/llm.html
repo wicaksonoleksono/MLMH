@@ -216,11 +216,65 @@ endblock %} {% block content %}
       sessionId: "{{ session.id }}",
       exchangeCount: 0,
       messageId: 1,
+      cameraManager: null,
 
       // Initialize
-      init() {
+      async init() {
         this.startConversationTimer();
+        await this.initCamera();
         this.initializeChat();
+        this.setupAbandonTracking();
+      },
+
+      async initCamera() {
+        try {
+          // Get camera settings from backend
+          const cameraSettings = {{ camera_settings | tojson | safe }} || {};
+          
+          // Initialize camera manager without session UUID initially
+          this.cameraManager = new CameraManager(this.sessionId, 'llm', cameraSettings);
+          await this.cameraManager.initialize();
+          
+          // Don't set session UUID yet - will be set after first LLM response
+          
+          console.log('📹 Camera initialized for LLM assessment');
+        } catch (error) {
+          console.warn('⚠️ Failed to initialize camera (continuing without camera):', error);
+          // Continue assessment even if camera fails
+        }
+      },
+
+      setupAbandonTracking() {
+        // Track when user leaves the page
+        let assessmentCompleted = false;
+        window.addEventListener('beforeunload', () => {
+          if (!assessmentCompleted && !this.conversationEnded) {
+            // Use sendBeacon for reliable tracking when page unloads
+            navigator.sendBeacon(`/assessment/abandon/${this.sessionId}`,
+              JSON.stringify({ reason: 'User left LLM assessment page' }));
+          }
+        });
+
+        // Track when user navigates away
+        window.addEventListener('pagehide', () => {
+          if (!assessmentCompleted && !this.conversationEnded) {
+            fetch(`/assessment/abandon/${this.sessionId}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ reason: 'User navigated away from LLM assessment' }),
+              keepalive: true
+            }).catch(() => {}); // Ignore errors
+          }
+        });
+        
+        // Set completion flag to prevent abandon calls on successful redirect
+        this.markAsCompleted = () => {
+          assessmentCompleted = true;
+          // Clean up camera when assessment completes
+          if (this.cameraManager) {
+            this.cameraManager.cleanup();
+          }
+        };
       },
 
       async initializeChat() {
@@ -308,6 +362,11 @@ endblock %} {% block content %}
           this.conversationEnded
         )
           return;
+
+        // Capture on message send
+        if (this.cameraManager) {
+          await this.cameraManager.onMessageSend();
+        }
 
         const userMessage = this.currentMessage.trim();
         this.currentMessage = "";
@@ -481,4 +540,5 @@ endblock %} {% block content %}
     };
   }
 </script>
+<script src="{{ url_for('static', filename='js/cameraManager.js') }}"></script>
 {% endblock %}

@@ -3,6 +3,7 @@ from flask import Blueprint, render_template, request, jsonify, redirect, url_fo
 from flask_login import current_user, login_required
 from ..decorators import raw_response
 from ..services.sessionService import SessionService
+from ..services.session.sessionManager import SessionManager
 
 assessment_bp = Blueprint('assessment', __name__, url_prefix='/assessment')
 
@@ -10,31 +11,21 @@ assessment_bp = Blueprint('assessment', __name__, url_prefix='/assessment')
 @assessment_bp.route('/start', methods=['POST'])
 @login_required
 def start_assessment():
-    """Create new assessment session with intelligent recovery handling"""
+    """Start assessment - auto-reset incomplete sessions or create new one"""
     try:
-        # Smart session creation - check for recoverable sessions first
-        from ..services.session.sessionManager import SessionManager
-        
+        # Check for recoverable sessions first
         recoverable_session = SessionManager.get_user_recoverable_session(current_user.id)
         
         if recoverable_session:
-            # User has recoverable session - reset it instead of creating new one
-            print(f"🔄 Found recoverable session {recoverable_session.id}, resetting instead of creating new")
-            reset_result = SessionService.reset_session_to_new_attempt(
+            # User has incomplete session - auto-reset it (same as "Coba Lagi" button)
+            result = SessionService.reset_session_to_new_attempt(
                 recoverable_session.id, 
-                "AUTO_RECOVERY_ON_NEW_START"
+                "AUTO_RESET_ON_START"
             )
-            
-            if reset_result['success']:
-                print(f"✅ Successfully reset recoverable session to new attempt")
-                flash('Sesi sebelumnya telah direset. Memulai assessment baru.', 'success')
-                return redirect(url_for('assessment.assessment_dashboard'))
-            else:
-                print(f"❌ Failed to reset recoverable session: {reset_result.get('message')}")
-                flash('Gagal mereset sesi sebelumnya.', 'error')
-                return redirect(url_for('main.serve_index'))
+            flash('Session sebelumnya direset. Memulai assessment baru.', 'success')
+            return redirect(url_for('assessment.assessment_dashboard'))
 
-        # Check if user can create new session
+        # No incomplete session - create new session
         if not SessionService.can_create_new_session(current_user.id):
             flash('Anda sudah mencapai maksimum 2 sesi assessment.', 'error')
             return redirect(url_for('main.serve_index'))
@@ -91,33 +82,23 @@ def assessment_dashboard():
     
     # Handle CAMERA_CHECK status properly
     if session.status == 'CAMERA_CHECK' and not session.camera_completed:
-        print("📷 Camera check incomplete - redirecting to camera check")
         return redirect(url_for('assessment.camera_check'))
-
     # Direct redirect logic for assessments - automatic flow
     if session.status in ['PHQ_IN_PROGRESS', 'LLM_IN_PROGRESS', 'BOTH_IN_PROGRESS']:
         next_assessment = session.next_assessment_type
-        print(f"📋 Session in progress - next_assessment: {next_assessment}")
         if next_assessment == 'phq':
-            print("➡️ Redirecting to PHQ")
             return redirect(url_for('assessment.phq_assessment'))
         elif next_assessment == 'llm':
-            print("➡️ Redirecting to LLM")
             return redirect(url_for('assessment.llm_assessment'))
 
     # If camera check is done but no assessment started, start first assessment
     if session.status == 'CAMERA_CHECK' and session.camera_completed:
-        print(f"📷 Camera check done - starting first assessment: {session.is_first}")
         if session.is_first == 'phq':
             return redirect(url_for('assessment.phq_assessment'))
         else:
             return redirect(url_for('assessment.llm_assessment'))
-    
-    # If session is completed, show completed dashboard
-    if session.status == 'COMPLETED':
-        print("🎉 Session completed - showing dashboard")
-    else:
-        print(f"⚠️ Unexpected dashboard state - status: {session.status}")
+    if session.status != 'COMPLETED':
+        print(f" Unexpected dashboard state - status: {session.status}")
 
     return render_template('assessment/dashboard.html',
                            user=current_user,
@@ -216,6 +197,10 @@ def phq_assessment():
 
     session = active_session
 
+    # Load camera settings for frontend
+    from ..services.camera.cameraCaptureService import CameraCaptureService
+    camera_settings = CameraCaptureService.get_camera_settings_for_session(session.id)
+    camera_settings_dict = CameraCaptureService.create_settings_snapshot(camera_settings) if camera_settings else {}
 
     # Check prerequisites for assessment
     if not session.consent_completed_at:
@@ -243,7 +228,8 @@ def phq_assessment():
             return redirect(url_for('assessment.assessment_dashboard'))
     return render_template('assessment/phq.html',
                            user=current_user,
-                           session=session)
+                           session=session,
+                           camera_settings=camera_settings_dict)
 
 
 @assessment_bp.route('/llm')
@@ -291,9 +277,15 @@ def llm_assessment():
             return redirect(url_for('assessment.assessment_dashboard'))
         else:
             return redirect(url_for('assessment.assessment_dashboard'))
+    # Load camera settings for frontend
+    from ..services.camera.cameraCaptureService import CameraCaptureService
+    camera_settings = CameraCaptureService.get_camera_settings_for_session(session.id)
+    camera_settings_dict = CameraCaptureService.create_settings_snapshot(camera_settings) if camera_settings else {}
+    
     return render_template('assessment/llm.html',
                            user=current_user,
-                           session=session)
+                           session=session,
+                           camera_settings=camera_settings_dict)
 
 
 @assessment_bp.route('/complete/<assessment_type>/<session_id>', methods=['POST'])
@@ -372,46 +364,11 @@ def reset_session_to_new_attempt(session_id):
         flash(str(e), 'error')
         return redirect(url_for('main.serve_index'))
     except Exception as e:
-        print(f"❌ Error resetting session: {str(e)}")
+        print(f" Error resetting session: {str(e)}")
         flash('Terjadi kesalahan sistem. Silakan coba lagi.', 'error')
         return redirect(url_for('main.serve_index'))
 
 
-@assessment_bp.route('/recover/<session_id>', methods=['POST'])
-@login_required
-def recover_session(session_id):
-    """Continue or reset a recoverable session"""
-    try:
-        session = SessionService.get_session(session_id)
-        if not session:
-            flash('Session tidak ditemukan.', 'error')
-            return redirect(url_for('main.serve_index'))
-        
-        # Verify session belongs to current user
-        if int(session.user_id) != int(current_user.id):
-            flash('Akses ditolak.', 'error')
-            return redirect(url_for('main.serve_index'))
-        
-        clear_data = request.form.get('clear_data', 'false').lower() == 'true'
-        
-        if clear_data:
-            # Reset the session (clear data and start fresh)
-            result = SessionService.reset_session_to_new_attempt(session.id, "USER_RECOVERY_RESET")
-            flash('Session direset. Memulai assessment baru.', 'success')
-        else:
-            # Continue the session (just reactivate)
-            session = SessionService.recover_session(session.id, clear_data=False)
-            flash('Melanjutkan assessment sebelumnya.', 'info')
-        
-        return redirect(url_for('assessment.assessment_dashboard'))
-        
-    except ValueError as e:
-        flash(str(e), 'error')
-        return redirect(url_for('main.serve_index'))
-    except Exception as e:
-        print(f"❌ Error recovering session: {str(e)}")
-        flash('Terjadi kesalahan sistem. Silakan coba lagi.', 'error')
-        return redirect(url_for('main.serve_index'))
 
 @assessment_bp.route('/sessions', methods=['GET'])
 @login_required
@@ -469,38 +426,6 @@ def check_recoverable_session():
         return jsonify({"status": "SNAFU", "error": str(e)}), 500
 
 
-@assessment_bp.route('/recover/<session_id>', methods=['POST'])
-@login_required
-@raw_response
-def recover_session(session_id):
-    """Recover an abandoned/incomplete session"""
-    try:
-        data = request.get_json() or {}
-        clear_data = data.get('clear_data', True)  # Default to clearing data for fresh restart
-
-        from ..services.session.sessionManager import SessionManager
-
-        # Verify session belongs to current user
-        session = SessionManager.get_session(session_id)
-        if not session or int(session.user_id) != int(current_user.id):
-            return jsonify({"status": "SNAFU", "error": "Session not found or access denied"}), 403
-
-        # Recover the session
-        recovered_session = SessionManager.recover_session(session_id, clear_data=clear_data)
-
-        return jsonify({
-            "status": "OLKORECT",
-            "message": "Session berhasil dipulihkan" if not clear_data else "Session berhasil direset untuk memulai ulang",
-            "session_id": recovered_session.id,
-            "session_status": recovered_session.status,
-            "next_step": "consent" if clear_data else "assessment",
-            "redirect_url": "/assessment/"
-        })
-
-    except ValueError as e:
-        return jsonify({"status": "SNAFU", "error": str(e)}), 400
-    except Exception as e:
-        return jsonify({"status": "SNAFU", "error": str(e)}), 500
 
 
 @assessment_bp.route('/abandon/<session_id>', methods=['POST'])
@@ -527,6 +452,143 @@ def abandon_session(session_id):
             "message": "Session ditandai sebagai abandoned",
             "session_id": abandoned_session.id,
             "session_status": abandoned_session.status
+        })
+
+    except Exception as e:
+        return jsonify({"status": "SNAFU", "error": str(e)}), 500
+
+
+# Camera Capture Endpoints
+@assessment_bp.route('/camera/upload', methods=['POST'])
+@login_required
+@raw_response
+def upload_camera_captures():
+    """Upload camera captures via AJAX"""
+    try:
+        from ..services.camera.cameraCaptureService import CameraCaptureService
+        
+        # Get form data
+        session_id = request.form.get('session_id')
+        if not session_id:
+            return jsonify({"status": "SNAFU", "error": "session_id required"}), 400
+
+        # Verify session belongs to current user
+        session = SessionService.get_session(session_id)
+        if not session or int(session.user_id) != int(current_user.id):
+            return jsonify({"status": "SNAFU", "error": "Session not found or access denied"}), 403
+
+        # Get camera settings for this session
+        camera_settings = CameraCaptureService.get_camera_settings_for_session(session_id)
+        settings_snapshot = CameraCaptureService.create_settings_snapshot(camera_settings)
+
+        captures_saved = []
+        
+        # Process each uploaded file
+        for key in request.files:
+            if key.startswith('capture_'):
+                file = request.files[key]
+                if file and file.filename:
+                    # Extract metadata from form
+                    metadata_key = key.replace('capture_', 'metadata_')
+                    metadata_json = request.form.get(metadata_key, '{}')
+                    
+                    try:
+                        import json
+                        metadata = json.loads(metadata_json)
+                    except:
+                        metadata = {}
+                    
+                    # Get capture details
+                    trigger = metadata.get('trigger', 'MANUAL')
+                    phq_session_uuid = metadata.get('phq_session_uuid')
+                    llm_session_uuid = metadata.get('llm_session_uuid')
+                    
+                    # Check if we should capture based on settings
+                    if camera_settings and not CameraCaptureService.should_capture_on_trigger(camera_settings, trigger):
+                        continue  # Skip this capture
+                    
+                    # Save capture
+                    file_data = file.read()
+                    capture = CameraCaptureService.save_capture(
+                        assessment_session_id=session_id,
+                        file_data=file_data,
+                        capture_trigger=trigger,
+                        phq_session_uuid=phq_session_uuid,
+                        llm_session_uuid=llm_session_uuid,
+                        camera_settings_snapshot=settings_snapshot
+                    )
+                    
+                    captures_saved.append({
+                        'id': capture.id,
+                        'filename': capture.filename,
+                        'trigger': capture.capture_trigger,
+                        'timestamp': capture.timestamp.isoformat()
+                    })
+
+        return jsonify({
+            "status": "OLKORECT", 
+            "message": f"Uploaded {len(captures_saved)} captures",
+            "captures": captures_saved
+        })
+
+    except Exception as e:
+        print(f"❌ Error uploading captures: {str(e)}")
+        return jsonify({"status": "SNAFU", "error": str(e)}), 500
+
+
+@assessment_bp.route('/camera/file/<filename>')
+@login_required
+def serve_camera_capture(filename):
+    """Serve camera capture file"""
+    try:
+        from flask import send_from_directory
+        from ..services.camera.cameraCaptureService import CameraCaptureService
+        
+        # Basic security check - ensure filename doesn't contain path traversal
+        if '..' in filename or '/' in filename or '\\' in filename:
+            return jsonify({"error": "Invalid filename"}), 400
+            
+        upload_path = CameraCaptureService.get_upload_path()
+        
+        # Verify the capture belongs to current user
+        with get_session() as db:
+            from ..model.assessment.sessions import CameraCapture
+            capture = db.query(CameraCapture).filter_by(filename=filename).first()
+            if not capture:
+                return jsonify({"error": "File not found"}), 404
+                
+            # Check if user owns this capture's session
+            session = SessionService.get_session(capture.assessment_session_id)
+            if not session or int(session.user_id) != int(current_user.id):
+                return jsonify({"error": "Access denied"}), 403
+        
+        return send_from_directory(upload_path, filename)
+        
+    except Exception as e:
+        print(f"❌ Error serving capture: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@assessment_bp.route('/camera/session/<session_id>')
+@login_required
+@raw_response
+def get_session_camera_captures(session_id):
+    """Get all camera captures for a session"""
+    try:
+        from ..services.camera.cameraCaptureService import CameraCaptureService
+        
+        # Verify session belongs to current user
+        session = SessionService.get_session(session_id)
+        if not session or int(session.user_id) != int(current_user.id):
+            return jsonify({"status": "SNAFU", "error": "Session not found or access denied"}), 403
+
+        captures = CameraCaptureService.get_session_captures(session_id)
+        
+        return jsonify({
+            "status": "OLKORECT",
+            "session_id": session_id,
+            "captures": captures,
+            "total_captures": len(captures)
         })
 
     except Exception as e:

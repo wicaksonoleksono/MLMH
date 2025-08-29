@@ -334,6 +334,9 @@ class PHQResponse(BaseModel):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
     question_id: Mapped[int] = mapped_column(Integer, ForeignKey('phq_questions.id'), nullable=False)
+    
+    # UUID for camera capture linking
+    session_uuid: Mapped[str] = mapped_column(String(36), nullable=False, unique=True, default=lambda: str(uuid.uuid4()))
 
     # Question metadata (snapshot at response time)
     question_number: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -362,6 +365,9 @@ class LLMConversationTurn(BaseModel):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
     turn_number: Mapped[int] = mapped_column(Integer, nullable=False)  # 1, 2, 3... conversation flow
+    
+    # UUID for camera capture linking
+    session_uuid: Mapped[str] = mapped_column(String(36), nullable=False, unique=True, default=lambda: str(uuid.uuid4()))
 
     # Conversation data
     ai_message: Mapped[str] = mapped_column(Text, nullable=False)  # Anisa's question/response
@@ -384,6 +390,32 @@ class LLMConversationTurn(BaseModel):
 
     def __repr__(self):
         return f'<LLMConversationTurn {self.id}: Turn {self.turn_number} (Session {self.session_id})>'
+
+
+class CameraCapture(BaseModel):
+    __tablename__ = 'camera_captures'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    
+    # Core identification - proper foreign keys with cascade delete
+    assessment_session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id', ondelete='CASCADE'), nullable=False)
+    phq_session_uuid: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey('phq_responses.session_uuid', ondelete='CASCADE'), nullable=True)
+    llm_session_uuid: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey('llm_conversation_turns.session_uuid', ondelete='CASCADE'), nullable=True)
+    
+    # File info - just filename, no paths
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    
+    # Capture metadata
+    capture_trigger: Mapped[str] = mapped_column(String(50), nullable=False)  # INTERVAL, BUTTON_CLICK, MESSAGE_SEND, QUESTION_START
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    camera_settings_snapshot: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    
+    # Relationships
+    session = relationship("AssessmentSession", back_populates="camera_captures")
+
+    def __repr__(self):
+        return f'<CameraCapture {self.id}: {self.filename} ({self.capture_trigger})>'
 
 
 class OpenQuestionResponse(BaseModel):
@@ -410,39 +442,6 @@ class OpenQuestionResponse(BaseModel):
     def __repr__(self):
         return f'<OpenQuestionResponse {self.id}: Seq {self.sequence_number}>'
 
-
-class CameraCapture(BaseModel):
-    __tablename__ = 'camera_captures'
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
-    capture_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
-
-    image_path: Mapped[str] = mapped_column(String(500), nullable=False)
-    thumbnail_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-
-    capture_timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    image_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
-
-    face_detection_results: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
-    emotion_analysis: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
-
-    file_size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    image_dimensions: Mapped[Optional[Dict[str, int]]] = mapped_column(JSON, nullable=True)
-
-    is_valid_capture: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-
-    session = relationship("AssessmentSession", back_populates="camera_captures")
-
-    def __repr__(self):
-        return f'<CameraCapture {self.id}: Seq {self.capture_sequence} for session {self.session_id}>'
-
-    @property
-    def file_exists(self) -> bool:
-        """Check if the image file exists"""
-        import os
-        return os.path.exists(self.image_path) if self.image_path else False
 
 
 class LLMAnalysisResult(BaseModel):

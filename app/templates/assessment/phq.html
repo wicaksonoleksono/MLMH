@@ -178,6 +178,7 @@ content %}
   </div>
 </div>
 {% endblock %} {% block scripts %}
+<script src="{{ url_for('static', filename='js/cameraManager.js') }}"></script>
 <script>
   function phqAssessment() {
       return {
@@ -191,6 +192,7 @@ content %}
           currentResponse: null,
           totalScore: 0,
           scoreAnalysis: '',
+          cameraManager: null,
 
           get currentQuestion() {
               return this.questions[this.currentQuestionIndex] || null;
@@ -198,8 +200,28 @@ content %}
 
           async init() {
               await this.loadQuestions();
+              await this.initCamera();
               this.setupAbandonTracking();
           },
+
+          async initCamera() {
+              try {
+                  // Get camera settings from backend
+                  const cameraSettings = {{ camera_settings | tojson | safe }} || {};
+                  
+                  // Initialize camera manager without session UUID initially
+                  this.cameraManager = new CameraManager(this.sessionId, 'phq', cameraSettings);
+                  await this.cameraManager.initialize();
+                  
+                  // Don't set session UUID yet - will be set after first PHQ response
+                  
+                  console.log('📹 Camera initialized for PHQ assessment');
+              } catch (error) {
+                  console.warn('⚠️ Failed to initialize camera (continuing without camera):', error);
+                  // Continue assessment even if camera fails
+              }
+          },
+
 
           setupAbandonTracking() {
               // Track when user leaves the page
@@ -227,6 +249,10 @@ content %}
               // Set completion flag to prevent abandon calls on successful redirect
               this.markAsCompleted = () => {
                   assessmentCompleted = true;
+                  // Clean up camera when assessment completes
+                  if (this.cameraManager) {
+                      this.cameraManager.cleanup();
+                  }
               };
           },
 
@@ -252,8 +278,13 @@ content %}
               }
           },
 
-          updateCurrentResponse(value, text) {
+          async updateCurrentResponse(value, text) {
               if (!this.currentQuestion) return;
+
+              // Capture on button click (answer selection) 
+              if (this.cameraManager) {
+                  await this.cameraManager.onButtonClick();
+              }
 
               // Ensure value is integer and in valid scale range
               const responseValue = parseInt(value);
@@ -287,6 +318,11 @@ content %}
           async nextQuestion() {
               if (!this.currentResponse) return;
 
+              // Capture on button click (answer selection)
+              if (this.cameraManager) {
+                  await this.cameraManager.onButtonClick();
+              }
+
               // If this is the last question, submit all responses
               if (this.currentQuestionIndex === this.questions.length - 1) {
                   await this.submitAllResponses();
@@ -295,6 +331,7 @@ content %}
                   this.currentQuestionIndex++;
                   this.loadCurrentResponse();
                   this.questionStartTime = Date.now();
+                  
               }
           },
 
@@ -307,10 +344,15 @@ content %}
                       responses: Object.values(this.responses)
                   };
 
-                  // Submit responses and get direct redirect
+                  // Submit responses first to get the actual UUIDs
                   const result = await apiCall(`{{ url_for("phq_assessment.submit_phq_responses", session_id='PLACEHOLDER') }}`.replace('PLACEHOLDER', this.sessionId), 'POST', payload);
                   if (result && result.status === 'OLKORECT') {
                       this.totalScore = result.data.total_score;
+
+                      // Upload camera captures with the actual response UUIDs
+                      if (this.cameraManager && result.data.response_uuids) {
+                          await this.cameraManager.uploadBatch(result.data.response_uuids);
+                      }
 
                       // Direct redirect - no second API call needed
                       if (result.data.next_redirect) {

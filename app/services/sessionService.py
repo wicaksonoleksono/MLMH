@@ -363,7 +363,19 @@ class SessionService:
                 raise RuntimeError("Failed to reset session to new attempt")
             
             # Clear related data (PHQ responses, LLM conversations, etc.)
-            from ..model.assessment.sessions import PHQResponse, LLMConversationTurn, LLMAnalysisResult
+            from ..model.assessment.sessions import PHQResponse, LLMConversationTurn, LLMAnalysisResult, CameraCapture
+            
+            # Get camera capture filenames BEFORE reset (tied to session_id)
+            camera_filenames = [capture.filename for capture in db.query(CameraCapture).filter_by(assessment_session_id=session_id).all()]
+            
+            # Delete physical camera files
+            if camera_filenames:
+                from ..services.camera.cameraCaptureService import CameraCaptureService
+                for filename in camera_filenames:
+                    try:
+                        CameraCaptureService.delete_capture_file(filename)
+                    except Exception as e:
+                        print(f"⚠️ Failed to delete camera capture file {filename}: {e}")
             
             # Delete PHQ responses for this session
             db.query(PHQResponse).filter_by(session_id=session_id).delete()

@@ -48,19 +48,10 @@ class StatsService:
                 # Get user's sessions
                 sessions = db.query(AssessmentSession).filter(AssessmentSession.user_id == user.id).order_by(AssessmentSession.created_at).all()
                 
-                session1_status = "Not Done"
-                session2_status = "Not Done"
-                
-                if len(sessions) >= 1:
-                    s1 = sessions[0]
-                    # Session 1 is done if BOTH PHQ and LLM are completed
-                    session1_status = "Done" if (s1.phq_completed_at and s1.llm_completed_at) else "Not Done"
-                
-                if len(sessions) >= 2:
-                    s2 = sessions[1]
-                    # Session 2 is done if BOTH PHQ and LLM are completed
-                    session2_status = "Done" if (s2.phq_completed_at and s2.llm_completed_at) else "Not Done"
-                
+                # Just rawdog the backend status values
+                session1_status = sessions[0].status if len(sessions) >= 1 else "Not done"
+                session2_status = sessions[1].status if len(sessions) >= 2 else "Not done"
+
                 preview_data.append({
                     'user_id': user.id,
                     'username': user.uname,

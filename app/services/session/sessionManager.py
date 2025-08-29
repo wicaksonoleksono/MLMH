@@ -102,11 +102,11 @@ class SessionManager:
 
     @staticmethod
     def get_user_recoverable_session(user_id: int) -> Optional[AssessmentSession]:
-        """Get user's most recent recoverable session (INCOMPLETE or ABANDONED)"""
+        """Get user's most recent recoverable session (any non-completed session)"""
         with get_session() as db:
             return db.query(AssessmentSession).filter(
                 AssessmentSession.user_id == user_id,
-                AssessmentSession.status.in_(['INCOMPLETE', 'ABANDONED']),
+                AssessmentSession.status != 'COMPLETED',
                 AssessmentSession.can_recover == True
             ).order_by(AssessmentSession.updated_at.desc()).first()
 

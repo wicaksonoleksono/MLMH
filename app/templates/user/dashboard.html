@@ -67,27 +67,16 @@ endblock %} {% block content %}
         <div class="flex-1">
           <h3 class="text-lg font-bold mb-2">Assessment Belum Selesai</h3>
           <p class="text-yellow-100 mb-4">
-            Anda memiliki assessment yang belum diselesaikan. Anda dapat
-            melanjutkan atau memulai ulang.
+            Anda memiliki assessment yang belum diselesaikan. Klik tombol di bawah untuk memulai ulang dengan urutan assessment yang sama.
           </p>
           <div class="flex flex-col sm:flex-row gap-3">
-            <form method="POST" :action="`{{ url_for('assessment.recover_session', session_id='TOKEN') }}`.replace('TOKEN', recoverableSession.id)" style="display: inline;">
-              <input type="hidden" name="clear_data" value="false">
+            <form method="POST" :action="`{{ url_for('assessment.reset_session_to_new_attempt', session_id='TOKEN') }}`.replace('TOKEN', recoverableSession.id)" style="display: inline;">
+              <input type="hidden" name="reason" value="USER_RECOVERY_RESTART">
               <button
                 type="submit"
                 class="bg-white text-yellow-600 hover:bg-yellow-50 font-medium py-2 px-4 rounded-lg transition-colors"
               >
-                Lanjutkan Assessment
-              </button>
-            </form>
-            <form method="POST" :action="`{{ url_for('assessment.recover_session', session_id='TOKEN') }}`.replace('TOKEN', recoverableSession.id)" style="display: inline;">
-              <input type="hidden" name="clear_data" value="true">
-              <button
-                type="submit"
-                onclick="return confirm('Mulai sesi baru? Semua progress akan dihapus dan dimulai dari awal.')"
-                class="bg-yellow-700 hover:bg-yellow-800 text-white font-medium py-2 px-4 rounded-lg transition-colors"
-              >
-                Mulai Ulang
+                Mulai Assessment
               </button>
             </form>
             <button
@@ -363,40 +352,6 @@ endblock %} {% block content %}
         this.recoverableSession = null;
       },
 
-      async resetRecoverableSession() {
-        if (!this.dismissedRecoverableSession) {
-          throw new Error('No dismissed recoverable session to reset');
-        }
-        
-        try {
-          console.log('🔄 Resetting dismissed recoverable session:', this.dismissedRecoverableSession.id);
-          
-          const resetUrl = `{{ url_for("assessment.reset_session_to_new_attempt", session_id="TOKEN") }}`.replace('TOKEN', this.dismissedRecoverableSession.id);
-          const response = await fetch(resetUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              reason: 'USER_CANCELLATION_RECOVERY',
-              clear_data: true
-            })
-          });
-          
-          const result = await response.json();
-          
-          if (result && result.status === 'OLKORECT') {
-            console.log('✅ Recoverable session reset successfully, redirecting to assessment');
-            // Clear the dismissed session since we've reset it
-            this.dismissedRecoverableSession = null;
-            // Redirect to assessment flow
-            window.location.href = "/assessment";
-          } else {
-            throw new Error(result.error || 'Failed to reset recoverable session');
-          }
-        } catch (error) {
-          console.error('❌ Error resetting recoverable session:', error);
-          throw error; // Let parent catch handle this
-        }
-      },
 
       formatDate(dateString) {
         if (!dateString) return "N/A";

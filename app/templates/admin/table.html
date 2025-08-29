@@ -1,115 +1,132 @@
-{% extends "admin/base.html" %}
-
-{% block content %}
+{% extends "admin/base.html" %} {% block content %}
 <div class="space-y-6" x-data="adminDashboard()">
-    <!-- Dashboard Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <template x-for="page in pages" :key="page.id">
-            <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow cursor-pointer"
-                 @click="navigateTo(page.route)">
-                <div class="text-3xl mb-3" x-text="page.icon"></div>
-                <h3 class="font-semibold text-gray-900 mb-2" x-text="page.title"></h3>
-                <p class="text-sm text-gray-600" x-text="page.description"></p>
-            </div>
-        </template>
-    </div>
+  <!-- Dashboard Grid -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <template x-for="page in pages" :key="page.id">
+      <div
+        class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow cursor-pointer"
+        @click="navigateTo(page.route)"
+      >
+        <div class="text-3xl mb-3" x-text="page.icon"></div>
+        <h3 class="font-semibold text-gray-900 mb-2" x-text="page.title"></h3>
+        <p class="text-sm text-gray-600" x-text="page.description"></p>
+      </div>
+    </template>
+  </div>
 
-    <!-- Overview Data -->
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-        <h2 class="text-xl font-semibold text-gray-900 mb-4">Ringkasan Sesi</h2>
-        
-        <div class="overflow-x-auto">
-            <table class="w-full">
-                <thead>
-                    <tr class="border-b border-gray-200">
-                        <th class="text-left py-3 px-4 font-medium text-gray-700">ID Pasien</th>
-                        <th class="text-left py-3 px-4 font-medium text-gray-700">Sesi 1</th>
-                        <th class="text-left py-3 px-4 font-medium text-gray-700">Sesi 2</th>
-                        <th class="text-left py-3 px-4 font-medium text-gray-700">Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <template x-for="session in sessions" :key="session.patient_id">
-                        <tr class="border-b border-gray-100">
-                            <td class="py-3 px-4 text-gray-900" x-text="session.patient_id"></td>
-                            <td class="py-3 px-4">
-                                <span class="px-2 py-1 rounded-full text-xs font-medium"
-                                      :class="getStatusClass(session.s1_status)"
-                                      x-text="session.s1_status"></span>
-                            </td>
-                            <td class="py-3 px-4">
-                                <span class="px-2 py-1 rounded-full text-xs font-medium"
-                                      :class="getStatusClass(session.s2_status)"
-                                      x-text="session.s2_status"></span>
-                            </td>
-                            <td class="py-3 px-4">
-                                <span class="px-2 py-1 rounded-full text-xs font-medium"
-                                      :class="getStatusClass(session.overall_status)"
-                                      x-text="session.overall_status"></span>
-                            </td>
-                        </tr>
-                    </template>
-                    <tr x-show="sessions.length === 0">
-                        <td colspan="4" class="py-8 text-center text-gray-500">Belum ada data sesi</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
+  <!-- Overview Data -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+    <h2 class="text-xl font-semibold text-gray-900 mb-4">Ringkasan Sesi</h2>
+
+    <div class="overflow-x-auto">
+      <table class="w-full">
+        <thead>
+          <tr class="border-b border-gray-200">
+            <th class="text-left py-3 px-4 font-medium text-gray-700">
+              ID Pasien
+            </th>
+            <th class="text-left py-3 px-4 font-medium text-gray-700">
+              Sesi 1
+            </th>
+            <th class="text-left py-3 px-4 font-medium text-gray-700">
+              Sesi 2
+            </th>
+            <th class="text-left py-3 px-4 font-medium text-gray-700">
+              Status
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="session in sessions" :key="session.patient_id">
+            <tr class="border-b border-gray-100">
+              <td
+                class="py-3 px-4 text-gray-900"
+                x-text="session.patient_id"
+              ></td>
+              <td class="py-3 px-4">
+                <span
+                  class="px-2 py-1 rounded-full text-xs font-medium"
+                  :class="getStatusClass(session.s1_status)"
+                  x-text="session.s1_status"
+                ></span>
+              </td>
+              <td class="py-3 px-4">
+                <span
+                  class="px-2 py-1 rounded-full text-xs font-medium"
+                  :class="getStatusClass(session.s2_status)"
+                  x-text="session.s2_status"
+                ></span>
+              </td>
+              <td class="py-3 px-4">
+                <span
+                  class="px-2 py-1 rounded-full text-xs font-medium"
+                  :class="getStatusClass(session.overall_status)"
+                  x-text="session.overall_status"
+                ></span>
+              </td>
+            </tr>
+          </template>
+          <tr x-show="sessions.length === 0">
+            <td colspan="4" class="py-8 text-center text-gray-500">
+              Belum ada data sesi
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
+  </div>
 </div>
-{% endblock %}
-
-{% block scripts %}
+{% endblock %} {% block scripts %}
 <script>
-function adminDashboard() {
+  function adminDashboard() {
     return {
-        pages: [
-            {
-                id: 'phq',
-                title: 'Asesmen PHQ',
-                description: 'Pengaturan kuesioner PHQ-9',
-                icon: '📋',
-                route: '/admin/phq'
-            },
-            {
-                id: 'camera',
-                title: 'Pengaturan Kamera',
-                description: 'Konfigurasi perekaman video',
-                icon: '📷',
-                route: '/admin/camera'
-            },
-            {
-                id: 'llm',
-                title: 'Asesmen LLM',
-                description: 'Konfigurasi asesmen AI',
-                icon: '🤖',
-                route: '/admin/llm'
-            },
-            {
-                id: 'consent',
-                title: 'Informed Consent',
-                description: 'Formulir persetujuan digital',
-                icon: '📋',
-                route: '/admin/consent'
-            }
-        ],
-        
-        sessions: [],
-
-        navigateTo(route) {
-            window.location.href = route;
+      pages: [
+        {
+          id: "phq",
+          title: "PPengaturan PHQ",
+          description: "Pengaturan kuesioner PHQ-9",
+          icon: "📋",
+          route: "/admin/phq",
         },
+        {
+          id: "camera",
+          title: "Pengaturan Kamera",
+          description: "Konfigurasi perekaman video",
+          icon: "📷",
+          route: "/admin/camera",
+        },
+        {
+          id: "llm",
+          title: "Asesmen LLM",
+          description: "Konfigurasi asesmen AI",
+          icon: "🤖",
+          route: "/admin/llm",
+        },
+        {
+          id: "consent",
+          title: "Informed Consent",
+          description: "Formulir persetujuan digital",
+          icon: "📋",
+          route: "/admin/consent",
+        },
+      ],
 
-        getStatusClass(status) {
-            const classes = {
-                'selesai': 'bg-green-100 text-green-800',
-                'menunggu': 'bg-yellow-100 text-yellow-800',
-                'lengkap': 'bg-blue-100 text-blue-800',
-                'berlangsung': 'bg-orange-100 text-orange-800'
-            };
-            return classes[status] || 'bg-gray-100 text-gray-800';
-        }
+      sessions: [],
+
+      navigateTo(route) {
+        window.location.href = route;
+      },
+
+      getStatusClass(status) {
+        const classes = {
+          selesai: "bg-green-100 text-green-800",
+          menunggu: "bg-yellow-100 text-yellow-800",
+          lengkap: "bg-blue-100 text-blue-800",
+          berlangsung: "bg-orange-100 text-orange-800",
+        };
+        return classes[status] || "bg-gray-100 text-gray-800";
+      },
     };
-}
+  }
 </script>
 {% endblock %}

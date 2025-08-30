@@ -57,7 +57,7 @@ class ExportService:
         return {
             'session_id': session.id,
             'user_id': session.user_id,
-            'username': session.user.username if session.user else 'Unknown',
+            'username': session.user.uname if session.user else 'Unknown',
             'created_at': session.created_at.isoformat(),
             'completed_at': session.completed_at.isoformat() if session.completed_at else None,
             'status': session.status,
@@ -107,23 +107,18 @@ class ExportService:
         }
         
         for conv in conversations:
-            messages = LLMConversationService.get_conversation_messages(conv.id)
-            
             conv_data = {
                 'conversation_id': conv.id,
-                'started_at': conv.created_at.isoformat(),
-                'completed_at': conv.completed_at.isoformat() if conv.completed_at else None,
-                'total_messages': len(messages),
-                'messages': []
+                'turn_number': conv.turn_number,
+                'created_at': conv.created_at.isoformat(),
+                'ai_message': conv.ai_message,
+                'user_message': conv.user_message,
+                'user_message_length': conv.user_message_length,
+                'has_end_conversation': conv.has_end_conversation,
+                'ai_model_used': conv.ai_model_used,
+                'response_audio_path': conv.response_audio_path,
+                'transcription': conv.transcription
             }
-            
-            for msg in messages:
-                conv_data['messages'].append({
-                    'timestamp': msg.timestamp.isoformat(),
-                    'role': msg.role,
-                    'content': msg.content,
-                    'response_time_ms': msg.response_time_ms
-                })
             
             llm_data['conversations'].append(conv_data)
         
@@ -144,7 +139,7 @@ class ExportService:
                 'captures': []
             }
             
-            upload_path = os.path.join(current_app.root_path, 'uploads')
+            upload_path = current_app.media_save
             
             for i, capture in enumerate(captures):
                 # Add image file
@@ -156,6 +151,7 @@ class ExportService:
                 # Add to metadata
                 metadata['captures'].append({
                     'filename': capture.filename,
+                    'full_path': os.path.join(current_app.media_save, capture.filename),
                     'timestamp': capture.timestamp.isoformat(),
                     'trigger': capture.capture_trigger,
                     'file_size_bytes': capture.file_size_bytes,
@@ -175,7 +171,7 @@ MENTAL HEALTH ASSESSMENT EXPORT
 
 Session Information:
 - Session ID: {session.id}
-- User: {session.user.username if session.user else 'Unknown'} (ID: {session.user_id})
+- User: {session.user.uname if session.user else 'Unknown'} (ID: {session.user_id})
 - Created: {session.created_at.strftime('%Y-%m-%d %H:%M:%S')}
 - Status: {session.status}
 - Assessment Order: {session.is_first} first

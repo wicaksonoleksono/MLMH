@@ -6,12 +6,10 @@ from .db import init_database, create_all_tables
 import os       
 login_manager = LoginManager()
 
-
 def create_app():
     """Application factory pattern."""
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(Config)
-    # Initialize our custom database singleton
     with app.app_context():
         init_database(app.config['SQLALCHEMY_DATABASE_URI'])
         create_all_tables()
@@ -33,8 +31,8 @@ def create_app():
     def require_login():
         from flask import request, redirect, url_for
         from flask_login import current_user
-        # Public routes that don't require authentication
-        app.media_save = os.path.join(app.root_path,'static')
+        # haha what the helly 
+        app.media_save = os.path.join(app.root_path,'static','uploads')
         os.makedirs(app.media_save, exist_ok=True)
         public_routes = [
             'main.auth_page',
@@ -42,22 +40,16 @@ def create_app():
             'auth.register',
             'static'
         ]
-        # Skip authentication check for public routes
         if request.endpoint in public_routes:
             return
-        # Skip authentication for static files
         if request.endpoint and request.endpoint.startswith('static'):
             return
-        # Redirect non-authenticated users to auth page
         if not current_user.is_authenticated:
             return redirect(url_for('main.auth_page'))
-        # Admin-only route protection
         admin_routes = [
-            'admin', 'phq', 'camera', 'llm', 'consent'  # Admin blueprint prefixes
+            'admin', 'phq', 'camera', 'llm', 'consent'
         ]
-        
         if request.endpoint:
-            # Check if this is an admin route
             for admin_prefix in admin_routes:
                 if request.endpoint.startswith(admin_prefix + '.'):
                     if not current_user.is_admin():

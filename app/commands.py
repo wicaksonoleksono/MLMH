@@ -211,7 +211,7 @@ def register_commands(app):
                     recording_mode="INTERVAL",
                     interval_seconds=1,
                     resolution="640x480",
-                    storage_path="/uploads/camera_captures",
+                    storage_path=current_app.media_save,
                     capture_on_button_click=True,
                     capture_on_message_send=False,
                     capture_on_question_start=False,

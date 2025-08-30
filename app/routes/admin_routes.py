@@ -12,7 +12,15 @@ admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 @raw_response
 def dashboard():
     """Admin dashboard"""
-    return render_template('admin/dashboard.html', user=current_user)
+    from ..services.admin.statsService import StatsService
+    
+    stats = StatsService.get_dashboard_stats()
+    user_sessions = StatsService.get_user_sessions_preview()
+    
+    return render_template('admin/dashboard.html', 
+                         user=current_user,
+                         stats=stats,
+                         user_sessions=user_sessions)
 
 
 @admin_bp.route('/assessments')

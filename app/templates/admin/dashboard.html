@@ -55,6 +55,7 @@
                             <th class="text-left py-3 px-4 font-medium text-gray-700">Username</th>
                             <th class="text-left py-3 px-4 font-medium text-gray-700">Session 1</th>
                             <th class="text-left py-3 px-4 font-medium text-gray-700">Session 2</th>
+                            <th class="text-left py-3 px-4 font-medium text-gray-700">Download All</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -63,20 +64,46 @@
                             <td class="py-3 px-4 text-gray-900">{{ user_session.user_id }}</td>
                             <td class="py-3 px-4 text-gray-900">{{ user_session.username }}</td>
                             <td class="py-3 px-4">
-                                <span class="px-2 py-1 rounded-full text-xs font-medium {{ 'bg-green-100 text-green-800' if user_session.session1 == 'Done' else 'bg-red-100 text-red-800' }}">
-                                    {{ user_session.session1 }}
-                                </span>
+                                {% if user_session.session1 == 'COMPLETED' and user_session.session1_id %}
+                                    <a href="{{ url_for('export.export_session', session_id=user_session.session1_id) }}" 
+                                       class="inline-flex items-center px-3 py-2 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition-colors">
+                                        📥 Download
+                                    </a>
+                                {% else %}
+                                    <span class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                        {{ user_session.session1 }}
+                                    </span>
+                                {% endif %}
                             </td>
                             <td class="py-3 px-4">
-                                <span class="px-2 py-1 rounded-full text-xs font-medium {{ 'bg-green-100 text-green-800' if user_session.session2 == 'Done' else 'bg-red-100 text-red-800' }}">
-                                    {{ user_session.session2 }}
-                                </span>
+                                {% if user_session.session2 == 'COMPLETED' and user_session.session2_id %}
+                                    <a href="{{ url_for('export.export_session', session_id=user_session.session2_id) }}" 
+                                       class="inline-flex items-center px-3 py-2 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition-colors">
+                                        📥 Download
+                                    </a>
+                                {% else %}
+                                    <span class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                        {{ user_session.session2 }}
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td class="py-3 px-4">
+                                {% if user_session.session1 == 'COMPLETED' and user_session.session2 == 'COMPLETED' and user_session.session1_id and user_session.session2_id %}
+                                    <button onclick="downloadBothSessions('{{ user_session.session1_id }}', '{{ user_session.session2_id }}')" 
+                                            class="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors">
+                                        📥 All Sessions
+                                    </button>
+                                {% else %}
+                                    <span class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                        ⏸️ Disabled
+                                    </span>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
                         {% if not user_sessions %}
                         <tr>
-                            <td colspan="4" class="py-8 text-center text-gray-500">No users found</td>
+                            <td colspan="5" class="py-8 text-center text-gray-500">No users found</td>
                         </tr>
                         {% endif %}
                     </tbody>
@@ -87,4 +114,44 @@
     
 
 </div>
+
+<script>
+function downloadBothSessions(session1Id, session2Id) {
+    // Use the existing bulk export endpoint
+    fetch('/admin/export/bulk', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            session_ids: [session1Id, session2Id]
+        })
+    })
+    .then(response => {
+        if (response.ok) {
+            // Create download link
+            const filename = response.headers.get('Content-Disposition') || 'bulk_export.zip';
+            response.blob().then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = filename.includes('filename=') ? 
+                    filename.split('filename=')[1].replace(/"/g, '') : 
+                    'bulk_export.zip';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            });
+        } else {
+            alert('Export failed. Please try again.');
+        }
+    })
+    .catch(error => {
+        console.error('Export error:', error);
+        alert('Export failed. Please try again.');
+    });
+}
+</script>
 {% endblock %}

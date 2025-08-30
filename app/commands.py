@@ -184,8 +184,8 @@ def register_commands(app):
         with get_session() as db:
             existing_llm_settings = db.query(LLMSettings).filter_by(is_default=True).first()
             if not existing_llm_settings:
+                import os 
                 default_llm_settings = LLMSettings(
-                    openai_api_key="set-it dude",  # Must be set by admin
                     chat_model="gpt-4o",
                     analysis_model="gpt-4o-mini", 
                     depression_aspects={
@@ -199,6 +199,10 @@ def register_commands(app):
                     is_default=True,
                     is_active=True
                 )
+                # Set encrypted API key from environment
+                api_key = os.getenv("OPENAI_API_KEY")
+                if api_key:
+                    default_llm_settings.set_api_key(api_key)
                 db.add(default_llm_settings)
                 click.echo("    ✓ Default LLM settings created")
 

@@ -43,7 +43,7 @@ class LLMFactory:
         config.update(kwargs)
         
         return ChatOpenAI(
-            api_key=llm_settings.openai_api_key,
+            api_key=llm_settings.get_api_key(),
             model=llm_settings.chat_model,  # e.g. gpt-4o
             **config
         )
@@ -64,7 +64,7 @@ class LLMFactory:
         config.update(kwargs)
         
         return ChatOpenAI(
-            api_key=llm_settings.openai_api_key,
+            api_key=llm_settings.get_api_key(),
             model=llm_settings.analysis_model,  # e.g. gpt-4o-mini
             **config
         )
@@ -83,9 +83,10 @@ class LLMFactory:
         issues = []
         
         # Check API key
-        if not llm_settings.openai_api_key:
+        decrypted_key = llm_settings.get_api_key()
+        if not decrypted_key:
             issues.append("Missing OpenAI API key")
-        elif len(llm_settings.openai_api_key) < 20:
+        elif len(decrypted_key) < 20:
             issues.append("Invalid OpenAI API key format")
         
         # Check models

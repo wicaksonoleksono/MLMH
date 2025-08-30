@@ -141,7 +141,7 @@ class LLMConversationService:
             analysis_result = LLMConversationService._call_analysis_api(
                 conversation_text,
                 analysis_prompt,
-                llm_settings.openai_api_key,
+                llm_settings.get_api_key(),
                 llm_settings.analysis_model
             )
             

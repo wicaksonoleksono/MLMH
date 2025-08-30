@@ -49,7 +49,7 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
             return [{
                 'id': setting.id,
                 'instructions': setting.instructions,
-                'openai_api_key': setting.openai_api_key,  # Return full API key for editing
+                'openai_api_key': setting.get_masked_api_key(),  # Return masked API key for security
                 'chat_model': setting.chat_model,
                 'analysis_model': setting.analysis_model,
                 'depression_aspects': setting.depression_aspects,
@@ -57,7 +57,7 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
             } for setting in settings]
 
     @staticmethod
-    def create_settings(openai_api_key: str, chat_model: str = "gpt-4o", 
+    def create_settings(openai_api_key: Optional[str] = None, chat_model: str = "gpt-4o", 
                        analysis_model: str = "gpt-4o-mini",
                        depression_aspects: Optional[List[str]] = None,
                        instructions: str = None,
@@ -92,7 +92,8 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                 
                 # Update existing settings
                 existing.instructions = final_instructions
-                existing.openai_api_key = openai_api_key
+                if openai_api_key is not None:  # Only update if new API key provided
+                    existing.set_api_key(openai_api_key)  # Use encryption method
                 existing.chat_model = chat_model
                 existing.analysis_model = analysis_model
                 existing.depression_aspects = aspects_json
@@ -106,16 +107,19 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                 # Create new settings
                 settings = LLMSettings(
                     instructions=final_instructions,
-                    openai_api_key=openai_api_key,
                     chat_model=chat_model,
                     analysis_model=analysis_model,
                     depression_aspects=aspects_json,
                     is_default=is_default
                 )
+                if openai_api_key is not None:  # Only set if API key provided
+                    settings.set_api_key(openai_api_key)  # Use encryption method
+                else:
+                    settings.openai_api_key = ""  # Empty encrypted key
                 db.add(settings)
             
             # Auto-set is_active based on field completeness (for both new and existing)
-            api_key_valid = settings.openai_api_key and settings.openai_api_key.strip() != ''
+            api_key_valid = bool(settings.get_api_key().strip())
             aspects_valid = (settings.depression_aspects and 
                            isinstance(settings.depression_aspects, dict) and
                            settings.depression_aspects.get('aspects') and

@@ -564,10 +564,14 @@ endblock %} {% block content %}
         try {
           const settingsData = {
             instructions: this.settings.instructions,
-            openai_api_key: this.settings.openai_api_key,
             chat_model: this.settings.chat_model,
             analysis_model: this.settings.analysis_model,
           };
+
+          // Only send API key if it's not the masked version (user entered new key)
+          if (this.settings.openai_api_key && !this.settings.openai_api_key.includes('••••')) {
+            settingsData.openai_api_key = this.settings.openai_api_key;
+          }
 
           // Only include depression_aspects if it has valid data (not empty or all empty fields)
           const validAspects = this.settings.depression_aspects.filter(aspect => 

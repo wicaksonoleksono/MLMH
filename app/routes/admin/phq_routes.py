@@ -76,12 +76,10 @@ def save_all_settings():
                 )
         
         # Create/update settings
-        questions_per_category = int(request.form.get('questions_per_category', 1))
         randomize = request.form.get('randomize_questions') == 'on'
         instructions = request.form.get('instructions', '')
         
         PHQService.create_settings(
-            questions_per_category=questions_per_category,
             scale_id=scale_result['id'],
             randomize_categories=randomize,
             instructions=instructions,
@@ -230,7 +228,6 @@ def create_settings():
     try:
         data = request.get_json()
         result = PHQService.create_settings(
-            questions_per_category=data['questions_per_category'],
             scale_id=data['scale_id'],
             randomize_categories=data.get('randomize_questions', False),
             instructions=data.get('instructions'),

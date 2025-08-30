@@ -1,6 +1,5 @@
-{% extends "admin/base.html" %}
-{% block title %}Pengaturan Kamera - Admin{% endblock %}
-{% block content %}
+{% extends "admin/base.html" %} {% block title %}Pengaturan Kamera - Admin{%
+endblock %} {% block content %}
 <div class="min-h-screen bg-gray-50" x-data="cameraSettings()">
   <!-- Header -->
   <div class="bg-white border-b border-gray-200 sticky top-0 z-40">
@@ -21,12 +20,7 @@
           >
             Muat Default
           </button>
-          <button
-            @click="clearAll()"
-            class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
-          >
-            Hapus Semua
-          </button>
+
           <button
             @click="saveAll()"
             class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
@@ -64,16 +58,15 @@
   function cameraSettings() {
     return {
       loading: false,
-
       settings: {
         recording_mode: "INTERVAL",
-        interval_seconds: 30,
+        interval_seconds: 1,
         resolution: "1280x720",
         is_default: true,
         // Event-driven settings
         capture_on_button_click: true,
         capture_on_message_send: false,
-        capture_on_question_start: false
+        capture_on_question_start: false,
       },
 
       // Camera test variables
@@ -90,50 +83,34 @@
         await this.loadData();
       },
 
+      onRecordingModeChange() {
+        if (
+          this.settings.recording_mode === "INTERVAL" &&
+          (!this.settings.interval_seconds ||
+            this.settings.interval_seconds < 1 ||
+            this.settings.interval_seconds > 60)
+        ) {
+          this.settings.interval_seconds = 30;
+        }
+      },
+
       loadDefaults() {
         this.showModal = true;
         this.modalTitle = "Muat Data Default";
-        this.modalMessage = "Apakah Anda yakin ingin memuat pengaturan kamera default? Data yang ada akan diganti.";
+        this.modalMessage =
+          "Apakah Anda yakin ingin memuat pengaturan kamera default? Data yang ada akan diganti.";
         this.modalConfirm = () => {
           this.settings = {
             recording_mode: "INTERVAL",
-            interval_seconds: 30,
-                quality_setting: "MEDIUM",
-            is_default: true
+            interval_seconds: 1,
+            resolution: "1280x720",
+            capture_on_button_click: true,
+            capture_on_message_send: false,
+            capture_on_question_start: false,
+            is_default: true,
           };
         };
       },
-
-      async clearAll() {
-        this.showModal = true;
-        this.modalTitle = "Hapus Semua Data";
-        this.modalMessage = "Apakah Anda yakin ingin menghapus semua pengaturan kamera yang ada?";
-        this.modalConfirm = async () => {
-          this.loading = true;
-          try {
-            const settings = await apiCall("/admin/camera/settings");
-            
-            if (Array.isArray(settings)) {
-              for (const setting of settings) {
-                await apiCall(`/admin/camera/settings/${setting.id}`, "DELETE");
-              }
-            }
-
-            this.showModal = true;
-            this.modalTitle = 'Berhasil';
-            this.modalMessage = 'Semua pengaturan kamera berhasil dihapus!';
-            this.modalConfirm = () => {};
-          } catch (error) {
-            this.showModal = true;
-            this.modalTitle = 'Error';
-            this.modalMessage = 'Error clearing data: ' + error.message;
-            this.modalConfirm = () => {};
-          } finally {
-            this.loading = false;
-          }
-        };
-      },
-
       async loadData() {
         this.loading = true;
         try {
@@ -144,16 +121,19 @@
             this.settings = {
               id: setting.id,
               recording_mode: setting.recording_mode,
-              interval_seconds: setting.interval_seconds,
+              interval_seconds:
+                setting.recording_mode === "INTERVAL" &&
+                setting.interval_seconds
+                  ? Math.max(1, Math.min(60, setting.interval_seconds))
+                  : 30,
               resolution: setting.resolution,
               capture_on_button_click: setting.capture_on_button_click,
               capture_on_message_send: setting.capture_on_message_send,
               capture_on_question_start: setting.capture_on_question_start,
-              is_default: setting.is_default
+              is_default: setting.is_default,
             };
           }
         } catch (error) {
-          
         } finally {
           this.loading = false;
         }
@@ -162,39 +142,80 @@
       async saveAll() {
         this.loading = true;
         try {
+          // Validate INTERVAL mode - interval_seconds must be between 1-60
+          if (this.settings.recording_mode === "INTERVAL") {
+            const interval = parseInt(this.settings.interval_seconds);
+            if (isNaN(interval) || interval < 1 || interval > 60) {
+              this.showModal = true;
+              this.modalTitle = "Error Validasi";
+              this.modalMessage =
+                "Mode Interval memerlukan interval pengambilan antara 1-60 detik. Harap atur nilai yang valid.";
+              this.modalConfirm = () => {
+                this.showModal = false;
+              };
+              this.loading = false;
+              return;
+            }
+          }
+
+          // Validate EVENT_DRIVEN mode - at least one trigger must be enabled
+          if (this.settings.recording_mode === "EVENT_DRIVEN") {
+            const hasTrigger =
+              this.settings.capture_on_button_click ||
+              this.settings.capture_on_message_send ||
+              this.settings.capture_on_question_start;
+            if (!hasTrigger) {
+              this.showModal = true;
+              this.modalTitle = "Error Validasi";
+              this.modalMessage =
+                "Mode Berdasarkan Peristiwa memerlukan setidaknya satu pemicu aktif. Harap aktifkan salah satu dari: Klik Tombol PHQ-9, Pengiriman Pesan Chat, atau Mulai Pertanyaan.";
+              this.modalConfirm = () => {
+                this.showModal = false;
+              };
+              this.loading = false;
+              return;
+            }
+          }
+
           const settingsData = {
             recording_mode: this.settings.recording_mode,
-            interval_seconds: this.settings.recording_mode === "INTERVAL" ? parseInt(this.settings.interval_seconds) : null,
+            interval_seconds:
+              this.settings.recording_mode === "INTERVAL"
+                ? parseInt(this.settings.interval_seconds)
+                : null,
             resolution: this.settings.resolution,
             capture_on_button_click: this.settings.capture_on_button_click,
             capture_on_message_send: this.settings.capture_on_message_send,
             capture_on_question_start: this.settings.capture_on_question_start,
-            is_default: this.settings.is_default
+            is_default: this.settings.is_default,
           };
 
-          
-          const result = await apiCall("/admin/camera/settings", "POST", settingsData);
-          
+          const result = await apiCall(
+            "/admin/camera/settings",
+            "POST",
+            settingsData
+          );
 
           if (result.status === "SNAFU") {
             this.showModal = true;
-            this.modalTitle = 'Error';
-            this.modalMessage = 'Error saving settings: ' + (result.error || result.errorMsg || "Unknown error");
+            this.modalTitle = "Error";
+            this.modalMessage =
+              "Error saving settings: " +
+              (result.error || result.errorMsg || "Unknown error");
             this.modalConfirm = () => {};
             return;
           }
 
           this.showModal = true;
-          this.modalTitle = 'Berhasil';
-          this.modalMessage = 'Pengaturan kamera berhasil disimpan!';
+          this.modalTitle = "Berhasil";
+          this.modalMessage = "Pengaturan kamera berhasil disimpan!";
           this.modalConfirm = () => {
             window.location.reload();
           };
         } catch (error) {
-          
           this.showModal = true;
-          this.modalTitle = 'Error';
-          this.modalMessage = 'Error saving data: ' + error.message;
+          this.modalTitle = "Error";
+          this.modalMessage = "Error saving data: " + error.message;
           this.modalConfirm = () => {};
         } finally {
           this.loading = false;
@@ -206,46 +227,53 @@
         try {
           this.hideError();
           this.hideSuccess();
-          
-          const resolution = this.settings.resolution.split('x');
+
+          const resolution = this.settings.resolution.split("x");
           const width = parseInt(resolution[0]);
           const height = parseInt(resolution[1]);
-          
+
           const stream = await navigator.mediaDevices.getUserMedia({
             video: {
               width: { ideal: width },
               height: { ideal: height },
-              facingMode: 'user'
-            }
+              facingMode: "user",
+            },
           });
 
           this.videoStream = stream;
-          const video = document.getElementById('videoPreview');
+          const video = document.getElementById("videoPreview");
           video.srcObject = stream;
-          
-          video.classList.remove('hidden');
-          document.getElementById('camera-placeholder').classList.add('hidden');
-          document.getElementById('camera-controls').classList.remove('hidden');
-          
+
+          video.classList.remove("hidden");
+          document.getElementById("camera-placeholder").classList.add("hidden");
+          document.getElementById("camera-controls").classList.remove("hidden");
+
           this.isPreviewActive = true;
-          
         } catch (error) {
-          this.showError('Akses kamera ditolak: ' + error.message + '. Harap izinkan akses kamera dan coba lagi.');
+          this.showError(
+            "Akses kamera ditolak: " +
+              error.message +
+              ". Harap izinkan akses kamera dan coba lagi."
+          );
           this.isPreviewActive = false;
         }
       },
 
       stopCameraTest() {
         if (this.videoStream) {
-          this.videoStream.getTracks().forEach(track => track.stop());
+          this.videoStream.getTracks().forEach((track) => track.stop());
           this.videoStream = null;
         }
-        
-        document.getElementById('videoPreview').classList.add('hidden');
-        document.getElementById('camera-placeholder').classList.remove('hidden');
-        document.getElementById('camera-controls').classList.add('hidden');
-        document.getElementById('captured-image-preview').classList.add('hidden');
-        
+
+        document.getElementById("videoPreview").classList.add("hidden");
+        document
+          .getElementById("camera-placeholder")
+          .classList.remove("hidden");
+        document.getElementById("camera-controls").classList.add("hidden");
+        document
+          .getElementById("captured-image-preview")
+          .classList.add("hidden");
+
         this.isPreviewActive = false;
         this.hideError();
         this.hideSuccess();
@@ -255,54 +283,59 @@
         if (!this.isPreviewActive) return;
 
         try {
-          const video = document.getElementById('videoPreview');
-          const canvas = document.getElementById('captureCanvas');
-          
-          const resolution = this.settings.resolution.split('x');
+          const video = document.getElementById("videoPreview");
+          const canvas = document.getElementById("captureCanvas");
+
+          const resolution = this.settings.resolution.split("x");
           const width = parseInt(resolution[0]);
           const height = parseInt(resolution[1]);
-          
+
           canvas.width = width;
           canvas.height = height;
-          
-          const ctx = canvas.getContext('2d');
+
+          const ctx = canvas.getContext("2d");
           ctx.drawImage(video, 0, 0, width, height);
-          
-          canvas.toBlob((blob) => {
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-            
-            document.getElementById('captured-image').src = dataUrl;
-            
-            const fileSizeKB = Math.round(blob.size / 1024);
-            document.getElementById('capture-info').textContent = 
-                `${width}x${height}, ${fileSizeKB}KB`;
-            
-            document.getElementById('captured-image-preview').classList.remove('hidden');
-            this.showSuccess();
-            
-          }, 'image/jpeg', 0.85);
-          
+
+          canvas.toBlob(
+            (blob) => {
+              const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+
+              document.getElementById("captured-image").src = dataUrl;
+
+              const fileSizeKB = Math.round(blob.size / 1024);
+              document.getElementById(
+                "capture-info"
+              ).textContent = `${width}x${height}, ${fileSizeKB}KB`;
+
+              document
+                .getElementById("captured-image-preview")
+                .classList.remove("hidden");
+              this.showSuccess();
+            },
+            "image/jpeg",
+            0.85
+          );
         } catch (error) {
-          this.showError('Gagal mengambil gambar: ' + error.message);
+          this.showError("Gagal mengambil gambar: " + error.message);
         }
       },
 
       showError(message) {
-        document.getElementById('error-message').textContent = message;
-        document.getElementById('camera-error').classList.remove('hidden');
+        document.getElementById("error-message").textContent = message;
+        document.getElementById("camera-error").classList.remove("hidden");
       },
 
       hideError() {
-        document.getElementById('camera-error').classList.add('hidden');
+        document.getElementById("camera-error").classList.add("hidden");
       },
 
       showSuccess() {
-        document.getElementById('camera-success').classList.remove('hidden');
+        document.getElementById("camera-success").classList.remove("hidden");
       },
 
       hideSuccess() {
-        document.getElementById('camera-success').classList.add('hidden');
-      }
+        document.getElementById("camera-success").classList.add("hidden");
+      },
     };
   }
 </script>

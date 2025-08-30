@@ -220,11 +220,6 @@ class PHQService:
     @staticmethod
     def update_scale(scale_id: int, updates: Dict[str, Any]) -> Dict[str, Any]:
         """Update PHQ scale"""
-        # 🐛 DEBUG: Log what frontend is sending to catch field mapping bugs
-        print(f"🔍 DEBUG update_scale received: {updates}")
-        for key, value in updates.items():
-            print(f"  {key}: {type(value).__name__} = {value}")
-        
         # 🚨 DETECT FIELD MAPPING BUG: is_active should never be a dict
         if 'is_active' in updates and isinstance(updates['is_active'], dict):
             print(f"🚨 BUG DETECTED: is_active is a dict! Frontend is sending wrong field mapping.")
@@ -246,17 +241,45 @@ class PHQService:
                 # Remove default from other scales
                 db.query(PHQScale).filter(PHQScale.is_default == True).update({'is_default': False})
 
-            # Only update allowed fields to prevent field confusion
-            allowed_fields = ['scale_name', 'min_value', 'max_value', 'scale_labels', 'is_default']
             for key, value in updates.items():
-                if key in allowed_fields and hasattr(scale, key):
-                    setattr(scale, key, value)
+                if hasattr(scale, key) and key != 'is_active':  # Skip is_active field, it's auto-calculated
+                    # Special handling for scale_labels JSON field
+                    if key == 'scale_labels':
+                        if isinstance(value, dict):
+                            # Validate that keys are integers
+                            validated_labels = {}
+                            for k, v in value.items():
+                                try:
+                                    int_key = int(k)
+                                    validated_labels[int_key] = str(v) if v is not None else ""
+                                except (ValueError, TypeError):
+                                    # Skip invalid keys
+                                    continue
+                            setattr(scale, key, validated_labels)
+                        else:
+                            # If not a dict, set to empty dict
+                            setattr(scale, key, {})
+                    else:
+                        setattr(scale, key, value)
+            
+            # Recalculate is_active based on field completeness
+            labels_valid = (scale.scale_labels and 
+                           isinstance(scale.scale_labels, dict) and
+                           len(scale.scale_labels) > 0)
+            range_valid = (scale.min_value is not None and 
+                          scale.max_value is not None and
+                          scale.min_value < scale.max_value)
+            scale.is_active = bool(labels_valid and range_valid)
 
             db.commit()
 
             return {
                 'id': scale.id,
-                'scale_name': scale.scale_name
+                'scale_name': scale.scale_name,
+                'min_value': scale.min_value,
+                'max_value': scale.max_value,
+                'scale_labels': scale.scale_labels,
+                'is_default': scale.is_default
             }
 
     @staticmethod
@@ -291,77 +314,76 @@ class PHQService:
             } for setting in settings]
     # Here delete it too .... 
     @staticmethod
-    def create_settings( questions_per_category: int, scale_id: int,
-                        randomize_categories: bool = False, instructions: str = None,
-                        is_default: bool = False) -> Dict[str, Any]:
-        """Create or update PHQ settings - always updates existing default if is_default=True"""
+    def create_settings(instructions: str, scale_id: int = None, randomize_categories: bool = False, is_default: bool = False) -> Dict[str, Any]:
+        """Create or update PHQ settings"""
         with get_session() as db:
-            # Null handling - don't save if required fields are null/empty
-
-            if not questions_per_category or questions_per_category <= 0:
-                raise ValueError("Questions per category must be a positive number")
-
-            if not scale_id:
-                raise ValueError("Scale ID cannot be null or empty")
-
-            # Null handling for instructions - don't save if null/empty
-            final_instructions = instructions if instructions and instructions.strip() else None
-
+            # Look for existing settings (assume only one set of settings for now)
+            existing = db.query(PHQSettings).filter(PHQSettings.is_active == True).first()
+            
             if is_default:
-                # Find existing default settings to update
-                existing = db.query(PHQSettings).filter(PHQSettings.is_default == True).first()
-                if existing:
-                    existing.questions_per_category = questions_per_category
-                    existing.scale_id = scale_id
-                    existing.randomize_categories = randomize_categories
-                    existing.instructions = final_instructions
-                    questions_exist = db.query(PHQQuestion).filter(PHQQuestion.is_active == True).count() > 0
-                    settings = existing
-                else:
-                    questions_exist = db.query(PHQQuestion).filter(PHQQuestion.is_active == True).count() > 0
-                    settings = PHQSettings(
-                        questions_per_category=questions_per_category,
-                        scale_id=scale_id,
-                        randomize_categories=randomize_categories,
-                        instructions=final_instructions,
-                        is_default=True,
-                        is_active=questions_exist
-                    )
-                    db.add(settings)
+                # Remove default from other settings
+                db.query(PHQSettings).filter(PHQSettings.is_default == True).update({'is_default': False})
+            
+            if existing:
+                # Update existing settings
+                existing.instructions = instructions
+                existing.scale_id = scale_id
+                existing.randomize_categories = randomize_categories
+                existing.is_default = is_default
+                
+                # Set is_active based on field completeness
+                with get_session() as db2:
+                    questions_exist = db2.query(PHQQuestion).filter(PHQQuestion.is_active == True).count() > 0
+                all_fields_valid = bool(instructions and instructions.strip() != '' and questions_exist and scale_id)
+                # Ensure is_active is never None
+                existing.is_active = bool(all_fields_valid)
+                
+                settings = existing
+                
             else:
-                # Non-default settings - create new
+                # Create new settings
                 settings = PHQSettings(
-                    questions_per_category=questions_per_category,
+                    instructions=instructions,
                     scale_id=scale_id,
                     randomize_categories=randomize_categories,
-                    instructions=final_instructions,
-                    is_default=False
+                    is_default=is_default
                 )
+                
+                # Set is_active based on field completeness
+                with get_session() as db2:
+                    questions_exist = db2.query(PHQQuestion).filter(PHQQuestion.is_active == True).count() > 0
+                all_fields_valid = bool(instructions and instructions.strip() != '' and questions_exist and scale_id)
+                # Ensure is_active is never None
+                settings.is_active = bool(all_fields_valid)
+                
                 db.add(settings)
-
-            # Auto-set is_active based on field completeness
-            questions_exist = db.query(PHQQuestion).filter(PHQQuestion.is_active == True).count() > 0
-            all_fields_valid = (
-                settings.questions_per_category is not None and settings.questions_per_category > 0 and
-                settings.scale_id is not None and
-                questions_exist
-            )
-            settings.is_active = all_fields_valid
             
             db.commit()
-
+            
             return {
                 'id': settings.id,
-                'questions_per_category': settings.questions_per_category,
+                'instructions': settings.instructions,
                 'scale_id': settings.scale_id,
                 'randomize_categories': settings.randomize_categories,
-                'instructions': settings.instructions,
                 'is_default': settings.is_default
             }
 
     @staticmethod
     def update_settings(settings_id: int, updates: Dict[str, Any]) -> Dict[str, Any]:
         """Update PHQ settings"""
+        # 🚨 DETECT FIELD MAPPING BUG: is_active should never be None or dict
+        if 'is_active' in updates:
+            if updates['is_active'] is None:
+                print(f"🚨 BUG DETECTED: is_active is None! Frontend is sending wrong field mapping.")
+                print(f"   is_active value: {updates['is_active']}")
+                del updates['is_active']
+                print(f"   Removed is_active from updates to prevent crash.")
+            elif isinstance(updates['is_active'], dict):
+                print(f"🚨 BUG DETECTED: is_active is a dict! Frontend is sending wrong field mapping.")
+                print(f"   is_active value: {updates['is_active']}")
+                del updates['is_active']
+                print(f"   Removed is_active from updates to prevent crash.")
+        
         with get_session() as db:
             settings = db.query(PHQSettings).filter(
                 and_(PHQSettings.id == settings_id, PHQSettings.is_active == True)
@@ -375,8 +397,12 @@ class PHQService:
                 db.query(PHQSettings).filter(PHQSettings.is_default == True).update({'is_default': False})
 
             for key, value in updates.items():
-                if hasattr(settings, key):
+                if hasattr(settings, key) and key != 'is_active':  # Skip is_active field, it's auto-calculated
                     setattr(settings, key, value)
+            
+            # Recalculate is_active based on field completeness
+            questions_exist = db.query(PHQQuestion).filter(PHQQuestion.is_active == True).count() > 0
+            settings.is_active = bool(settings.instructions and settings.instructions.strip() != '' and questions_exist)
 
             db.commit()
 

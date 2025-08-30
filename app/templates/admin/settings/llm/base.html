@@ -126,7 +126,7 @@ endblock %} {% block content %}
       loadDataFromTemplate() {
         // Load data from Jinja template context (passed via window.llmData)
         const llmData = window.llmData || {};
-        
+
         try {
           // Load settings
           if (llmData.settings) {
@@ -134,15 +134,25 @@ endblock %} {% block content %}
             this.settings = {
               id: setting.id,
               instructions: setting.instructions || "",
-              openai_api_key: setting.openai_api_key || "",
+              openai_api_key: setting.openai_api_key || "", // This will be the masked version
+              openai_api_key_unmasked: setting.openai_api_key_unmasked || "", // This is the real key
               chat_model: setting.chat_model || "gpt-4o",
               analysis_model: setting.analysis_model || "gpt-4o-mini",
               depression_aspects: setting.depression_aspects || [
-                { name: "Depression Analysis", description: "General depression assessment" }
+                {
+                  name: "Depression Analysis",
+                  description: "General depression assessment",
+                },
               ],
             };
+
+            // If we have an unmasked key, use it for the display (but mask it immediately)
+            if (this.settings.openai_api_key_unmasked) {
+              // Keep the unmasked key in a separate variable but don't display it
+              // The display will show the masked version
+            }
           }
-          
+
           // Load available models if provided
           if (llmData.available_models) {
             this.availableModels = [...llmData.available_models];
@@ -164,6 +174,7 @@ endblock %} {% block content %}
               this.settings = {
                 instructions: defaults.instructions || "",
                 openai_api_key: defaults.openai_api_key || "",
+                openai_api_key_unmasked: "", // No unmasked key for defaults
                 chat_model: defaults.chat_model || "gpt-4o",
                 analysis_model: defaults.analysis_model || "gpt-4o-mini",
                 depression_aspects: defaults.depression_aspects || [
@@ -217,6 +228,7 @@ endblock %} {% block content %}
               this.settings = {
                 instructions: "",
                 openai_api_key: "",
+                openai_api_key_unmasked: "", // No unmasked key
                 chat_model: "gpt-4o",
                 analysis_model: "gpt-4o-mini",
                 depression_aspects: [
@@ -268,10 +280,10 @@ endblock %} {% block content %}
               };
             }
           } catch (error) {
-            
             this.settings = {
               instructions: "",
               openai_api_key: "",
+              openai_api_key_unmasked: "", // No unmasked key
               chat_model: "gpt-4o",
               analysis_model: "gpt-4o-mini",
               depression_aspects: [
@@ -342,6 +354,20 @@ endblock %} {% block content %}
               }
             }
 
+            // Clear the frontend state completely
+            this.settings = {
+              id: null,
+              instructions: "",
+              openai_api_key: "",
+              openai_api_key_unmasked: "",
+              chat_model: "",
+              analysis_model: "",
+              depression_aspects: [], // Empty array instead of default aspects
+            };
+
+            // Clear available models as well
+            this.availableModels = [];
+
             this.showModal = true;
             this.modalTitle = "Berhasil";
             this.modalMessage = "Semua pengaturan LLM berhasil dihapus!";
@@ -364,17 +390,16 @@ endblock %} {% block content %}
       async loadData() {
         this.loading = true;
         try {
-          
           const settingsRes = await apiCall("/admin/llm/settings");
-          
 
           if (Array.isArray(settingsRes) && settingsRes.length > 0) {
             const setting = settingsRes[0];
-            
+
             this.settings = {
               id: setting.id,
               instructions: setting.instructions || "",
-              openai_api_key: setting.openai_api_key || "",
+              openai_api_key: setting.openai_api_key || "", // Masked version
+              openai_api_key_unmasked: setting.openai_api_key_unmasked || "", // Unmasked version
               chat_model: setting.chat_model,
               analysis_model: setting.analysis_model,
               depression_aspects: setting.depression_aspects || [
@@ -425,11 +450,11 @@ endblock %} {% block content %}
               ],
             };
           } else {
-            
             this.settings = {
               id: null,
               instructions: "",
               openai_api_key: "",
+              openai_api_key_unmasked: "", // No unmasked key
               chat_model: "gpt-4o",
               analysis_model: "gpt-4o-mini",
               depression_aspects: [
@@ -482,18 +507,15 @@ endblock %} {% block content %}
           }
 
           // Try to load available models (separate API call)
-          if (this.settings.openai_api_key) {
+          if (this.settings.openai_api_key_unmasked) {
             try {
               const models = await apiCall("/admin/llm/models");
               this.availableModels = Array.isArray(models) ? models : [];
-              
             } catch (error) {
-              
               this.availableModels = [];
             }
           }
         } catch (error) {
-          
           this.showModal = true;
           this.modalTitle = "Error Loading Data";
           this.modalMessage = `Failed to load LLM settings: ${error.message}`;
@@ -508,17 +530,16 @@ endblock %} {% block content %}
       async loadData() {
         this.loading = true;
         try {
-          
           const settingsRes = await apiCall("/admin/llm/settings");
-          
 
           if (Array.isArray(settingsRes) && settingsRes.length > 0) {
             const setting = settingsRes[0];
-            
+
             this.settings = {
               id: setting.id,
               instructions: setting.instructions || "",
-              openai_api_key: setting.openai_api_key || "",
+              openai_api_key: setting.openai_api_key || "", // Masked version
+              openai_api_key_unmasked: setting.openai_api_key_unmasked || "", // Unmasked version
               chat_model: setting.chat_model,
               analysis_model: setting.analysis_model,
               depression_aspects: setting.depression_aspects || [
@@ -568,21 +589,18 @@ endblock %} {% block content %}
                 },
               ],
             };
-            
           } else {
             // Loading default config from backend
             try {
               const defaultConfig = await apiCall("/admin/llm/config/default");
               if (defaultConfig.openai_api_key) {
                 this.settings.openai_api_key = defaultConfig.openai_api_key;
-                
+                this.settings.openai_api_key_unmasked =
+                  defaultConfig.openai_api_key; // Same for default config
               }
-            } catch (error) {
-              
-            }
+            } catch (error) {}
           }
         } catch (error) {
-          
         } finally {
           this.loading = false;
         }
@@ -596,30 +614,37 @@ endblock %} {% block content %}
             chat_model: this.settings.chat_model,
             analysis_model: this.settings.analysis_model,
           };
-
-          // Only send API key if it's not the masked version (user entered new key)
-          if (this.settings.openai_api_key && !this.settings.openai_api_key.includes('••••')) {
+          //hahaha gajelas manual lah wireshark minta tolong
+          if (
+            this.settings.openai_api_key &&
+            !this.settings.openai_api_key.includes("•")
+          ) {
+            // NOT MASKED> XDXD ./.
             settingsData.openai_api_key = this.settings.openai_api_key;
+          } else if (this.settings.openai_api_key_unmasked) {
+            // Use the unmasked key we stored
+            settingsData.openai_api_key = this.settings.openai_api_key_unmasked;
           }
 
-          
           // Only include depression_aspects if it has valid data (not empty or all empty fields)
-          const validAspects = this.settings.depression_aspects.filter(aspect => 
-            aspect.name && aspect.name.trim() && aspect.description && aspect.description.trim()
+          const validAspects = this.settings.depression_aspects.filter(
+            (aspect) =>
+              aspect.name &&
+              aspect.name.trim() &&
+              aspect.description &&
+              aspect.description.trim()
           );
-          
+
           if (validAspects.length > 0) {
             settingsData.depression_aspects = validAspects;
           }
           // If no valid aspects, don't include the field at all (null handling)
 
-          
           const result = await apiCall(
             "/admin/llm/settings",
             "POST",
             settingsData
           );
-          
 
           if (result.status === "SNAFU") {
             this.showModal = true;
@@ -641,7 +666,6 @@ endblock %} {% block content %}
             window.location.reload();
           };
         } catch (error) {
-          
           this.showModal = true;
           this.modalTitle = "Error";
           this.modalMessage = "Error saving data: " + error.message;
@@ -668,6 +692,7 @@ endblock %} {% block content %}
       },
 
       async testModel(modelId, type) {
+        // The test Model refreh model should load api key from the backend i think its better taht way.. xd,,
         try {
           const result = await apiCall(
             `/admin/llm/models/${encodeURIComponent(modelId)}/test`
@@ -679,7 +704,6 @@ endblock %} {% block content %}
           );
           return result.available || false;
         } catch (error) {
-          
           alert(`Error testing ${type} model "${modelId}": ${error.message}`);
           return false;
         }
@@ -691,7 +715,6 @@ endblock %} {% block content %}
           this.availableModels = Array.isArray(models) ? models : [];
           alert("Model list refreshed!");
         } catch (error) {
-          
           this.availableModels = [];
           alert("Error refreshing models: " + error.message);
         }
@@ -699,8 +722,23 @@ endblock %} {% block content %}
 
       async testApiKey() {
         try {
-          // Test stored API key from database (server-side)
-          const result = await apiCall("/admin/llm/api-key/test", "POST", {});
+          // Test either the provided API key or the stored one
+          const testData = {};
+
+          // If there's a provided API key that's not masked, use it
+          if (
+            this.settings.openai_api_key &&
+            !this.settings.openai_api_key.includes("•")
+          ) {
+            testData.api_key = this.settings.openai_api_key;
+          }
+
+          // Test API key (either provided or stored)
+          const result = await apiCall(
+            "/admin/llm/api-key/test",
+            "POST",
+            testData
+          );
 
           if (result.valid) {
             alert("✅ API Key is valid!");

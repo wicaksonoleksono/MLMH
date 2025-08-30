@@ -112,7 +112,7 @@
             type="text"
             x-model="settings.openai_api_key"
             class="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 font-mono text-sm"
-            :placeholder="settings.openai_api_key && settings.openai_api_key.includes('••••') ? 'Key is encrypted - enter new key to replace' : 'sk-proj-...'"
+            :placeholder="settings.openai_api_key && settings.openai_api_key.includes('•') ? 'Key is encrypted - enter new key to replace' : 'sk-proj-...'"
           />
           <button
             @click="testApiKey()"
@@ -123,13 +123,13 @@
         </div>
         <p class="text-xs text-gray-500 mt-1">
           <span
-            x-show="settings.openai_api_key && settings.openai_api_key.includes('••••')"
+            x-show="settings.openai_api_key && settings.openai_api_key.includes('•')"
             class="text-green-600"
           >
             ✓ Encrypted API key stored securely. Enter new key to replace.
           </span>
           <span
-            x-show="!settings.openai_api_key || !settings.openai_api_key.includes('••••')"
+            x-show="!settings.openai_api_key || !settings.openai_api_key.includes('•')"
             class="text-gray-500"
           >
             API key will be encrypted and stored securely. Click "Test API Key"
@@ -166,8 +166,8 @@
         >
       </div>
       <p class="text-gray-600 mb-6">
-        Tulis nama model untuk percakapan dan analisis - klik refresh untuk
-        melihat model tersedia
+        klik refresh untuk melihat model yang tersedia Kemudian Pilih moodel
+        yang tedari model yang tersedia
       </p>
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">

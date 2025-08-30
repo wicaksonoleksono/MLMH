@@ -68,6 +68,7 @@ class AssessmentSession(BaseModel):
     llm_conversations = relationship("LLMConversation", back_populates="session", cascade="all, delete-orphan")
     llm_analysis = relationship("LLMAnalysisResult", back_populates="session", cascade="all, delete-orphan")
     camera_captures = relationship("CameraCapture", back_populates="session", cascade="all, delete-orphan")
+    email_notifications = relationship("EmailNotification", back_populates="session", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f'<AssessmentSession {self.id[:8]}: {self.is_first} first, status={self.status} for user {self.user_id}>'
@@ -96,6 +97,18 @@ class AssessmentSession(BaseModel):
             self.duration_seconds = int((self.end_time - self.start_time).total_seconds())
 
         self.updated_at = datetime.utcnow()
+        
+        # Trigger post-completion tasks (email notifications, etc.)
+    #     self._trigger_completion_tasks()
+    
+    # def _trigger_completion_tasks(self) -> None:
+    #     """Trigger post-completion tasks like email notifications"""
+    #     try:
+    #         # Import here to avoid circular imports
+    #         from app.services.assessment.sessionCompletionService import SessionCompletionService
+    #         SessionCompletionService.handle_session_completion(self.id)
+    #     except Exception as e:
+    #         print(f"Error triggering completion tasks for session {self.id}: {str(e)}")
 
     def calculate_completion_percentage(self) -> int:
         """Calculate completion percentage based on completed steps"""
@@ -435,3 +448,104 @@ class SessionExport(BaseModel):
 
     def __repr__(self):
         return f'<SessionExport {self.id}: {self.export_type} for session {self.session_id}>'
+
+
+class EmailNotification(BaseModel):
+    __tablename__ = 'email_notifications'
+    
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
+    
+    # Notification type
+    notification_type: Mapped[str] = mapped_column(String(50), nullable=False)  # 'SESSION_COMPLETED', 'FOLLOWUP_REMINDER'
+    
+    # Email details
+    email_address: Mapped[str] = mapped_column(String(255), nullable=False)
+    subject: Mapped[str] = mapped_column(String(500), nullable=False)
+    template_used: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    
+    # Scheduling
+    scheduled_send_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)  # When to send
+    actual_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # When actually sent
+    
+    # Status tracking
+    status: Mapped[str] = mapped_column(String(20), default='PENDING')  # PENDING, SENT, FAILED, CANCELLED
+    send_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_attempt_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    # Metadata
+    notification_data: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    session = relationship("AssessmentSession")
+    user = relationship("User")
+    
+    def __repr__(self):
+        return f'<EmailNotification {self.id}: {self.notification_type} for session {self.session_id}>'
+    
+    def mark_sent(self) -> None:
+        """Mark notification as successfully sent"""
+        self.status = 'SENT'
+        self.actual_sent_at = datetime.utcnow()
+        self.updated_at = datetime.utcnow()
+    
+    def mark_failed(self, error: str) -> None:
+        """Mark notification as failed"""
+        self.status = 'FAILED'
+        self.error_message = error
+        self.last_attempt_at = datetime.utcnow()
+        self.send_attempts += 1
+        self.updated_at = datetime.utcnow()
+    
+    def can_retry(self, max_attempts: int = 3) -> bool:
+        """Check if notification can be retried"""
+        return self.status == 'FAILED' and self.send_attempts < max_attempts
+    
+    @classmethod
+    def create_completion_notification(
+        cls,
+        session_id: str,
+        user_id: int,
+        email_address: str
+    ) -> "EmailNotification":
+        """Create immediate session completion notification"""
+        return cls(
+            session_id=session_id,
+            user_id=user_id,
+            email_address=email_address,
+            notification_type='SESSION_COMPLETED',
+            subject='Sesi Assessment Selesai - Terima kasih!',
+            template_used='session_completed',
+            scheduled_send_at=datetime.utcnow(),  # Send immediately
+            notification_data={
+                'session_number': 1  # Will be updated by service
+            }
+        )
+    
+    @classmethod
+    def create_followup_reminder(
+        cls,
+        session_id: str, 
+        user_id: int,
+        email_address: str,
+        send_date: datetime
+    ) -> "EmailNotification":
+        """Create 14-day followup reminder notification"""
+        return cls(
+            session_id=session_id,
+            user_id=user_id, 
+            email_address=email_address,
+            notification_type='FOLLOWUP_REMINDER',
+            subject='Pengingat: Waktunya Sesi 2!',
+            template_used='followup_reminder',
+            scheduled_send_at=send_date,
+            notification_data={
+                'reminder_days': 14,
+                'next_session_number': 2
+            }
+        )

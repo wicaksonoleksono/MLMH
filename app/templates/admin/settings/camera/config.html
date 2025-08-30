@@ -33,6 +33,7 @@
                         name="recording_mode" 
                         value="INTERVAL" 
                         x-model="settings.recording_mode"
+                        @change="onRecordingModeChange()"
                         class="peer sr-only"
                     >
                     <div class="p-6 border-2 border-gray-200 rounded-xl cursor-pointer transition-all peer-checked:border-green-500 peer-checked:bg-green-50">
@@ -61,6 +62,7 @@
                         name="recording_mode" 
                         value="EVENT_DRIVEN" 
                         x-model="settings.recording_mode"
+                        @change="onRecordingModeChange()"
                         class="peer sr-only"
                     >
                     <div class="p-6 border-2 border-gray-200 rounded-xl cursor-pointer transition-all peer-checked:border-purple-500 peer-checked:bg-purple-50">

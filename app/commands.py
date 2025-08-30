@@ -2,7 +2,9 @@ import click
 from flask import current_app
 from .model.shared.users import User
 from .model.shared.enums import UserType
+from .model.assessment.sessions import EmailNotification
 from .db import get_session, create_all_tables, get_engine
+from .services.SMTP.emailNotificationService import EmailNotificationService
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import text
 
@@ -364,3 +366,150 @@ def register_commands(app):
             except Exception as e:
                 click.echo(f"[SNAFU] Database connection failed: {str(e)}")
                 click.echo("Check your database configuration and ensure the database server is running.")
+
+    @app.cli.command("send-emails")
+    def send_scheduled_emails():
+        """Send scheduled email notifications (run via cron)"""
+        click.echo("[OLKORECT] Processing scheduled email notifications...")
+        
+        try:
+            processed_count = EmailNotificationService.process_scheduled_notifications()
+            click.echo(f"[OLKORECT] Processed {processed_count} scheduled notifications")
+            
+            # Also retry failed notifications
+            retried_count = EmailNotificationService.retry_failed_notifications()
+            if retried_count > 0:
+                click.echo(f"[OLKORECT] Retried {retried_count} failed notifications")
+                
+        except Exception as e:
+            click.echo(f"[SNAFU] Error processing notifications: {str(e)}")
+
+    @app.cli.command("list-pending-emails")
+    def list_pending_emails():
+        """List pending email notifications"""
+        try:
+            pending = EmailNotificationService.get_pending_notifications(50)
+            
+            if not pending:
+                click.echo("No pending notifications")
+                return
+            
+            click.echo(f"[OLKORECT] {len(pending)} pending notifications:")
+            click.echo("-" * 50)
+            
+            for notification in pending:
+                status_text = "PENDING" if notification.status == "PENDING" else "FAILED"
+                scheduled_time = notification.scheduled_send_at.strftime("%Y-%m-%d %H:%M UTC")
+                
+                click.echo(f"{status_text} {notification.notification_type}")
+                click.echo(f"   To: {notification.email_address}")
+                click.echo(f"   Scheduled: {scheduled_time}")
+                click.echo(f"   Subject: {notification.subject}")
+                click.echo()
+                
+        except Exception as e:
+            click.echo(f"[SNAFU] Error listing pending notifications: {str(e)}")
+
+    @app.cli.command("test-smtp")
+    def test_smtp_connection():
+        """Test SMTP connection"""
+        click.echo("[OLKORECT] Testing SMTP connection...")
+        
+        try:
+            if EmailNotificationService.test_smtp_connection():
+                click.echo("[OLKORECT] SMTP connection successful!")
+            else:
+                click.echo("[SNAFU] SMTP connection failed!")
+        except Exception as e:
+            click.echo(f"[SNAFU] SMTP connection test error: {str(e)}")
+
+    @app.cli.command("send-completion-notification")
+    @click.argument('session_id')
+    def send_completion_notification(session_id):
+        """Manually trigger completion notification for a session"""
+        click.echo(f"[OLKORECT] Sending completion notification for session {session_id}...")
+        
+        try:
+            success = EmailNotificationService.create_session_completion_notifications(session_id)
+            
+            if success:
+                click.echo("[OLKORECT] Completion notification created and sent!")
+            else:
+                click.echo("[SNAFU] Failed to create/send completion notification")
+        except Exception as e:
+            click.echo(f"[SNAFU] Error sending completion notification: {str(e)}")
+
+    @app.cli.command("test-email-send")
+    @click.option('--subject', default='Test Email', help='Email subject')
+    @click.option('--message', default='This is a test email from the Mental Health system', help='Email message')
+    def test_email_send(subject, message):
+        """Test sending email to wicaksonolxn@gmail.com using simple SMTP"""
+        click.echo("[OLKORECT] Testing email send to wicaksonolxn@gmail.com...")
+        
+        try:
+            from app.services.SMTP.smtpService import SMTPService
+            
+            html_content = f"""
+            <html>
+            <body>
+                <h2>{subject}</h2>
+                <p>{message}</p>
+                <p>Sent from Mental Health Assessment System</p>
+            </body>
+            </html>
+            """
+            
+            success = SMTPService.send_html_email(
+                to_email="wicaksonolxn@gmail.com",
+                subject=subject,
+                html_content=html_content
+            )
+            
+            if success:
+                click.echo("[OLKORECT] Test email sent successfully to wicaksonolxn@gmail.com!")
+            else:
+                click.echo("[SNAFU] Failed to send test email!")
+                
+        except Exception as e:
+            click.echo(f"[SNAFU] Error sending test email: {str(e)}")
+    @app.cli.command("test-session2-email")
+    @click.option('--email', default='wicaksonolxn@gmail.com', help='Test email recipient')
+    def test_session2_email(email):
+        """Test Session 2 continuation email template and send to test email"""
+        click.echo(f"[OLKORECT] Testing Session 2 email to {email}...")
+        
+        try:
+            from flask import current_app
+            from app.services.SMTP.smtpService import SMTPService
+            import os
+            
+            # Template data - ONLY session_2_url, no cancel/reschedule
+            template_data = {
+                'user_name': 'Airlangga',
+                'session_1_completion_date': '15 Januari 2025',
+                'days_since_session_1': '14',
+                'session_2_url': current_app.config['SESSION_2_URL'],  # NO FALLBACK
+                'support_email': current_app.config['EMAIL_FROM_ADDRESS'],  # NO FALLBACK
+                'brand_name': 'Assessment Kesehatan Mental',
+                'current_year': '2025'
+            }
+            
+            template_path = os.path.join(
+                os.path.dirname(__file__), 
+                'services', 'SMTP', 'session2_template.html'
+            )
+            
+            success = SMTPService.send_template_email(
+                to_email=email,
+                subject='🌟 Waktunya Melanjutkan Perjalanan Anda - Sesi 2 Menanti!',
+                template_path=template_path,
+                template_data=template_data
+            )
+            
+            if success:
+                click.echo(f"[OLKORECT] Session 2 test email sent successfully to {email}!")
+            else:
+                click.echo(f"[SNAFU] Failed to send Session 2 test email!")
+                
+        except Exception as e:
+            click.echo(f"[SNAFU] Error sending Session 2 test email: {str(e)}")

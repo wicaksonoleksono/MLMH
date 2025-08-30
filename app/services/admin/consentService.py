@@ -28,17 +28,8 @@ class ConsentService:
                        is_default: bool = False) -> Dict[str, Any]:
         """Create or update consent settings"""
         with get_session() as db:
-            # Null handling - don't save if required fields are null/empty
-            if not title or not title.strip():
-                raise ValueError("Title cannot be null or empty")
-            
-            if not content or not content.strip():
-                raise ValueError("Content cannot be null or empty")
-            
-            # Null handling for optional fields - don't save if null/empty
+            # Null handling for footer_text
             final_footer_text = footer_text if footer_text and footer_text.strip() else None
-            
-            # No longer using setting_name field
             
             # Look for existing settings (assume only one set of settings for now)
             existing = db.query(ConsentSettings).filter(ConsentSettings.is_active == True).first()
@@ -53,7 +44,17 @@ class ConsentService:
                 existing.content = content.strip()
                 existing.footer_text = final_footer_text
                 existing.is_default = is_default
+                
+                # Auto-set is_active based on field completeness
+                all_fields_valid = (
+                    existing.title and existing.title.strip() != '' and
+                    existing.content and existing.content.strip() != ''
+                )
+                # Ensure is_active is never None
+                existing.is_active = bool(all_fields_valid)
+                
                 settings = existing
+                
             else:
                 # Create new settings
                 settings = ConsentSettings(
@@ -62,17 +63,19 @@ class ConsentService:
                     footer_text=final_footer_text,
                     is_default=is_default
                 )
+                
+                # Auto-set is_active based on field completeness
+                all_fields_valid = (
+                    settings.title and settings.title.strip() != '' and
+                    settings.content and settings.content.strip() != ''
+                )
+                # Ensure is_active is never None
+                settings.is_active = bool(all_fields_valid)
+                
                 db.add(settings)
-
-            # Auto-set is_active based on field completeness
-            all_fields_valid = (
-                settings.title and settings.title.strip() != '' and
-                settings.content and settings.content.strip() != ''
-            )
-            settings.is_active = all_fields_valid
             
             db.commit()
-
+            
             return {
                 'id': settings.id,
                 'title': settings.title,
@@ -84,6 +87,24 @@ class ConsentService:
     @staticmethod
     def update_settings(settings_id: int, updates: Dict[str, Any]) -> Dict[str, Any]:
         """Update consent settings"""
+        # 🚨 DEBUG: Log what frontend is sending
+        print(f"🔍 DEBUG update_settings received: {updates}")
+        for key, value in updates.items():
+            print(f"  {key}: {type(value).__name__} = {value}")
+        
+        # 🚨 DETECT FIELD MAPPING BUG: is_active should never be None or dict
+        if 'is_active' in updates:
+            if updates['is_active'] is None:
+                print(f"🚨 BUG DETECTED: is_active is None! Frontend is sending wrong field mapping.")
+                print(f"   is_active value: {updates['is_active']}")
+                del updates['is_active']
+                print(f"   Removed is_active from updates to prevent crash.")
+            elif isinstance(updates['is_active'], dict):
+                print(f"🚨 BUG DETECTED: is_active is a dict! Frontend is sending wrong field mapping.")
+                print(f"   is_active value: {updates['is_active']}")
+                del updates['is_active']
+                print(f"   Removed is_active from updates to prevent crash.")
+        
         with get_session() as db:
             settings = db.query(ConsentSettings).filter(
                 and_(ConsentSettings.id == settings_id, ConsentSettings.is_active == True)
@@ -97,8 +118,15 @@ class ConsentService:
                 db.query(ConsentSettings).filter(ConsentSettings.is_default == True).update({'is_default': False})
 
             for key, value in updates.items():
-                if hasattr(settings, key):
+                if hasattr(settings, key) and key != 'is_active':  # Skip is_active field, it's auto-calculated
                     setattr(settings, key, value)
+            
+            # Recalculate is_active based on field completeness
+            all_fields_valid = (
+                settings.title and settings.title.strip() != '' and
+                settings.content and settings.content.strip() != ''
+            )
+            settings.is_active = all_fields_valid
 
             db.commit()
 

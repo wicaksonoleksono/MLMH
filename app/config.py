@@ -20,7 +20,17 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS: bool = False
     SQLALCHEMY_ECHO: bool = DEBUG
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-
+    # SMTP Configuration - NO FALLBACKS
+    SMTP_USERNAME: str = os.getenv('SMTP_USERNAME')
+    SMTP_PASSWORD: str = os.getenv('SMTP_PASSWORD')
+    EMAIL_FROM_ADDRESS: str = os.getenv('EMAIL_FROM_ADDRESS')
+    EMAIL_FROM_NAME: str = os.getenv('EMAIL_FROM_NAME', 'Mental Health App')
+    
+    # Landing page URLs for email notifications  
+    LANDING_PAGE_URL: str = os.getenv('LANDING_PAGE_URL', 'google.com')
+    RESCHEDULE_URL: str = os.getenv('RESCHEDULE_URL', 'google.com') 
+    CANCEL_URL: str = os.getenv('CANCEL_URL', 'google.com')
+    SESSION_2_URL: str = os.getenv('SESSION_2_URL')
     SQLALCHEMY_DATABASE_URI = (
         os.getenv('SQLALCHEMY_DATABASE_URI') or
         f"postgresql://{os.getenv('DB_USERNAME') or os.getenv('POSTGRES_USER')}:"

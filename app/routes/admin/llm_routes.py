@@ -97,8 +97,19 @@ def get_available_models():
         return {"status": "SNAFU", "error": "Admin access required"}, 403
     
     try:
-        models = LLMService.get_available_models()
-        return jsonify(models)
+        # Get decrypted API key from settings
+        from ...db import get_session
+        from ...model.admin.llm import LLMSettings
+        with get_session() as db:
+            setting = db.query(LLMSettings).filter(LLMSettings.is_active == True).first()
+            if setting:
+                decrypted_api_key = setting.get_api_key()
+                if decrypted_api_key and decrypted_api_key.strip() != '':
+                    models = LLMService.get_available_models(decrypted_api_key)
+                    return jsonify(models)
+        
+        # Fallback to empty list if no valid API key
+        return jsonify([])
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -137,37 +148,41 @@ def build_prompt():
 @llm_bp.route('/api-key/test', methods=['POST'])
 @raw_response
 def test_api_key():
-    """Test OpenAI API key validity using stored encrypted key"""
+    """Test OpenAI API key validity - either provided key or stored encrypted key"""
     if not current_user.is_authenticated or not current_user.is_admin():
         return {"status": "SNAFU", "error": "Admin access required"}, 403
-    
     try:
-        # Get the actual LLMSettings object to access the decrypted API key
-        from ...db import get_session
-        from ...model.admin.llm import LLMSettings
+        # Check if API key is provided in request body
+        data = request.get_json()
+        provided_api_key = data.get('api_key') if data else None
         
-        with get_session() as db:
-            setting = db.query(LLMSettings).filter(LLMSettings.is_active == True).first()
-            
-            if not setting:
-                return jsonify({"valid": False, "error": "No LLM settings found"})
-            
-            # Get decrypted API key from the model
-            decrypted_api_key = setting.get_api_key()
-            
-            if not decrypted_api_key or decrypted_api_key.strip() == '':
-                return jsonify({"valid": False, "error": "No API key configured"})
-            
-            # Test the decrypted API key
-            valid = LLMService.test_api_key(decrypted_api_key)
+        if provided_api_key:
+            # Test the provided API key directly
+            valid = LLMService.test_api_key(provided_api_key)
             if valid:
-                models = LLMService.get_available_models(decrypted_api_key)
+                models = LLMService.get_available_models(provided_api_key)
                 return jsonify({"valid": True, "models": models})
             else:
                 return jsonify({"valid": False, "error": "Invalid API key"})
+        else:
+            # Test stored API key from database (fallback to original behavior)
+            from ...db import get_session
+            from ...model.admin.llm import LLMSettings
+            with get_session() as db:
+                setting = db.query(LLMSettings).filter(LLMSettings.is_active == True).first()
+                if not setting:
+                    return jsonify({"valid": False, "error": "No LLM settings found"})
+                decrypted_api_key = setting.get_api_key()
+                if not decrypted_api_key or decrypted_api_key.strip() == '':
+                    return jsonify({"valid": False, "error": "No API key configured"})
+                valid = LLMService.test_api_key(decrypted_api_key)
+                if valid:
+                    models = LLMService.get_available_models(decrypted_api_key)
+                    return jsonify({"valid": True, "models": models})
+                else:
+                    return jsonify({"valid": False, "error": "Invalid API key"})
     except Exception as e:
         return jsonify({"valid": False, "error": str(e)})
-
 
 @llm_bp.route('/config/default', methods=['GET'])
 @raw_response
@@ -175,7 +190,6 @@ def get_default_config():
     """Get default configuration from environment"""
     if not current_user.is_authenticated or not current_user.is_admin():
         return {"status": "SNAFU", "error": "Admin access required"}, 403
-    
     from flask import current_app
     return jsonify({
         "openai_api_key": current_app.config.get('OPENAI_API_KEY', ''),

@@ -16,6 +16,7 @@ class LLMSettings(BaseModel, StatusMixin):
     analysis_model: Mapped[str] = mapped_column(String(50), default="gpt-4o-mini", nullable=False)
     depression_aspects: Mapped[dict] = mapped_column(JSON, nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     
     def set_api_key(self, plain_api_key: str) -> None:
         """Encrypt and store API key"""

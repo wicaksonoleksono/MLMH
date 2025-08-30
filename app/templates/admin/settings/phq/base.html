@@ -143,6 +143,12 @@ endblock %} {% block content %}
         },
       ],
 
+      settings: {
+        id: null,
+        instructions: "",
+        is_default: false
+      },
+
       // Modal state
       showModal: false,
       modalTitle: "",
@@ -200,14 +206,13 @@ endblock %} {% block content %}
         this.showModal = true;
         this.modalTitle = "Hapus Semua Data";
         this.modalMessage =
-          "Apakah Anda yakin ingin menghapus semua data PHQ yang ada?";
+          "Apakah Anda yakin ingin menghapus semua data PHQ yang ada? (Kecuali pengaturan skala)";
         this.modalConfirm = async () => {
           this.loading = true;
           try {
-            // Get and delete all existing data
-            const [categories, scales, settings] = await Promise.all([
+            // Get all existing data
+            const [categories, settings] = await Promise.all([
               apiCall("/admin/phq/categories"),
-              apiCall("/admin/phq/scales"),
               apiCall("/admin/phq/settings"),
             ]);
 
@@ -218,13 +223,6 @@ endblock %} {% block content %}
               }
             }
 
-            // Delete scales
-            if (Array.isArray(scales)) {
-              for (const scale of scales) {
-                await apiCall(`/admin/phq/scales/${scale.id}`, "DELETE");
-              }
-            }
-
             // Delete settings
             if (Array.isArray(settings)) {
               for (const setting of settings) {
@@ -232,15 +230,89 @@ endblock %} {% block content %}
               }
             }
 
+            // Reset frontend state for categories and settings (but not scales)
+            this.categories = [
+              {
+                name_id: "ANHEDONIA",
+                name: "Anhedonia",
+                description_id:
+                  "Kurang tertarik atau bergairah dalam melakukan apapun",
+                questions: [""],
+              },
+              {
+                name_id: "DEPRESSED_MOOD",
+                name: "Depressed Mood",
+                description_id: "Merasa murung, muram, atau putus asa",
+                questions: [""],
+              },
+              {
+                name_id: "SLEEP_DISTURBANCE",
+                name: "Sleep Disturbance",
+                description_id:
+                  "Sulit tidur atau mudah terbangun, atau terlalu banyak tidur",
+                questions: [""],
+              },
+              {
+                name_id: "FATIGUE",
+                name: "Fatigue",
+                description_id: "Merasa lelah atau kurang bertenaga",
+                questions: [""],
+              },
+              {
+                name_id: "APPETITE_CHANGES",
+                name: "Appetite Changes",
+                description_id: "Kurang nafsu makan atau terlalu banyak makan",
+                questions: [""],
+              },
+              {
+                name_id: "WORTHLESSNESS",
+                name: "Worthlessness",
+                description_id:
+                  "Kurang percaya diri — atau merasa bahwa Anda adalah orang yang gagal atau telah mengecewakan diri sendiri atau keluarga",
+                questions: [""],
+              },
+              {
+                name_id: "CONCENTRATION",
+                name: "Concentration",
+                description_id:
+                  "Sulit berkonsentrasi pada sesuatu, misalnya membaca koran atau menonton televisi",
+                questions: [""],
+              },
+              {
+                name_id: "PSYCHOMOTOR",
+                name: "Psychomotor",
+                description_id:
+                  "Bergerak atau berbicara sangat lambat sehingga orang lain memperhatikannya. Atau sebaliknya — merasa resah atau gelisah sehingga Anda lebih sering bergerak dari biasanya",
+                questions: [""],
+              },
+              {
+                name_id: "SUICIDAL_IDEATION",
+                name: "Suicidal Ideation",
+                description_id:
+                  "Merasa lebih baik mati atau ingin melukai diri sendiri dengan cara apapun",
+                questions: [""],
+              },
+            ];
+            
+            this.settings = {
+              id: null,
+              instructions: "",
+              is_default: false
+            };
+
             this.showModal = true;
             this.modalTitle = "Berhasil";
-            this.modalMessage = "Semua data PHQ berhasil dihapus!";
-            this.modalConfirm = () => {};
+            this.modalMessage = "Data PHQ berhasil dihapus! (Kecuali pengaturan skala)";
+            this.modalConfirm = () => {
+              this.showModal = false;
+            };
           } catch (error) {
             this.showModal = true;
             this.modalTitle = "Error";
             this.modalMessage = "Error clearing data: " + error.message;
-            this.modalConfirm = () => {};
+            this.modalConfirm = () => {
+              this.showModal = false;
+            };
           } finally {
             this.loading = false;
           }
@@ -425,7 +497,6 @@ endblock %} {% block content %}
           // Save settings
           if (scaleResult.status === "OLKORECT") {
             const settingsData = {
-              questions_per_category: 1,
               scale_id: scaleResult.data ? scaleResult.data.id : scaleResult.id,
               randomize_questions: this.config.randomize === "true",
               instructions: this.config.instructions,

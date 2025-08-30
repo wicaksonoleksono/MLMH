@@ -51,6 +51,7 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                 'id': setting.id,
                 'instructions': setting.instructions,
                 'openai_api_key': setting.get_masked_api_key(),  # Return masked API key for security
+                'openai_api_key_unmasked': setting.get_api_key(),  # Return unmasked API key for frontend use
                 'chat_model': setting.chat_model,
                 'analysis_model': setting.analysis_model,
                 'depression_aspects': setting.depression_aspects.get('aspects', []) if setting.depression_aspects else [],
@@ -100,6 +101,17 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                 existing.depression_aspects = aspects_json
                 existing.is_default = is_default
                 
+                # Set is_active based on field completeness (API key NOT required)
+                aspects_valid = (aspects_json and 
+                               isinstance(aspects_json, dict) and
+                               aspects_json.get('aspects') and
+                               len(aspects_json.get('aspects', [])) > 0)
+                models_valid = (chat_model and chat_model.strip() != '' and
+                               analysis_model and analysis_model.strip() != '')
+                is_active_value = aspects_valid and models_valid  # API key not required for is_active
+                # Ensure is_active is never None
+                existing.is_active = bool(is_active_value)
+                
                 settings = existing
                 
                 # Note: Active sessions will use new settings on next request
@@ -117,17 +129,19 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                     settings.set_api_key(openai_api_key)  # Use encryption method
                 else:
                     settings.openai_api_key = ""  # Empty encrypted key
+                
+                # Set is_active based on field completeness (API key NOT required)
+                aspects_valid = (aspects_json and 
+                               isinstance(aspects_json, dict) and
+                               aspects_json.get('aspects') and
+                               len(aspects_json.get('aspects', [])) > 0)
+                models_valid = (chat_model and chat_model.strip() != '' and
+                               analysis_model and analysis_model.strip() != '')
+                is_active_value = aspects_valid and models_valid  # API key not required for is_active
+                # Ensure is_active is never None
+                settings.is_active = bool(is_active_value)
+                
                 db.add(settings)
-            
-            # Auto-set is_active based on field completeness (API key NOT required)
-            aspects_valid = (settings.depression_aspects and 
-                           isinstance(settings.depression_aspects, dict) and
-                           settings.depression_aspects.get('aspects') and
-                           len(settings.depression_aspects.get('aspects', [])) > 0)
-            models_valid = (settings.chat_model and settings.chat_model.strip() != '' and
-                           settings.analysis_model and settings.analysis_model.strip() != '')
-            all_fields_valid = aspects_valid and models_valid  # API key not required for is_active
-            settings.is_active = all_fields_valid
             
             db.commit()
             
@@ -146,6 +160,24 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
     @staticmethod
     def update_settings(settings_id: int, updates: Dict[str, Any]) -> Dict[str, Any]:
         """Update LLM settings"""
+        # 🚨 DEBUG: Log what frontend is sending
+        print(f"🔍 DEBUG update_settings received: {updates}")
+        for key, value in updates.items():
+            print(f"  {key}: {type(value).__name__} = {value}")
+        
+        # 🚨 DETECT FIELD MAPPING BUG: is_active should never be None or dict
+        if 'is_active' in updates:
+            if updates['is_active'] is None:
+                print(f"🚨 BUG DETECTED: is_active is None! Frontend is sending wrong field mapping.")
+                print(f"   is_active value: {updates['is_active']}")
+                del updates['is_active']
+                print(f"   Removed is_active from updates to prevent crash.")
+            elif isinstance(updates['is_active'], dict):
+                print(f"🚨 BUG DETECTED: is_active is a dict! Frontend is sending wrong field mapping.")
+                print(f"   is_active value: {updates['is_active']}")
+                del updates['is_active']
+                print(f"   Removed is_active from updates to prevent crash.")
+        
         with get_session() as db:
             settings = db.query(LLMSettings).filter(
                 and_(LLMSettings.id == settings_id, LLMSettings.is_active == True)
@@ -159,7 +191,7 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                 db.query(LLMSettings).filter(LLMSettings.is_default == True).update({'is_default': False})
 
             for key, value in updates.items():
-                if hasattr(settings, key):
+                if hasattr(settings, key) and key != 'is_active':  # Skip is_active field, it's auto-calculated
                     # Null handling for depression_aspects
                     if key == 'depression_aspects':
                         if value is None or (isinstance(value, dict) and not value.get('aspects')):
@@ -175,6 +207,15 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                         setattr(settings, key, final_value)
                     else:
                         setattr(settings, key, value)
+            
+            # Recalculate is_active based on field completeness (API key NOT required)
+            aspects_valid = (settings.depression_aspects and 
+                           isinstance(settings.depression_aspects, dict) and
+                           settings.depression_aspects.get('aspects') and
+                           len(settings.depression_aspects.get('aspects', [])) > 0)
+            models_valid = (settings.chat_model and settings.chat_model.strip() != '' and
+                           settings.analysis_model and settings.analysis_model.strip() != '')
+            settings.is_active = aspects_valid and models_valid  # API key not required for is_active
 
             db.commit()
 
@@ -239,13 +280,15 @@ Format output JSON:
 
     @staticmethod
     def get_available_models(api_key: str = None) -> List[str]:
+        # INI PENTING .. 
         """Get available OpenAI models from API"""
         if api_key is None:
             # Try to get API key from current settings first, then config
             with get_session() as db:
                 settings = db.query(LLMSettings).filter(LLMSettings.is_active == True).first()
                 if settings:
-                    api_key = settings.openai_api_key
+                    # Use get_api_key() to decrypt the key properly
+                    api_key = settings.get_api_key()
             
             # Fallback to config if no settings
             if not api_key:
@@ -277,11 +320,9 @@ Format output JSON:
         """Test if OpenAI API key is valid - simple and cheap"""
         if not api_key or not api_key.strip():
             return False
-        
         try:
             from openai import OpenAI
             client = OpenAI(api_key=api_key)
-            # via list hehe 
             models = client.models.list()
             return True
             
@@ -293,178 +334,33 @@ Format output JSON:
     def test_model_availability(model_id: str, api_key: str = None) -> bool:
         """Test if a specific model is available"""
         if api_key is None:
-            # Try to get API key from current settings first, then config
             with get_session() as db:
                 settings = db.query(LLMSettings).filter(LLMSettings.is_active == True).first()
                 if settings:
                     api_key = settings.openai_api_key
-            
-            # Fallback to config if no settings
             if not api_key:
                 api_key = current_app.config.get('OPENAI_API_KEY')
         
         if not api_key or not model_id:
             return False
-        
         try:
             headers = {
                 'Authorization': f'Bearer {api_key}',
                 'Content-Type': 'application/json'
             }
-            
-            # Test with a minimal completion request
             payload = {
                 'model': model_id,
                 'messages': [{'role': 'user', 'content': 'test'}],
                 'max_tokens': 1
             }
-            
             response = requests.post(
                 'https://api.openai.com/v1/chat/completions', 
                 headers=headers, 
                 json=payload, 
                 timeout=10
             )
-            
             return response.status_code == 200
-            
         except Exception as e:
             print(f"Error testing model {model_id}: {e}")
             return False
 
-    @staticmethod
-    def test_streaming_compatibility(llm_settings_id: int) -> Dict[str, Any]:
-        """Test if LLM settings are compatible with streaming architecture"""
-        with get_session() as db:
-            settings = db.query(LLMSettings).filter_by(id=llm_settings_id).first()
-            if not settings:
-                return {"compatible": False, "error": "Settings not found"}
-        
-        try:
-            # Import our streaming factory to test compatibility
-            from ..llm.factory import LLMFactory
-            
-            # Test factory validation
-            validation = LLMFactory.validate_settings(settings)
-            if not validation["valid"]:
-                return {
-                    "compatible": False,
-                    "error": "Settings validation failed",
-                    "issues": validation["issues"]
-                }
-            
-            # Test creating streaming LLM
-            streaming_test = LLMFactory.test_connection(settings, "chat")
-            analysis_test = LLMFactory.test_connection(settings, "analysis")
-            
-            return {
-                "compatible": streaming_test["success"] and analysis_test["success"],
-                "streaming_llm": streaming_test,
-                "analysis_agent": analysis_test,
-                "depression_aspects_count": len(settings.depression_aspects.get('aspects', [])),
-                "models": {
-                    "chat_model": settings.chat_model,
-                    "analysis_model": settings.analysis_model
-                }
-            }
-            
-        except Exception as e:
-            return {
-                "compatible": False,
-                "error": f"Compatibility test failed: {str(e)}"
-            }
-
-
-    @staticmethod
-    def validate_streaming_models(chat_model: str, analysis_model: str, api_key: str) -> Dict[str, Any]:
-        """DISABLED - Streaming validation no longer used"""
-        return {
-            "chat_model_valid": True,
-            "analysis_model_valid": True,
-            "streaming_compatible": True,
-            "issues": []
-        }
-    
-    @staticmethod
-    def test_langchain_integration(llm_settings_id: int) -> Dict[str, Any]:
-        """Test LangChain integration with the streaming architecture"""
-        with get_session() as db:
-            settings = db.query(LLMSettings).filter_by(id=llm_settings_id).first()
-            if not settings:
-                return {"success": False, "error": "Settings not found"}
-        
-        try:
-            from ..llm.factory import LLMFactory
-            from langchain_core.messages import HumanMessage
-            
-            # Test streaming LLM creation and basic functionality
-            streaming_llm = LLMFactory.create_streaming_llm(settings)
-            analysis_agent = LLMFactory.create_analysis_agent(settings)
-            
-            # Test simple message with streaming LLM
-            test_message = [HumanMessage(content="Hello, this is a test message. Respond briefly.")]
-            
-            try:
-                streaming_response = streaming_llm.invoke(test_message)
-                streaming_success = bool(streaming_response.content)
-            except Exception as e:
-                return {
-                    "success": False,
-                    "error": f"Streaming LLM test failed: {str(e)}",
-                    "component": "streaming_llm"
-                }
-            
-            # Test analysis agent
-            try:
-                analysis_response = analysis_agent.invoke(test_message)
-                analysis_success = bool(analysis_response.content)
-            except Exception as e:
-                return {
-                    "success": False,
-                    "error": f"Analysis agent test failed: {str(e)}",
-                    "component": "analysis_agent"
-                }
-            
-            # Test streaming capability
-            streaming_chunks = []
-            try:
-                for chunk in streaming_llm.stream(test_message):
-                    if chunk.content:
-                        streaming_chunks.append(chunk.content)
-                        if len(streaming_chunks) >= 3:  # Just test first few chunks
-                            break
-                
-                streaming_works = len(streaming_chunks) > 0
-            except Exception as e:
-                return {
-                    "success": False,
-                    "error": f"Streaming test failed: {str(e)}",
-                    "component": "streaming"
-                }
-            
-            return {
-                "success": True,
-                "streaming_llm_working": streaming_success,
-                "analysis_agent_working": analysis_success,
-                "streaming_capability": streaming_works,
-                "streaming_chunks_received": len(streaming_chunks),
-                "models_tested": {
-                    "chat_model": settings.chat_model,
-                    "analysis_model": settings.analysis_model
-                },
-                "langchain_version": "compatible",
-                "message": "LangChain integration test successful"
-            }
-            
-        except ImportError as e:
-            return {
-                "success": False,
-                "error": f"LangChain import failed: {str(e)}",
-                "message": "LangChain dependencies may not be installed"
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "error": f"LangChain integration test failed: {str(e)}",
-                "message": "Unexpected error during integration test"
-            }

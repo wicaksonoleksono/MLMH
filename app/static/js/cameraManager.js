@@ -25,7 +25,7 @@ class CameraManager {
             this.setupCaptureMode();
             this.isInitialized = true;
         } catch (error) {
-            console.error('Failed to initialize camera:', error);
+            // Camera initialization failed
             throw error;
         }
     }

@@ -153,7 +153,7 @@
             };
           }
         } catch (error) {
-          console.error("Error loading data:", error);
+          
         } finally {
           this.loading = false;
         }
@@ -172,9 +172,9 @@
             is_default: this.settings.is_default
           };
 
-          console.log("Saving camera settings:", settingsData);
+          
           const result = await apiCall("/admin/camera/settings", "POST", settingsData);
-          console.log("Camera settings result:", result);
+          
 
           if (result.status === "SNAFU") {
             this.showModal = true;
@@ -191,7 +191,7 @@
             window.location.reload();
           };
         } catch (error) {
-          console.error("Save error:", error);
+          
           this.showModal = true;
           this.modalTitle = 'Error';
           this.modalMessage = 'Error saving data: ' + error.message;

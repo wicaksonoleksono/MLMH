@@ -111,7 +111,7 @@
               };
             }
           } catch (error) {
-            console.error("Error loading defaults:", error);
+            
             this.settings = {
               title: "Formulir Persetujuan Penelitian Kesehatan Mental",
               content: "Dengan ini saya menyatakan bahwa saya telah mendapat penjelasan yang cukup mengenai penelitian ini dan saya bersedia berpartisipasi dalam penelitian assessment kesehatan mental.\\n\\nSaya memahami bahwa:\\n1. Partisipasi saya bersifat sukarela\\n2. Data yang dikumpulkan akan dijaga kerahasiaannya\\n3. Saya dapat mengundurkan diri kapan saja\\n4. Hasil assessment akan digunakan untuk keperluan penelitian",
@@ -173,7 +173,7 @@
             };
           }
         } catch (error) {
-          console.error("Error loading data:", error);
+          
         } finally {
           this.loading = false;
         }
@@ -192,9 +192,9 @@
             is_default: true
           };
 
-          console.log("Saving consent settings:", settingsData);
+          
           const result = await apiCall("/admin/consent/settings", "POST", settingsData);
-          console.log("Consent settings result:", result);
+          
 
           if (result.status === "SNAFU") {
             this.showModal = true;
@@ -211,7 +211,7 @@
             window.location.reload();
           };
         } catch (error) {
-          console.error("Save error:", error);
+          
           this.showModal = true;
           this.modalTitle = 'Error';
           this.modalMessage = 'Error saving data: ' + error.message;

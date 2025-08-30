@@ -185,7 +185,7 @@ def register_commands(app):
             existing_llm_settings = db.query(LLMSettings).filter_by(is_default=True).first()
             if not existing_llm_settings:
                 default_llm_settings = LLMSettings(
-                    openai_api_key="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",  # Must be set by admin
+                    openai_api_key="set-it dude",  # Must be set by admin
                     chat_model="gpt-4o",
                     analysis_model="gpt-4o-mini", 
                     depression_aspects={

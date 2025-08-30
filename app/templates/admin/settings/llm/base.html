@@ -239,7 +239,7 @@ endblock %} {% block content %}
               };
             }
           } catch (error) {
-            console.error("Error loading defaults:", error);
+            
             this.settings = {
               instructions: "",
               openai_api_key: "",
@@ -335,13 +335,13 @@ endblock %} {% block content %}
       async loadData() {
         this.loading = true;
         try {
-          console.log("Loading LLM settings from API...");
+          
           const settingsRes = await apiCall("/admin/llm/settings");
-          console.log("LLM settings API response:", settingsRes);
+          
 
           if (Array.isArray(settingsRes) && settingsRes.length > 0) {
             const setting = settingsRes[0];
-            console.log("Loading setting:", setting);
+            
             this.settings = {
               id: setting.id,
               instructions: setting.instructions || "",
@@ -396,7 +396,7 @@ endblock %} {% block content %}
               ],
             };
           } else {
-            console.log("No settings found, using defaults");
+            
             this.settings = {
               id: null,
               instructions: "",
@@ -457,14 +457,14 @@ endblock %} {% block content %}
             try {
               const models = await apiCall("/admin/llm/models");
               this.availableModels = Array.isArray(models) ? models : [];
-              console.log(`Loaded ${this.availableModels.length} available models`);
+              
             } catch (error) {
-              console.error("Error loading available models:", error);
+              
               this.availableModels = [];
             }
           }
         } catch (error) {
-          console.error("Error loading LLM data:", error);
+          
           this.showModal = true;
           this.modalTitle = "Error Loading Data";
           this.modalMessage = `Failed to load LLM settings: ${error.message}`;
@@ -479,13 +479,13 @@ endblock %} {% block content %}
       async loadData() {
         this.loading = true;
         try {
-          console.log("Loading LLM settings...");
+          
           const settingsRes = await apiCall("/admin/llm/settings");
-          console.log("LLM settings response:", settingsRes);
+          
 
           if (Array.isArray(settingsRes) && settingsRes.length > 0) {
             const setting = settingsRes[0];
-            console.log("Loading setting:", setting);
+            
             this.settings = {
               id: setting.id,
               instructions: setting.instructions || "",
@@ -539,23 +539,21 @@ endblock %} {% block content %}
                 },
               ],
             };
-            console.log("Settings loaded:", this.settings);
+            
           } else {
-            console.log(
-              "No existing settings found, loading default config from backend"
-            );
+            // Loading default config from backend
             try {
               const defaultConfig = await apiCall("/admin/llm/config/default");
               if (defaultConfig.openai_api_key) {
                 this.settings.openai_api_key = defaultConfig.openai_api_key;
-                console.log("Default API key loaded from backend config");
+                
               }
             } catch (error) {
-              console.error("Error loading default config:", error);
+              
             }
           }
         } catch (error) {
-          console.error("Error loading data:", error);
+          
         } finally {
           this.loading = false;
         }
@@ -581,13 +579,13 @@ endblock %} {% block content %}
           }
           // If no valid aspects, don't include the field at all (null handling)
 
-          console.log("Saving LLM settings:", settingsData);
+          
           const result = await apiCall(
             "/admin/llm/settings",
             "POST",
             settingsData
           );
-          console.log("LLM settings save result:", result);
+          
 
           if (result.status === "SNAFU") {
             this.showModal = true;
@@ -609,7 +607,7 @@ endblock %} {% block content %}
             window.location.reload();
           };
         } catch (error) {
-          console.error("Save error:", error);
+          
           this.showModal = true;
           this.modalTitle = "Error";
           this.modalMessage = "Error saving data: " + error.message;
@@ -647,7 +645,7 @@ endblock %} {% block content %}
           );
           return result.available || false;
         } catch (error) {
-          console.error(`Error testing model ${modelId}:`, error);
+          
           alert(`Error testing ${type} model "${modelId}": ${error.message}`);
           return false;
         }
@@ -659,7 +657,7 @@ endblock %} {% block content %}
           this.availableModels = Array.isArray(models) ? models : [];
           alert("Model list refreshed!");
         } catch (error) {
-          console.error("Error loading available models:", error);
+          
           this.availableModels = [];
           alert("Error refreshing models: " + error.message);
         }
@@ -684,7 +682,7 @@ endblock %} {% block content %}
             alert("❌ Invalid API Key: " + (result.error || "Unknown error"));
           }
         } catch (error) {
-          console.error("Error testing API key:", error);
+          
           alert("Error testing API key: " + error.message);
         }
       },

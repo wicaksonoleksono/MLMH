@@ -149,7 +149,7 @@ function downloadBothSessions(session1Id, session2Id) {
         }
     })
     .catch(error => {
-        console.error('Export error:', error);
+        // Export failed
         alert('Export failed. Please try again.');
     });
 }

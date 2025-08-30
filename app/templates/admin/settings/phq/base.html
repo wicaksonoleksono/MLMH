@@ -280,7 +280,7 @@ endblock %} {% block content %}
             this.config.instructions = phqData.settings.instructions || "";
           }
         } catch (error) {
-          console.error("Error loading data from template:", error);
+          
         }
       },
 
@@ -340,7 +340,7 @@ endblock %} {% block content %}
             this.config.instructions = settings.instructions || "";
           }
         } catch (error) {
-          console.error("Error loading data:", error);
+          
         } finally {
           this.loading = false;
         }
@@ -358,13 +358,13 @@ endblock %} {% block content %}
             is_default: true,
           };
 
-          console.log("Saving scale:", scaleData);
+          
           const scaleResult = await apiCall(
             "/admin/phq/scales",
             "POST",
             scaleData
           );
-          console.log("Scale result:", scaleResult);
+          
 
           if (scaleResult.status === "SNAFU") {
             alert(
@@ -402,13 +402,13 @@ endblock %} {% block content %}
                     order_index: j,
                   };
 
-                  console.log("Saving question:", questionData);
+                  
                   const qResult = await apiCall(
                     "/admin/phq/questions",
                     "POST",
                     questionData
                   );
-                  console.log("Question result:", qResult);
+                  
 
                   if (qResult.status === "SNAFU") {
                     alert(
@@ -432,13 +432,13 @@ endblock %} {% block content %}
               is_default: true,
             };
 
-            console.log("Saving settings:", settingsData);
+            
             const settingsResult = await apiCall(
               "/admin/phq/settings",
               "POST",
               settingsData
             );
-            console.log("Settings result:", settingsResult);
+            
 
             if (settingsResult.status === "SNAFU") {
               alert(
@@ -458,7 +458,7 @@ endblock %} {% block content %}
             window.location.reload();
           };
         } catch (error) {
-          console.error("Save error:", error);
+          
           this.showModal = true;
           this.modalTitle = "Error";
           this.modalMessage = "Error saving data: " + error.message;

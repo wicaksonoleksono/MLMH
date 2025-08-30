@@ -320,7 +320,7 @@ endblock %} {% block content %}
             this.recoverableSession = null;
           }
         } catch (error) {
-          console.error("Error checking recoverable session:", error);
+          
           this.recoverableSession = null;
         }
       },
@@ -334,11 +334,11 @@ endblock %} {% block content %}
           if (Array.isArray(result)) {
             this.sessions = result;
           } else {
-            console.error("Failed to load sessions:", result);
+            
             this.sessions = [];
           }
         } catch (error) {
-          console.error("Error loading sessions:", error);
+          
           this.sessions = [];
         } finally {
           this.sessionsLoading = false;

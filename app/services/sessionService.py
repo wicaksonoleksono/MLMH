@@ -160,7 +160,7 @@ class SessionService:
             for session in sessions:
                 # Simplified status display - only "Berhasil" or "Gagal" for users
                 if session.status == 'COMPLETED':
-                    status_indicator = '✅'
+                    status_indicator = ''
                     status_text = 'Berhasil'
                     status_class = 'success'
                 else:
@@ -327,16 +327,16 @@ class SessionService:
             if updated_session.status == 'PHQ_IN_PROGRESS':
                 next_redirect = '/assessment/phq'
                 message = "LLM selesai! Lanjut ke PHQ assessment..."
-                print(f"✅ LLM → PHQ: Redirecting to {next_redirect}")
+                print(f" LLM → PHQ: Redirecting to {next_redirect}")
             elif updated_session.status == 'COMPLETED':
                 next_redirect = '/assessment/'
-                message = "Semua assessment selesai! 🎉"
-                print(f"🎉 Both Complete: Redirecting to {next_redirect}")
+                message = "Semua assessment selesai! "
+                print(f" Both Complete: Redirecting to {next_redirect}")
             else:
                 # Fallback
                 next_redirect = '/assessment/'
                 message = "LLM assessment selesai!"
-                print(f"⚠️ Unexpected status {updated_session.status}: Fallback to {next_redirect}")
+                print(f" Unexpected status {updated_session.status}: Fallback to {next_redirect}")
             
             return {
                 "session_id": session_id,
@@ -378,7 +378,7 @@ class SessionService:
                     try:
                         CameraCaptureService.delete_capture_file(filename)
                     except Exception as e:
-                        print(f"⚠️ Failed to delete camera capture file {filename}: {e}")
+                        print(f" Failed to delete camera capture file {filename}: {e}")
             
             # Delete PHQ responses for this session
             db.query(PHQResponse).filter_by(session_id=session_id).delete()

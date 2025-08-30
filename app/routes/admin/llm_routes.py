@@ -13,10 +13,22 @@ def llm_settings_page():
     if not current_user.is_authenticated or not current_user.is_admin():
         return {"status": "SNAFU", "error": "Admin access required"}, 403
     
-    # Provide empty llm_data to avoid template errors
+    # Load actual settings from database
+    settings_list = LLMService.get_settings()
+    current_settings = settings_list[0] if settings_list else None
+    
+    # Try to load available models if API key exists
+    available_models = []
+    if current_settings and current_settings.get('openai_api_key'):
+        try:
+            available_models = LLMService.get_available_models()
+        except Exception as e:
+            # If models can't be loaded, just continue with empty list
+            pass
+    
     llm_data = {
-        'settings': None,
-        'available_models': []
+        'settings': current_settings,
+        'available_models': available_models
     }
     
     return render_template('admin/settings/llm/index.html', 
@@ -125,23 +137,34 @@ def build_prompt():
 @llm_bp.route('/api-key/test', methods=['POST'])
 @raw_response
 def test_api_key():
-    """Test OpenAI API key validity"""
+    """Test OpenAI API key validity using stored encrypted key"""
     if not current_user.is_authenticated or not current_user.is_admin():
         return {"status": "SNAFU", "error": "Admin access required"}, 403
     
-    data = request.get_json()
-    api_key = data.get('api_key')
-    
-    if not api_key:
-        return jsonify({"valid": False, "error": "API key is required"})
-    
     try:
-        valid = LLMService.test_api_key(api_key)
-        if valid:
-            models = LLMService.get_available_models(api_key)
-            return jsonify({"valid": True, "models": models})
-        else:
-            return jsonify({"valid": False, "error": "Invalid API key"})
+        # Get the actual LLMSettings object to access the decrypted API key
+        from ...db import get_session
+        from ...model.admin.llm import LLMSettings
+        
+        with get_session() as db:
+            setting = db.query(LLMSettings).filter(LLMSettings.is_active == True).first()
+            
+            if not setting:
+                return jsonify({"valid": False, "error": "No LLM settings found"})
+            
+            # Get decrypted API key from the model
+            decrypted_api_key = setting.get_api_key()
+            
+            if not decrypted_api_key or decrypted_api_key.strip() == '':
+                return jsonify({"valid": False, "error": "No API key configured"})
+            
+            # Test the decrypted API key
+            valid = LLMService.test_api_key(decrypted_api_key)
+            if valid:
+                models = LLMService.get_available_models(decrypted_api_key)
+                return jsonify({"valid": True, "models": models})
+            else:
+                return jsonify({"valid": False, "error": "Invalid API key"})
     except Exception as e:
         return jsonify({"valid": False, "error": str(e)})
 

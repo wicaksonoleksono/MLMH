@@ -199,10 +199,13 @@ def register_commands(app):
                     is_default=True,
                     is_active=True
                 )
-                # Set encrypted API key from environment
+                # Set encrypted API key from environment or empty string
                 api_key = os.getenv("OPENAI_API_KEY")
                 if api_key:
                     default_llm_settings.set_api_key(api_key)
+                else:
+                    # Set empty encrypted key to satisfy NOT NULL constraint
+                    default_llm_settings.set_api_key("")
                 db.add(default_llm_settings)
                 click.echo("    ✓ Default LLM settings created")
 
@@ -211,11 +214,15 @@ def register_commands(app):
         with get_session() as db:
             existing_camera_settings = db.query(CameraSettings).filter_by(is_default=True).first()
             if not existing_camera_settings:
+                # Compute media save path same way as in __init__.py
+                media_save_path = os.path.join(current_app.root_path, 'static', 'uploads')
+                os.makedirs(media_save_path, exist_ok=True)
+                
                 default_camera_settings = CameraSettings(
                     recording_mode="INTERVAL",
                     interval_seconds=1,
                     resolution="640x480",
-                    storage_path=current_app.media_save,
+                    storage_path=media_save_path,
                     capture_on_button_click=True,
                     capture_on_message_send=False,
                     capture_on_question_start=False,

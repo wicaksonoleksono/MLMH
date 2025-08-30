@@ -46,20 +46,21 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
         with get_session() as db:
             settings = db.query(LLMSettings).filter(LLMSettings.is_active == True).all()
             
+            
             return [{
                 'id': setting.id,
                 'instructions': setting.instructions,
                 'openai_api_key': setting.get_masked_api_key(),  # Return masked API key for security
                 'chat_model': setting.chat_model,
                 'analysis_model': setting.analysis_model,
-                'depression_aspects': setting.depression_aspects,
+                'depression_aspects': setting.depression_aspects.get('aspects', []) if setting.depression_aspects else [],
                 'is_default': setting.is_default
             } for setting in settings]
 
     @staticmethod
     def create_settings(openai_api_key: Optional[str] = None, chat_model: str = "gpt-4o", 
                        analysis_model: str = "gpt-4o-mini",
-                       depression_aspects: Optional[List[str]] = None,
+                       depression_aspects: Optional[List[Dict]] = None,
                        instructions: str = None,
                        is_default: bool = False) -> Dict[str, Any]:
         """Create or update LLM settings - no streaming validation"""
@@ -118,15 +119,14 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                     settings.openai_api_key = ""  # Empty encrypted key
                 db.add(settings)
             
-            # Auto-set is_active based on field completeness (for both new and existing)
-            api_key_valid = bool(settings.get_api_key().strip())
+            # Auto-set is_active based on field completeness (API key NOT required)
             aspects_valid = (settings.depression_aspects and 
                            isinstance(settings.depression_aspects, dict) and
                            settings.depression_aspects.get('aspects') and
                            len(settings.depression_aspects.get('aspects', [])) > 0)
             models_valid = (settings.chat_model and settings.chat_model.strip() != '' and
                            settings.analysis_model and settings.analysis_model.strip() != '')
-            all_fields_valid = api_key_valid and aspects_valid and models_valid
+            all_fields_valid = aspects_valid and models_valid  # API key not required for is_active
             settings.is_active = all_fields_valid
             
             db.commit()
@@ -138,7 +138,7 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                 'openai_api_key': openai_api_key or '',  # Always return string, even if empty
                 'chat_model': settings.chat_model,
                 'analysis_model': settings.analysis_model,
-                'depression_aspects': settings.depression_aspects,
+                'depression_aspects': settings.depression_aspects.get('aspects', []) if settings.depression_aspects else [],
                 'is_default': settings.is_default,
                 'streaming_compatible': True
             }
@@ -205,7 +205,7 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
             "openai_api_key": "",
             "chat_model": "gpt-4o",
             "analysis_model": "gpt-4o-mini",
-            "depression_aspects": {"aspects": LLMService.DEFAULT_ASPECTS},
+            "depression_aspects": LLMService.DEFAULT_ASPECTS,
             "is_default": True
         }
 

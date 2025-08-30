@@ -120,7 +120,36 @@ endblock %} {% block content %}
       modalConfirm: () => {},
 
       async init() {
-        await this.loadData();
+        this.loadDataFromTemplate();
+      },
+
+      loadDataFromTemplate() {
+        // Load data from Jinja template context (passed via window.llmData)
+        const llmData = window.llmData || {};
+        
+        try {
+          // Load settings
+          if (llmData.settings) {
+            const setting = llmData.settings;
+            this.settings = {
+              id: setting.id,
+              instructions: setting.instructions || "",
+              openai_api_key: setting.openai_api_key || "",
+              chat_model: setting.chat_model || "gpt-4o",
+              analysis_model: setting.analysis_model || "gpt-4o-mini",
+              depression_aspects: setting.depression_aspects || [
+                { name: "Depression Analysis", description: "General depression assessment" }
+              ],
+            };
+          }
+          
+          // Load available models if provided
+          if (llmData.available_models) {
+            this.availableModels = [...llmData.available_models];
+          }
+        } catch (error) {
+          console.error("Error loading template data:", error);
+        }
       },
 
       async loadDefaults() {
@@ -137,7 +166,7 @@ endblock %} {% block content %}
                 openai_api_key: defaults.openai_api_key || "",
                 chat_model: defaults.chat_model || "gpt-4o",
                 analysis_model: defaults.analysis_model || "gpt-4o-mini",
-                depression_aspects: defaults.depression_aspects?.aspects || [
+                depression_aspects: defaults.depression_aspects || [
                   {
                     name: "Anhedonia",
                     description: "kehilangan minat/kenikmatan",
@@ -348,7 +377,7 @@ endblock %} {% block content %}
               openai_api_key: setting.openai_api_key || "",
               chat_model: setting.chat_model,
               analysis_model: setting.analysis_model,
-              depression_aspects: setting.depression_aspects?.aspects || [
+              depression_aspects: setting.depression_aspects || [
                 {
                   name: "Anhedonia",
                   description: "kehilangan minat/kenikmatan",
@@ -492,7 +521,7 @@ endblock %} {% block content %}
               openai_api_key: setting.openai_api_key || "",
               chat_model: setting.chat_model,
               analysis_model: setting.analysis_model,
-              depression_aspects: setting.depression_aspects?.aspects || [
+              depression_aspects: setting.depression_aspects || [
                 {
                   name: "Anhedonia",
                   description: "kehilangan minat/kenikmatan",
@@ -573,6 +602,7 @@ endblock %} {% block content %}
             settingsData.openai_api_key = this.settings.openai_api_key;
           }
 
+          
           // Only include depression_aspects if it has valid data (not empty or all empty fields)
           const validAspects = this.settings.depression_aspects.filter(aspect => 
             aspect.name && aspect.name.trim() && aspect.description && aspect.description.trim()
@@ -668,16 +698,9 @@ endblock %} {% block content %}
       },
 
       async testApiKey() {
-        const apiKey = this.settings.openai_api_key;
-        if (!apiKey) {
-          alert("Please enter an API key first");
-          return;
-        }
-
         try {
-          const result = await apiCall("/admin/llm/api-key/test", "POST", {
-            api_key: apiKey,
-          });
+          // Test stored API key from database (server-side)
+          const result = await apiCall("/admin/llm/api-key/test", "POST", {});
 
           if (result.valid) {
             alert("✅ API Key is valid!");
@@ -686,7 +709,6 @@ endblock %} {% block content %}
             alert("❌ Invalid API Key: " + (result.error || "Unknown error"));
           }
         } catch (error) {
-          
           alert("Error testing API key: " + error.message);
         }
       },
@@ -702,4 +724,8 @@ endblock %} {% block content %}
   }
 </script>
 
+<!-- Pass LLM data from Jinja to JavaScript -->
+<script>
+  window.llmData = {{ llm_data | tojson | safe }};
+</script>
 {% endblock %}

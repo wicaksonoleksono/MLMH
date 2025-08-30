@@ -69,7 +69,6 @@
         recording_mode: "INTERVAL",
         interval_seconds: 30,
         resolution: "1280x720",
-        storage_path: "recordings",
         is_default: true,
         // Event-driven settings
         capture_on_button_click: true,
@@ -97,11 +96,9 @@
         this.modalMessage = "Apakah Anda yakin ingin memuat pengaturan kamera default? Data yang ada akan diganti.";
         this.modalConfirm = () => {
           this.settings = {
-            setting_name: "Default Camera Settings",
             recording_mode: "INTERVAL",
             interval_seconds: 30,
-            storage_path: "recordings",
-            quality_setting: "MEDIUM",
+                quality_setting: "MEDIUM",
             is_default: true
           };
         };
@@ -149,7 +146,6 @@
               recording_mode: setting.recording_mode,
               interval_seconds: setting.interval_seconds,
               resolution: setting.resolution,
-              storage_path: setting.storage_path,
               capture_on_button_click: setting.capture_on_button_click,
               capture_on_message_send: setting.capture_on_message_send,
               capture_on_question_start: setting.capture_on_question_start,
@@ -170,7 +166,6 @@
             recording_mode: this.settings.recording_mode,
             interval_seconds: this.settings.recording_mode === "INTERVAL" ? parseInt(this.settings.interval_seconds) : null,
             resolution: this.settings.resolution,
-            storage_path: this.settings.storage_path,
             capture_on_button_click: this.settings.capture_on_button_click,
             capture_on_message_send: this.settings.capture_on_message_send,
             capture_on_question_start: this.settings.capture_on_question_start,

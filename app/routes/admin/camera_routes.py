@@ -31,7 +31,6 @@ def create_settings():
     data = request.get_json()
     return jsonify(CameraService.create_settings(
         recording_mode=data['recording_mode'],
-        storage_path=data.get('storage_path', 'recordings'),
         interval_seconds=data.get('interval_seconds'),
         resolution=data.get('resolution', '1280x720'),
         capture_on_button_click=data.get('capture_on_button_click', True),

@@ -48,7 +48,6 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
             
             return [{
                 'id': setting.id,
-                'setting_name': setting.setting_name,
                 'instructions': setting.instructions,
                 'openai_api_key': setting.openai_api_key,  # Return full API key for editing
                 'chat_model': setting.chat_model,
@@ -66,8 +65,7 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
         """Create or update LLM settings - no streaming validation"""
         with get_session() as db:
             
-            # Auto-generate setting name
-            setting_name = f"LLM Settings (Chat: {chat_model}, Analysis: {analysis_model})"
+            # No longer using setting_name field
             
             # Null handling for depression_aspects - don't save if null/empty
             aspects_json = None
@@ -93,7 +91,6 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                 old_settings_id = existing.id
                 
                 # Update existing settings
-                existing.setting_name = setting_name
                 existing.instructions = final_instructions
                 existing.openai_api_key = openai_api_key
                 existing.chat_model = chat_model
@@ -108,7 +105,6 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
             else:
                 # Create new settings
                 settings = LLMSettings(
-                    setting_name=setting_name,
                     instructions=final_instructions,
                     openai_api_key=openai_api_key,
                     chat_model=chat_model,
@@ -134,7 +130,6 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
             return {
                 "status": "OLKORECT",
                 'id': settings.id,
-                'setting_name': settings.setting_name,
                 'instructions': settings.instructions or '',
                 'openai_api_key': openai_api_key or '',  # Always return string, even if empty
                 'chat_model': settings.chat_model,
@@ -181,7 +176,6 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
 
             return {
                 'id': settings.id,
-                'setting_name': settings.setting_name,
                 'chat_model': settings.chat_model,
                 'analysis_model': settings.analysis_model
             }
@@ -203,7 +197,6 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
     def get_default_settings() -> Dict[str, Any]:
         """Get hardcoded default LLM settings for 'Muat Default' button"""
         return {
-            "setting_name": "Default LLM Settings",
             "instructions": "",
             "openai_api_key": "",
             "chat_model": "gpt-4o",

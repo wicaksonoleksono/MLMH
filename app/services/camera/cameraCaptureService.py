@@ -14,8 +14,8 @@ class CameraCaptureService:
 
     @staticmethod
     def get_upload_path() -> str:
-        """Get the upload directory path dynamically"""
-        return os.path.join(current_app.root_path, 'uploads')
+        """Get the static directory path dynamically"""
+        return current_app.media_save
 
     @staticmethod
     def ensure_upload_directory():
@@ -35,7 +35,6 @@ class CameraCaptureService:
                 return True
             return False
         except Exception as e:
-            print(f"❌ Failed to delete capture file {filename}: {e}")
             return False
 
     @staticmethod
@@ -131,18 +130,36 @@ class CameraCaptureService:
 
     @staticmethod
     def get_camera_settings_for_session(session_id: str) -> Optional[CameraSettings]:
-        """Get active camera settings for the session"""
+        """Get active camera settings for the session with fallback to current active settings"""
         with get_session() as db:
             # Get session to find camera_settings_id
             session = db.query(AssessmentSession).filter_by(id=session_id).first()
-            if not session or not session.camera_settings_id:
+            if not session:
                 return None
             
-            # Get camera settings
-            return db.query(CameraSettings).filter_by(
-                id=session.camera_settings_id,
-                is_active=True
-            ).first()
+            camera_settings = None
+            
+            # Try to get linked camera settings first
+            if session.camera_settings_id:
+                camera_settings = db.query(CameraSettings).filter_by(
+                    id=session.camera_settings_id,
+                    is_active=True
+                ).first()
+            
+            # Fallback: get current active camera settings if session has none or invalid ones
+            if not camera_settings:
+                camera_settings = db.query(CameraSettings).filter_by(is_active=True).first()
+                
+                # Update session to link to current active settings (fix broken sessions)
+                if camera_settings and camera_settings.recording_mode in ['INTERVAL', 'EVENT_DRIVEN']:
+                    session.camera_settings_id = camera_settings.id
+                    db.commit()
+            
+            # Validate recording mode before returning
+            if camera_settings and camera_settings.recording_mode in ['INTERVAL', 'EVENT_DRIVEN']:
+                return camera_settings
+            
+            return None
 
     @staticmethod
     def create_settings_snapshot(settings: CameraSettings) -> Dict[str, Any]:
@@ -151,11 +168,10 @@ class CameraCaptureService:
             return {}
             
         return {
-            'setting_name': settings.setting_name,
             'recording_mode': settings.recording_mode,
             'interval_seconds': settings.interval_seconds,
             'resolution': settings.resolution,
-            'upload_path': CameraCaptureService.get_upload_path(),  # Dynamic path from current_app.root_path
+            'upload_path': CameraCaptureService.get_upload_path(),  # Dynamic path from current_app.media_save
             'capture_on_button_click': settings.capture_on_button_click,
             'capture_on_message_send': settings.capture_on_message_send,
             'capture_on_question_start': settings.capture_on_question_start
@@ -172,18 +188,18 @@ class CameraCaptureService:
             return False  # Invalid mode = no capture
             
         if settings.recording_mode == 'INTERVAL':
-            # INTERVAL mode: ONLY respond to INTERVAL triggers, ignore all events
-            return trigger == 'INTERVAL'
+            # INTERVAL mode: ONLY respond to interval triggers, ignore all events
+            return trigger == 'interval'
             
         elif settings.recording_mode == 'EVENT_DRIVEN':
             # EVENT_DRIVEN mode: ONLY respond to enabled event triggers, ignore intervals
-            if trigger == 'INTERVAL':
+            if trigger == 'interval':
                 return False  # Reject interval triggers in event mode
             
             trigger_map = {
-                'BUTTON_CLICK': settings.capture_on_button_click,
-                'MESSAGE_SEND': settings.capture_on_message_send,
-                'QUESTION_START': settings.capture_on_question_start
+                'button_click': settings.capture_on_button_click,
+                'message_send': settings.capture_on_message_send,
+                'question_start': settings.capture_on_question_start
             }
             return trigger_map.get(trigger, False)
         

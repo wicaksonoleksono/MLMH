@@ -125,15 +125,7 @@ class PHQResponseService:
             if not scale:
                 raise ValueError(
                     f"PHQ settings {phq_settings.id} has no scale configured (scale_id: {phq_settings.scale_id})")
-
-            scale_labels = scale.scale_labels if scale else {
-                1: "Tidak sama sekali",
-                2: "Beberapa hari",
-                3: "Lebih dari setengah hari",
-                4: "Hampir setiap hari"
-            }
-
-            # Add metadata to response
+            scale_labels = scale.scale_labels 
             for question in selected_questions:
                 question.update({
                     "scale_min": scale.min_value if scale else 1,
@@ -326,7 +318,6 @@ class PHQResponseService:
         else:
             severity = "Severe"
             description = "Severe depression symptoms"
-
         return {
             "severity_level": severity,
             "description": description,

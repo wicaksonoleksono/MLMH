@@ -31,9 +31,8 @@ class LLMConversationService:
     ) -> LLMConversation:
         """Create a new conversation turn"""
         with get_session() as db:
-            # Check for </end_conversation> in AI message
+            # this is the shit  btw 
             has_end_conversation = "</end_conversation>" in ai_message.lower()
-            
             turn = LLMConversation(
                 session_id=session_id,
                 turn_number=turn_number,

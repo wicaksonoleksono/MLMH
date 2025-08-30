@@ -3,6 +3,7 @@ from flask_login import LoginManager
 from .config import Config
 from .db import init_database, create_all_tables
 
+import os       
 login_manager = LoginManager()
 
 
@@ -32,27 +33,24 @@ def create_app():
     def require_login():
         from flask import request, redirect, url_for
         from flask_login import current_user
-        
         # Public routes that don't require authentication
+        app.media_save = os.path.join(app.root_path,'static')
+        os.makedirs(app.media_save, exist_ok=True)
         public_routes = [
             'main.auth_page',
             'auth.login', 
             'auth.register',
             'static'
         ]
-        
         # Skip authentication check for public routes
         if request.endpoint in public_routes:
             return
-            
         # Skip authentication for static files
         if request.endpoint and request.endpoint.startswith('static'):
             return
-            
         # Redirect non-authenticated users to auth page
         if not current_user.is_authenticated:
             return redirect(url_for('main.auth_page'))
-            
         # Admin-only route protection
         admin_routes = [
             'admin', 'phq', 'camera', 'llm', 'consent'  # Admin blueprint prefixes
@@ -80,6 +78,8 @@ def create_app():
     from app.routes.assessment_routes import assessment_bp
     from app.routes.assessment.llm_routes import llm_assessment_bp
     from app.routes.assessment.phq_routes import phq_assessment_bp
+    from app.routes.assessment.camera_routes import camera_assessment_bp
+    from app.routes.admin.export_routes import export_bp
     app.register_blueprint(admin_bp)
     app.register_blueprint(phq_bp)
     app.register_blueprint(camera_bp)
@@ -89,6 +89,8 @@ def create_app():
     app.register_blueprint(assessment_bp)
     app.register_blueprint(llm_assessment_bp)
     app.register_blueprint(phq_assessment_bp)
+    app.register_blueprint(camera_assessment_bp)
+    app.register_blueprint(export_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     register_commands(app)

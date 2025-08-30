@@ -1,0 +1,57 @@
+# app/routes/admin/export_routes.py
+from flask import Blueprint, request, jsonify, send_file
+from flask_login import login_required, current_user
+from ...decorators import admin_required, raw_response
+from ...services.admin.exportService import ExportService
+
+export_bp = Blueprint('export', __name__, url_prefix='/admin/export')
+
+
+@export_bp.route('/session/<session_id>')
+@login_required
+@admin_required
+@raw_response
+def export_session(session_id):
+    """Export single session as ZIP download"""
+    try:
+        zip_buffer = ExportService.export_session(session_id)
+        filename = ExportService.get_export_filename(session_id)
+        
+        return send_file(
+            zip_buffer,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/zip'
+        )
+        
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        return jsonify({"error": f"Export failed: {str(e)}"}), 500
+
+
+@export_bp.route('/bulk', methods=['POST'])
+@login_required
+@admin_required
+@raw_response
+def export_bulk_sessions():
+    """Export multiple sessions as ZIP of ZIPs"""
+    try:
+        data = request.get_json()
+        session_ids = data.get('session_ids', [])
+        
+        if not session_ids:
+            return jsonify({"error": "No session IDs provided"}), 400
+        
+        zip_buffer = ExportService.export_bulk_sessions(session_ids)
+        filename = ExportService.get_bulk_export_filename()
+        
+        return send_file(
+            zip_buffer,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/zip'
+        )
+        
+    except Exception as e:
+        return jsonify({"error": f"Bulk export failed: {str(e)}"}), 500

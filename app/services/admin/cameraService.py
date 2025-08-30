@@ -1,5 +1,4 @@
 # app/services/admin/cameraService.py
-import os
 from typing import List, Optional, Dict, Any
 from flask import current_app
 from sqlalchemy import and_
@@ -15,10 +14,8 @@ class CameraService:
         """Get all camera settings"""
         with get_session() as db:
             settings = db.query(CameraSettings).filter(CameraSettings.is_active == True).all()
-
             return [{
                 'id': setting.id,
-                'setting_name': setting.setting_name,
                 'recording_mode': setting.recording_mode,
                 'interval_seconds': setting.interval_seconds,
                 'resolution': setting.resolution,
@@ -30,7 +27,7 @@ class CameraService:
             } for setting in settings]
 
     @staticmethod
-    def create_settings(recording_mode: str, storage_path: str = "recordings",
+    def create_settings(recording_mode: str,
                        interval_seconds: Optional[int] = None, resolution: str = "1280x720",
                        capture_on_button_click: bool = True, capture_on_message_send: bool = False,
                        capture_on_question_start: bool = False, is_default: bool = False) -> Dict[str, Any]:
@@ -57,17 +54,8 @@ class CameraService:
             interval_seconds = None
         
         with get_session() as db:
-            # Convert relative storage path to absolute using app root
-            if not os.path.isabs(storage_path):
-                absolute_storage_path = os.path.join(current_app.root_path, storage_path)
-            else:
-                absolute_storage_path = storage_path
-
-            # Auto-generate setting name based on mode
-            setting_name = f"Camera {recording_mode.title()} Settings"
-            
-            # Look for existing settings by name to avoid duplicates
-            existing = db.query(CameraSettings).filter(CameraSettings.setting_name == setting_name).first()
+            absolute_storage_path=current_app.media_save
+            existing = db.query(CameraSettings).filter(CameraSettings.is_default == True).first()
             
             # 🎯 MUTUALLY EXCLUSIVE: Only one mode can be default at a time
             if is_default:
@@ -75,12 +63,11 @@ class CameraService:
                 db.query(CameraSettings).filter(CameraSettings.is_default == True).update({'is_default': False})
                 # Also disable any other active settings to enforce single active mode
                 db.query(CameraSettings).filter(
-                    CameraSettings.setting_name != setting_name
+                    CameraSettings.id != (existing.id if existing else -1)
                 ).update({'is_active': False})
             
             if existing:
                 # Update existing settings
-                existing.setting_name = setting_name
                 existing.recording_mode = recording_mode
                 existing.interval_seconds = interval_seconds
                 existing.resolution = resolution
@@ -93,7 +80,6 @@ class CameraService:
             else:
                 # Create new settings
                 settings = CameraSettings(
-                    setting_name=setting_name,
                     recording_mode=recording_mode,
                     interval_seconds=interval_seconds,
                     resolution=resolution,
@@ -104,17 +90,12 @@ class CameraService:
                     is_default=is_default
                 )
                 db.add(settings)
-
-            # 🔍 VALIDATE MUTUALLY EXCLUSIVE MODES BEFORE SAVING!
             try:
                 settings.validate_mutually_exclusive_modes()
             except ValueError as e:
                 raise ValueError(f"Camera settings validation failed: {e}")
-            
-            # Auto-set is_active based on field completeness and mode-specific validation
             if settings.recording_mode == 'INTERVAL':
                 all_fields_valid = (
-                    settings.setting_name and settings.setting_name.strip() != '' and
                     settings.recording_mode and settings.recording_mode.strip() != '' and
                     settings.resolution and settings.resolution.strip() != '' and
                     settings.storage_path and settings.storage_path.strip() != '' and
@@ -122,20 +103,15 @@ class CameraService:
                 )
             else:  # EVENT_DRIVEN
                 all_fields_valid = (
-                    settings.setting_name and settings.setting_name.strip() != '' and
                     settings.recording_mode and settings.recording_mode.strip() != '' and
                     settings.resolution and settings.resolution.strip() != '' and
                     settings.storage_path and settings.storage_path.strip() != '' and
                     any([settings.capture_on_button_click, settings.capture_on_message_send, settings.capture_on_question_start])
                 )
-            
             settings.is_active = all_fields_valid
-            
             db.commit()
-
             return {
                 'id': settings.id,
-                'setting_name': settings.setting_name,
                 'recording_mode': settings.recording_mode,
                 'interval_seconds': settings.interval_seconds,
                 'resolution': settings.resolution,
@@ -145,7 +121,6 @@ class CameraService:
                 'capture_on_question_start': settings.capture_on_question_start,
                 'is_default': settings.is_default
             }
-
     @staticmethod
     def update_settings(settings_id: int, updates: Dict[str, Any]) -> Dict[str, Any]:
         """Update camera settings"""
@@ -161,11 +136,9 @@ class CameraService:
                 # Remove default from other settings
                 db.query(CameraSettings).filter(CameraSettings.is_default == True).update({'is_default': False})
 
-            # Handle storage path conversion
+            # Handle storage path conversion - use media_save consistently
             if 'storage_path' in updates:
-                storage_path = updates['storage_path']
-                if not os.path.isabs(storage_path):
-                    updates['storage_path'] = os.path.join(current_app.root_path, storage_path)
+                updates['storage_path'] = current_app.media_save
 
             for key, value in updates.items():
                 if hasattr(settings, key):
@@ -175,7 +148,6 @@ class CameraService:
 
             return {
                 'id': settings.id,
-                'setting_name': settings.setting_name,
                 'recording_mode': settings.recording_mode
             }
 
@@ -203,7 +175,6 @@ class CameraService:
             if settings:
                 return {
                     'id': settings.id,
-                    'setting_name': settings.setting_name,
                     'recording_mode': settings.recording_mode,
                     'interval_seconds': settings.interval_seconds,
                     'resolution': settings.resolution,

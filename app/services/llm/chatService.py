@@ -14,6 +14,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import ConfigurableFieldSpec
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI
+from langchain_openai.chat_models.base import ChatOpenAI
 from pydantic.v1 import BaseModel, Field
 
 
@@ -75,12 +76,10 @@ class LLMChatService:
     def _init_langchain(self, settings: Dict[str, Any]) -> None:
         """Initialize Langchain components with settings from database"""
         try:
-            # Create the chat model with settings from database
             self.chat_model = ChatOpenAI(
                 model=settings['chat_model'],
                 openai_api_key=settings['openai_api_key'],
                 temperature=0,
-                seed = 42,
                 streaming=True
             )
             
@@ -94,11 +93,7 @@ class LLMChatService:
                 MessagesPlaceholder(variable_name="history"),
                 ("human", "{input}"),
             ])
-            
-            # Create the chain
             self.chain = self.prompt | self.chat_model
-            
-            # Create chain with history management
             self.chain_with_history = RunnableWithMessageHistory(
                 self.chain,
                 get_by_session_id,
@@ -122,18 +117,11 @@ class LLMChatService:
         """
         Stream AI response using session's system prompt from database settings
         """
-        # Load settings from database (NO fallbacks)
         settings = self._load_llm_settings()
-        
-        # Initialize LangChain with database settings
         self._init_langchain(settings)
-        
-        # Validate session
         session = SessionService.get_session(session_id)
         if not session:
             raise ValueError("Session not found")
-        
-        # Stream response using Langchain
         response_content = ""
         config = {"configurable": {"session_id": session_id}}
         
@@ -204,7 +192,6 @@ class LLMChatService:
         Start a new conversation with initial AI greeting from database settings
         """
         try:
-            # Load settings to ensure they exist
             settings_list = LLMService.get_settings()
             if not settings_list:
                 return {
@@ -212,39 +199,28 @@ class LLMChatService:
                     'message': 'No LLM settings configured. Please configure settings first.'
                 }
             
-            # Clear any existing LangChain history and database turns
             history = get_by_session_id(str(session_id))
             history.clear()
-            
-            # Generate initial AI greeting in Indonesian
             initial_greeting = "Hai! Nama aku Anisa, temanmu yang siap mendengarkan curhatanmu. Lagi ngapain nih? Cerita dong tentang hari-harimu akhir-akhir ini!"
-            
-            # Add initial AI message to LangChain history
             history.add_messages([AIMessage(content=initial_greeting)])
-            
             return {
                 'status': 'success',
                 'conversation_started': True,
                 'initial_message': initial_greeting,
                 'session_id': session_id
             }
-            
         except Exception as e:
             return {
                 'status': 'error',
                 'message': str(e)
             }
-    
     @staticmethod
     def finish_conversation(session_id: str) -> Dict[str, Any]:
         """
         Finish conversation and prepare for completion handler
         """
-        # Check if conversation is complete
         if LLMChatService.is_conversation_complete(session_id):
-            # Complete LLM assessment and get next step directly
             completion_result = SessionService.complete_llm_and_get_next_step(session_id)
-            
             return {
                 'status': 'success',
                 'conversation_completed': True,

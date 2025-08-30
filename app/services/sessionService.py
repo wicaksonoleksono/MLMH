@@ -136,6 +136,12 @@ class SessionService:
         with get_session() as db:
             return db.query(AssessmentSession).filter_by(id=session_id).first()
     
+    @staticmethod
+    def validate_user_session(session_id: str, user_id: int) -> bool:
+        """Validate session belongs to user - clean SOC validation"""
+        session = SessionService.get_session(session_id)
+        return session is not None and str(session.user_id) == str(user_id)
+    
     # Remove get_session_by_token - UUID serves as both ID and token
     
     @staticmethod

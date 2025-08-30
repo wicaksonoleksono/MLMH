@@ -282,7 +282,6 @@ class PHQService:
 
             return [{
                 'id': setting.id,
-                'setting_name': setting.setting_name,
                 'questions_per_category': setting.questions_per_category,
                 'scale_id': setting.scale_id,
                 'scale_name': setting.scale.scale_name,
@@ -290,16 +289,14 @@ class PHQService:
                 'instructions': setting.instructions,
                 'is_default': setting.is_default
             } for setting in settings]
-
+    # Here delete it too .... 
     @staticmethod
-    def create_settings(setting_name: str, questions_per_category: int, scale_id: int,
+    def create_settings( questions_per_category: int, scale_id: int,
                         randomize_categories: bool = False, instructions: str = None,
                         is_default: bool = False) -> Dict[str, Any]:
         """Create or update PHQ settings - always updates existing default if is_default=True"""
         with get_session() as db:
             # Null handling - don't save if required fields are null/empty
-            if not setting_name or not setting_name.strip():
-                raise ValueError("Setting name cannot be null or empty")
 
             if not questions_per_category or questions_per_category <= 0:
                 raise ValueError("Questions per category must be a positive number")
@@ -314,23 +311,15 @@ class PHQService:
                 # Find existing default settings to update
                 existing = db.query(PHQSettings).filter(PHQSettings.is_default == True).first()
                 if existing:
-                    # Update existing default settings
-                    existing.setting_name = setting_name.strip()
                     existing.questions_per_category = questions_per_category
                     existing.scale_id = scale_id
                     existing.randomize_categories = randomize_categories
                     existing.instructions = final_instructions
-                    
-                    # Auto-manage is_active based on questions availability
                     questions_exist = db.query(PHQQuestion).filter(PHQQuestion.is_active == True).count() > 0
                     settings = existing
                 else:
-                    # Auto-manage is_active based on questions availability
                     questions_exist = db.query(PHQQuestion).filter(PHQQuestion.is_active == True).count() > 0
-                    
-                    # Create first default settings
                     settings = PHQSettings(
-                        setting_name=setting_name.strip(),
                         questions_per_category=questions_per_category,
                         scale_id=scale_id,
                         randomize_categories=randomize_categories,
@@ -340,34 +329,19 @@ class PHQService:
                     )
                     db.add(settings)
             else:
-                # Non-default settings - check by name
-                existing = db.query(PHQSettings).filter(PHQSettings.setting_name == setting_name).first()
-                if existing:
-                    # Update existing settings
-                    existing.questions_per_category = questions_per_category
-                    existing.scale_id = scale_id
-                    existing.randomize_categories = randomize_categories
-                    existing.instructions = final_instructions
-                    
-                    # Auto-manage is_active based on questions availability
-                    questions_exist = db.query(PHQQuestion).filter(PHQQuestion.is_active == True).count() > 0
-                    settings = existing
-                else:
-                    # Create new settings
-                    settings = PHQSettings(
-                        setting_name=setting_name.strip(),
-                        questions_per_category=questions_per_category,
-                        scale_id=scale_id,
-                        randomize_categories=randomize_categories,
-                        instructions=final_instructions,
-                        is_default=False
-                    )
-                    db.add(settings)
+                # Non-default settings - create new
+                settings = PHQSettings(
+                    questions_per_category=questions_per_category,
+                    scale_id=scale_id,
+                    randomize_categories=randomize_categories,
+                    instructions=final_instructions,
+                    is_default=False
+                )
+                db.add(settings)
 
             # Auto-set is_active based on field completeness
             questions_exist = db.query(PHQQuestion).filter(PHQQuestion.is_active == True).count() > 0
             all_fields_valid = (
-                settings.setting_name and settings.setting_name.strip() != '' and
                 settings.questions_per_category is not None and settings.questions_per_category > 0 and
                 settings.scale_id is not None and
                 questions_exist
@@ -378,7 +352,6 @@ class PHQService:
 
             return {
                 'id': settings.id,
-                'setting_name': settings.setting_name,
                 'questions_per_category': settings.questions_per_category,
                 'scale_id': settings.scale_id,
                 'randomize_categories': settings.randomize_categories,
@@ -409,7 +382,7 @@ class PHQService:
 
             return {
                 'id': settings.id,
-                'setting_name': settings.setting_name
+                'is_default': settings.is_default
             }
 
     @staticmethod

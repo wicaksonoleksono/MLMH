@@ -62,11 +62,9 @@ class PHQQuestion(BaseModel, StatusMixin):
 
 class PHQScale(BaseModel, StatusMixin):
     __tablename__ = 'phq_scales'
-
     scale_name: Mapped[str] = mapped_column(String(100), nullable=False)
     min_value: Mapped[int] = mapped_column(Integer, nullable=False)
     max_value: Mapped[int] = mapped_column(Integer, nullable=False)
-    # {0: "Tidak sama sekali", 1: "Beberapa hari", ...}
     scale_labels: Mapped[dict] = mapped_column(JSON, nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
 
@@ -76,8 +74,6 @@ class PHQScale(BaseModel, StatusMixin):
 
 class PHQSettings(BaseModel, StatusMixin):
     __tablename__ = 'phq_settings'
-
-    setting_name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     questions_per_category: Mapped[int] = mapped_column(Integer, default=1)
     scale_id: Mapped[int] = mapped_column(ForeignKey('phq_scales.id'), nullable=False)
     randomize_categories: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -88,4 +84,4 @@ class PHQSettings(BaseModel, StatusMixin):
     scale: Mapped["PHQScale"] = relationship("PHQScale")
 
     def __repr__(self) -> str:
-        return f"<PHQSettings {self.setting_name}>"
+        return f"<PHQSettings {self.__tablename__}"

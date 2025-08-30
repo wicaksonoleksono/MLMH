@@ -9,22 +9,10 @@ from ..base import BaseModel, StatusMixin
 
 class ConsentSettings(BaseModel, StatusMixin):
     __tablename__ = 'consent_settings'
-    
-    setting_name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    
-    # Consent form content
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    
-    # Additional settings (kept for future use but not used in current implementation)
-    require_signature: Mapped[Optional[bool]] = mapped_column(Boolean, default=None, nullable=True)
-    require_date: Mapped[Optional[bool]] = mapped_column(Boolean, default=None, nullable=True)
-    allow_withdrawal: Mapped[bool] = mapped_column(Boolean, default=True)
-    
-    # Footer text
     footer_text: Mapped[Optional[str]] = mapped_column(Text)
-    
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     
     def __repr__(self) -> str:
-        return f"<ConsentSettings {self.setting_name}>"
+        return f"<ConsentSettings {self.id}>"

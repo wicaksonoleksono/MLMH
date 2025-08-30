@@ -9,6 +9,7 @@ from ...services.sessionService import SessionService
 import json
 import time
 from datetime import datetime
+import uuid
 
 llm_assessment_bp = Blueprint('llm_assessment', __name__, url_prefix='/assessment/llm')
 
@@ -71,25 +72,17 @@ def stream_conversation(session_id):
 @api_response
 def send_message_proper(session_id):
     """POST endpoint for sending message with proper headers/auth"""
-    # Get session using UUID
     session = SessionService.get_session(session_id)
     if not session or str(session.user_id) != str(current_user.id):
         return {"message": "Session not found or access denied"}, 403
-    
-    # Get message from JSON body
     data = request.get_json()
     user_message = data.get('message', '').strip()
     if not user_message:
         return {"message": "Message is required"}, 400
-    
-    # Generate unique message ID for this streaming session
-    import uuid
     message_id = str(uuid.uuid4())
-    
     # Store message temporarily for streaming (in-memory store)
     if not hasattr(send_message_proper, 'pending_messages'):
         send_message_proper.pending_messages = {}
-    
     send_message_proper.pending_messages[message_id] = {
         'session_id': session.id,
         'user_message': user_message,
@@ -102,12 +95,10 @@ def send_message_proper(session_id):
         'stream_url': f'/assessment/llm/stream-response/{message_id}'
     }
 
-
 @llm_assessment_bp.route('/stream-response/<message_id>')
 @user_required  
 def stream_response(message_id):
     """EventSource endpoint for streaming AI response to a specific message"""
-    # Get pending message
     pending_messages = getattr(send_message_proper, 'pending_messages', {})
     message_data = pending_messages.get(message_id)
     
@@ -119,36 +110,22 @@ def stream_response(message_id):
         try:
             session_id = message_data['session_id']
             user_message = message_data['user_message']
-            
-            # Verify session belongs to current user
             session = SessionService.get_session(session_id)
             if not session or int(session.user_id) != int(current_user.id):
                 yield f"data: {json.dumps({'type': 'error', 'message': 'Access denied'})}\n\n"
                 return
-            
-            # Initialize the chat service
             chat_service = LLMChatService()
-            
-            # Send stream start signal
             yield f"data: {json.dumps({'type': 'stream_start'})}\n\n"
-            
-            # Stream AI response using new service
             for chunk in chat_service.stream_ai_response(session_id, user_message):
                 yield f"data: {json.dumps({'type': 'chunk', 'data': chunk})}\n\n"
-            
-            # Check if conversation ended and send completion signal
             if chat_service.is_conversation_complete(session_id):
                 yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': True})}\n\n"
             else:
                 yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': False})}\n\n"
-            
-            # Cleanup pending message
             if message_id in pending_messages:
                 del pending_messages[message_id]
-
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-
     return Response(
         stream_with_context(generate()),
         mimetype='text/event-stream',

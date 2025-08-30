@@ -34,9 +34,6 @@ def create_settings():
     return jsonify(ConsentService.create_settings(
         title=data['title'],
         content=data['content'],
-        require_signature=data.get('require_signature', False),
-        require_date=data.get('require_date', False),
-        allow_withdrawal=data.get('allow_withdrawal', False),
         footer_text=data.get('footer_text'),
         is_default=data.get('is_default', False)
     ))

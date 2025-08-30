@@ -228,19 +228,13 @@ endblock %} {% block content %}
 
       async initCamera() {
         try {
-          // Get camera settings from backend
-          const cameraSettings = {{ camera_settings | tojson | safe }} || {};
+          const cameraResult = await apiCall(`/assessment/camera/settings/${this.sessionId}`);
+          const cameraSettings = cameraResult?.data?.data?.settings || {};
           
-          // Initialize camera manager without response ID initially
           this.cameraManager = new CameraManager(this.sessionId, 'llm', cameraSettings);
           await this.cameraManager.initialize();
-          
-          // Don't set response ID yet - will be set after conversation responses are saved
-          
-          console.log('📹 Camera initialized for LLM assessment');
         } catch (error) {
-          console.warn('⚠️ Failed to initialize camera (continuing without camera):', error);
-          // Continue assessment even if camera fails
+          // Camera initialization failed - continue without camera
         }
       },
 
@@ -310,7 +304,6 @@ endblock %} {% block content %}
           this.loading = false;
           this.scrollToBottom();
         } catch (error) {
-          console.error("❌ Error initializing chat:", error);
           this.loading = false;
           alert("Error starting conversation. Please refresh the page.");
         }
@@ -351,7 +344,7 @@ endblock %} {% block content %}
 
           this.scrollToBottom();
         } catch (error) {
-          console.error("❌ Error loading chat history:", error);
+          // Error loading chat history - continue with fresh chat
         }
       },
 
@@ -451,19 +444,17 @@ endblock %} {% block content %}
                 // Handle stream start signal
               }
             } catch (e) {
-              console.error("Error parsing SSE data:", e);
+              // Error parsing SSE data
             }
           };
 
           eventSource.onerror = (error) => {
-            console.error("❌ EventSource error:", error);
             botMessage.content = "Kesalahan koneksi. Silakan coba lagi.";
             botMessage.streaming = false;
             this.isTyping = false;
             eventSource.close();
           };
         } catch (error) {
-          console.error("❌ Error in hybrid POST + EventSource:", error);
           const botMessage = this.messages[this.messages.length - 1];
           botMessage.content = `ERROR: ${error.message || error}`;
           botMessage.streaming = false;
@@ -495,8 +486,15 @@ endblock %} {% block content %}
             result.status === "OLKORECT" ? result.data : result;
 
           if (actualResult.status === "success" && actualResult.next_redirect) {
-            // Direct redirect - no second API call needed
-            window.location.href = actualResult.next_redirect;
+            this.markAsCompleted();
+            
+            if (this.cameraManager) {
+              await this.cameraManager.uploadBatch(actualResult.conversation_ids);
+            }
+            
+            setTimeout(() => {
+              window.location.href = actualResult.next_redirect;
+            }, 2000);
           } else {
             alert(
               "Error finishing conversation: " +
@@ -505,7 +503,6 @@ endblock %} {% block content %}
             this.isFinishing = false;
           }
         } catch (error) {
-          console.error("❌ Error finishing conversation:", error);
           alert("Error finishing conversation. Please try again.");
           this.isFinishing = false;
         }

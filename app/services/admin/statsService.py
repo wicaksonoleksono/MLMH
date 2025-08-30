@@ -56,7 +56,9 @@ class StatsService:
                     'user_id': user.id,
                     'username': user.uname,
                     'session1': session1_status,
-                    'session2': session2_status
+                    'session2': session2_status,
+                    'session1_id': sessions[0].id if len(sessions) >= 1 else None,
+                    'session2_id': sessions[1].id if len(sessions) >= 2 else None
                 })
             
             return preview_data

@@ -2,15 +2,15 @@
 class CameraManager {
     constructor(sessionId, assessmentType, cameraSettings) {
         this.sessionId = sessionId;
-        this.assessmentType = assessmentType; // 'phq' or 'llm'
+        this.assessmentType = assessmentType;
         this.cameraSettings = cameraSettings || {};
-        this.captures = []; // Local queue for batch upload
+        this.captures = [];
         this.videoElement = null;
         this.canvasElement = null;
         this.stream = null;
         this.isInitialized = false;
         this.intervalTimer = null;
-        this.currentResponseId = null; // PHQ response ID or LLM conversation ID
+        this.currentResponseId = null;
         
         // Bind methods to preserve context
         this.captureImage = this.captureImage.bind(this);
@@ -20,26 +20,12 @@ class CameraManager {
 
     async initialize() {
         try {
-            console.log('🎥 Initializing CameraManager:', {
-                sessionId: this.sessionId,
-                assessmentType: this.assessmentType,
-                cameraSettings: this.cameraSettings
-            });
-
-            // Create video and canvas elements
             await this.createVideoElements();
-            
-            // Request camera access
             await this.requestCameraAccess();
-            
-            // Set up capture mode based on settings
             this.setupCaptureMode();
-            
             this.isInitialized = true;
-            console.log('✅ CameraManager initialized successfully');
-            
         } catch (error) {
-            console.error('❌ Failed to initialize camera:', error);
+            console.error('Failed to initialize camera:', error);
             throw error;
         }
     }
@@ -77,32 +63,29 @@ class CameraManager {
 
             this.stream = await navigator.mediaDevices.getUserMedia(constraints);
             this.videoElement.srcObject = this.stream;
-            
-            console.log('📹 Camera access granted');
-            
         } catch (error) {
-            console.error('❌ Camera access denied:', error);
             throw new Error('Camera access is required for assessment');
         }
     }
 
     setupCaptureMode() {
-        if (!this.cameraSettings.recording_mode) return;
+        if (!this.cameraSettings.recording_mode) {
+            return;
+        }
 
         if (this.cameraSettings.recording_mode === 'INTERVAL' && this.cameraSettings.interval_seconds) {
             this.startIntervalCapture();
         }
-        // EVENT_DRIVEN mode is handled by specific trigger methods
     }
 
     startIntervalCapture() {
-        if (this.intervalTimer) return; // Already running
+        if (this.intervalTimer) {
+            return;
+        }
 
         const intervalMs = this.cameraSettings.interval_seconds * 1000;
-        console.log(`🔄 Starting interval capture every ${this.cameraSettings.interval_seconds} seconds`);
-        
         this.intervalTimer = setInterval(() => {
-            this.captureImage('INTERVAL');
+            this.captureImage('interval');
         }, intervalMs);
     }
 
@@ -110,19 +93,15 @@ class CameraManager {
         if (this.intervalTimer) {
             clearInterval(this.intervalTimer);
             this.intervalTimer = null;
-            console.log('⏹️ Stopped interval capture');
         }
     }
 
     async captureImage(trigger = 'MANUAL') {
         if (!this.isInitialized || !this.videoElement.videoWidth) {
-            console.warn('⚠️ Camera not ready for capture');
             return;
         }
 
-        // Check if we should capture based on settings
         if (!this.shouldCapture(trigger)) {
-            console.log(`🚫 Skipping capture for trigger: ${trigger}`);
             return;
         }
 
@@ -144,40 +123,54 @@ class CameraManager {
                 throw new Error('Failed to create image blob');
             }
 
-            // Add to local queue with metadata (UUIDs will be set during batch upload)
-            const capture = {
-                blob: blob,
-                timestamp: new Date().toISOString(),
-                trigger: trigger,
+            // IMMEDIATELY upload file to disk
+            const formData = new FormData();
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const filename = `capture_${timestamp}.jpg`;
+            
+            formData.append('image', blob, filename);
+            formData.append('trigger', trigger);
+
+            const response = await fetch(`/assessment/camera/upload-single/${this.sessionId}`, {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (result.status !== 'OLKORECT') {
+                throw new Error(result.error || 'Upload failed');
+            }
+
+            // Store only metadata for later DB writing
+            const captureMetadata = {
+                capture_id: result.data.capture_id,
+                filename: result.data.filename,
+                timestamp: result.data.timestamp,
+                trigger: result.data.trigger,
                 file_size: blob.size
             };
 
-            this.captures.push(capture);
-            
-            console.log('📸 Captured image:', {
-                trigger: trigger,
-                size: blob.size,
-                queueLength: this.captures.length,
-                responseId: this.currentResponseId
-            });
-
-            return capture;
+            this.captures.push(captureMetadata);
+            return captureMetadata;
 
         } catch (error) {
-            console.error('❌ Failed to capture image:', error);
             throw error;
         }
     }
 
     shouldCapture(trigger) {
-        if (!this.cameraSettings.recording_mode) return false;
+        if (!this.cameraSettings.recording_mode) {
+            return false;
+        }
 
         if (this.cameraSettings.recording_mode === 'INTERVAL') {
-            return trigger === 'INTERVAL';
+            return trigger === 'interval';
         } else if (this.cameraSettings.recording_mode === 'EVENT_DRIVEN') {
             const triggerMap = {
-                'BUTTON_CLICK': this.cameraSettings.capture_on_button_click,
-                'MESSAGE_SEND': this.cameraSettings.capture_on_message_send
+                'button_click': this.cameraSettings.capture_on_button_click,
+                'message_send': this.cameraSettings.capture_on_message_send,
+                'question_start': this.cameraSettings.capture_on_question_start
             };
             return triggerMap[trigger] === true;
         }
@@ -187,108 +180,72 @@ class CameraManager {
 
     setCurrentResponseId(responseId) {
         this.currentResponseId = responseId;
-        console.log('📋 Set current response ID:', responseId);
     }
 
     // Trigger methods for specific events
     async onButtonClick() {
-        return await this.captureImage('BUTTON_CLICK');
+        return await this.captureImage('button_click');
     }
 
     async onMessageSend() {
-        return await this.captureImage('MESSAGE_SEND');
+        return await this.captureImage('message_send');
+    }
+
+    async onQuestionStart() {
+        return await this.captureImage('question_start');
     }
 
 
     async uploadBatch(responseIds = null) {
         if (this.captures.length === 0) {
-            console.log('📤 No captures to upload');
             return;
         }
 
         try {
-            console.log(`📤 Uploading ${this.captures.length} captures...`);
-            
-            const formData = new FormData();
-            formData.append('session_id', this.sessionId);
-            formData.append('assessment_type', this.assessmentType);
-            
-            // Add response IDs if provided
-            if (responseIds) {
-                if (this.assessmentType === 'phq') {
-                    formData.append('phq_response_ids', JSON.stringify(responseIds));
-                } else if (this.assessmentType === 'llm') {
-                    formData.append('llm_conversation_ids', JSON.stringify(responseIds));
-                }
-            }
+            // Files are already uploaded - just link metadata to response IDs
+            const captureIds = this.captures.map(capture => capture.capture_id);
 
-            // Add each capture with metadata
-            this.captures.forEach((capture, index) => {
-                const fileKey = `capture_${index}`;
-                const metadataKey = `metadata_${index}`;
-                
-                // Create filename with timestamp
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                const filename = `capture_${timestamp}_${index}.jpg`;
-                
-                formData.append(fileKey, capture.blob, filename);
-                const metadata = {
-                    trigger: capture.trigger,
-                    timestamp: capture.timestamp
+            if (responseIds && responseIds.length > 0) {
+                const linkData = {
+                    capture_ids: captureIds,
+                    phq_response_ids: this.assessmentType === 'phq' ? responseIds : [],
+                    llm_conversation_ids: this.assessmentType === 'llm' ? responseIds : []
                 };
-                
-                // Add response ID to metadata if available
-                if (this.currentResponseId) {
-                    if (this.assessmentType === 'phq') {
-                        metadata.phq_response_id = this.currentResponseId;
-                    } else if (this.assessmentType === 'llm') {
-                        metadata.llm_conversation_id = this.currentResponseId;
-                    }
+
+                const linkResponse = await fetch(`/assessment/camera/link-responses/${this.sessionId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(linkData)
+                });
+
+                const linkResult = await linkResponse.json();
+                if (linkResult.status !== 'OLKORECT') {
+                    throw new Error(linkResult.error || 'Failed to link captures');
                 }
-                
-                formData.append(metadataKey, JSON.stringify(metadata));
-            });
-
-            const response = await fetch('/assessment/camera/upload', {
-                method: 'POST',
-                body: formData
-            });
-
-            const result = await response.json();
-
-            if (result.status === 'OLKORECT') {
-                console.log('✅ Successfully uploaded captures:', result);
-                this.captures = []; // Clear queue
-                return result;
-            } else {
-                throw new Error(result.error || 'Upload failed');
             }
+
+            const processedCount = this.captures.length;
+            this.captures = [];
+            return { status: 'OLKORECT', processed_count: processedCount };
 
         } catch (error) {
-            console.error('❌ Failed to upload captures:', error);
             throw error;
         }
     }
 
     async cleanup() {
         try {
-            console.log('🧹 Cleaning up CameraManager...');
-            
-            // Upload any remaining captures
             if (this.captures.length > 0) {
                 await this.uploadBatch();
             }
             
-            // Stop interval capture
             this.stopIntervalCapture();
             
-            // Release camera stream
             if (this.stream) {
                 this.stream.getTracks().forEach(track => track.stop());
                 this.stream = null;
             }
             
-            // Remove DOM elements
             if (this.videoElement) {
                 document.body.removeChild(this.videoElement);
                 this.videoElement = null;
@@ -300,10 +257,8 @@ class CameraManager {
             }
             
             this.isInitialized = false;
-            console.log('✅ CameraManager cleanup complete');
-            
         } catch (error) {
-            console.error('❌ Error during cleanup:', error);
+            // Silent cleanup - errors here are not critical
         }
     }
 

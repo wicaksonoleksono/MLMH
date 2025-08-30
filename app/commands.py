@@ -110,7 +110,6 @@ def register_commands(app):
             existing_phq_settings = db.query(PHQSettings).filter_by(is_default=True).first()
             if not existing_phq_settings:
                 default_phq_settings = PHQSettings(
-                    setting_name="Default PHQ Settings",
                     questions_per_category=1,
                     scale_id=scale_id,
                     randomize_categories=False,
@@ -142,6 +141,36 @@ def register_commands(app):
                         "question_text_en": "Trouble falling or staying asleep, or sleeping too much", 
                         "question_text_id": "Sulit tidur atau mudah terbangun, atau terlalu banyak tidur",
                         "order_index": 3
+                    },
+                    {
+                        "category_name_id": "APPETITE_CHANGES",
+                        "question_text_en": "Poor appetite or overeating",
+                        "question_text_id": "Nafsu makan berkurang atau makan berlebihan", 
+                        "order_index": 4
+                    },
+                    {
+                        "category_name_id": "WORTHLESSNESS",
+                        "question_text_en": "Feeling bad about yourself or that you are a failure",
+                        "question_text_id": "Merasa tidak berharga atau merasa gagal",
+                        "order_index": 5
+                    },
+                    {
+                        "category_name_id": "CONCENTRATION", 
+                        "question_text_en": "Trouble concentrating on things",
+                        "question_text_id": "Sulit berkonsentrasi pada sesuatu",
+                        "order_index": 6
+                    },
+                    {
+                        "category_name_id": "PSYCHOMOTOR",
+                        "question_text_en": "Moving or speaking slowly, or being fidgety/restless",
+                        "question_text_id": "Bergerak atau berbicara lambat, atau gelisah/tidak bisa diam",
+                        "order_index": 7
+                    },
+                    {
+                        "category_name_id": "SUICIDAL_IDEATION",
+                        "question_text_en": "Thoughts that you would be better off dead",
+                        "question_text_id": "Pikiran bahwa Anda lebih baik mati",
+                        "order_index": 8
                     }
                 ]
                 
@@ -156,7 +185,6 @@ def register_commands(app):
             existing_llm_settings = db.query(LLMSettings).filter_by(is_default=True).first()
             if not existing_llm_settings:
                 default_llm_settings = LLMSettings(
-                    setting_name="Default LLM Settings",
                     openai_api_key="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",  # Must be set by admin
                     chat_model="gpt-4o",
                     analysis_model="gpt-4o-mini", 
@@ -180,9 +208,8 @@ def register_commands(app):
             existing_camera_settings = db.query(CameraSettings).filter_by(is_default=True).first()
             if not existing_camera_settings:
                 default_camera_settings = CameraSettings(
-                    setting_name="Default Camera Settings",
                     recording_mode="INTERVAL",
-                    interval_seconds=30,
+                    interval_seconds=1,
                     resolution="640x480",
                     storage_path="/uploads/camera_captures",
                     capture_on_button_click=True,
@@ -200,7 +227,6 @@ def register_commands(app):
             existing_consent_settings = db.query(ConsentSettings).filter_by(is_default=True).first()
             if not existing_consent_settings:
                 default_consent_settings = ConsentSettings(
-                    setting_name="Default Consent Settings",
                     title="Informed Consent Form",  # Default title
                     content="Please configure the informed consent content in the admin panel.",  # Must be set by admin
                     is_default=True,

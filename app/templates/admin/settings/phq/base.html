@@ -425,7 +425,6 @@ endblock %} {% block content %}
           // Save settings
           if (scaleResult.status === "OLKORECT") {
             const settingsData = {
-              setting_name: "PHQ-9 Default",
               questions_per_category: 1,
               scale_id: scaleResult.data ? scaleResult.data.id : scaleResult.id,
               randomize_questions: this.config.randomize === "true",

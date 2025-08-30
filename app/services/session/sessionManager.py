@@ -46,8 +46,12 @@ class SessionManager:
                                len(llm_settings.depression_aspects.get('aspects', [])) > 0)
                 llm_valid = api_key_valid and aspects_valid
             
-            # Camera settings just need to exist (basic validation)
-            camera_valid = camera_settings is not None
+            # Camera settings validation - must exist and have proper recording mode
+            camera_valid = False
+            if camera_settings:
+                # Must have valid recording mode (INTERVAL or EVENT_DRIVEN)
+                valid_modes = ['INTERVAL', 'EVENT_DRIVEN']
+                camera_valid = camera_settings.recording_mode in valid_modes
             
             # Collect missing/invalid settings
             missing_settings = []
@@ -69,7 +73,10 @@ class SessionManager:
                         missing_settings.append('Depression Aspects (aspek belum diset)')
             
             if not camera_valid:
-                missing_settings.append('Camera Settings (belum dibuat)')
+                if not camera_settings:
+                    missing_settings.append('Camera Settings (belum dibuat)')
+                else:
+                    missing_settings.append('Camera Settings (recording_mode harus INTERVAL atau EVENT_DRIVEN)')
 
             return {
                 'all_configured': all([phq_valid, llm_valid, camera_valid]),

@@ -231,5 +231,5 @@ __marimo__/
 venv/
 .env
 .jpg
-/uploads
+uploads
 app/static/uploads

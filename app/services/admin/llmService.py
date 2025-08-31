@@ -246,7 +246,7 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
             "openai_api_key": "",
             "chat_model": "gpt-4o",
             "analysis_model": "gpt-4o-mini",
-            "depression_aspects": LLMService.DEFAULT_ASPECTS,
+            "depression_aspects": {"aspects": LLMService.DEFAULT_ASPECTS},
             "is_default": True
         }
 
@@ -337,7 +337,7 @@ Format output JSON:
             with get_session() as db:
                 settings = db.query(LLMSettings).filter(LLMSettings.is_active == True).first()
                 if settings:
-                    api_key = settings.openai_api_key
+                    api_key = settings.get_api_key()
             if not api_key:
                 api_key = current_app.config.get('OPENAI_API_KEY')
         

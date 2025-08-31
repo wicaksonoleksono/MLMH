@@ -29,7 +29,6 @@ class LLMSettings(BaseModel, StatusMixin):
         """Decrypt and return API key for use"""
         if not self.openai_api_key:
             return ""
-        
         # If it's already a plain text key (migration scenario), return as-is
         if EncryptionService.is_encrypted(self.openai_api_key):
             return EncryptionService.decrypt_api_key(self.openai_api_key)
@@ -41,15 +40,13 @@ class LLMSettings(BaseModel, StatusMixin):
         """Get masked version for UI display"""
         if not self.openai_api_key:
             return ""
-        
         try:
             # Get the plain text version first
             plain_key = self.get_api_key()
             return EncryptionService.mask_api_key(plain_key)
         except:
-            # If decryption fails, return a generic mask
+            # If decrypion fails, return a generic mask
             return "••••••••••••[encrypted]"
-    
     def __repr__(self) -> str:
         masked_key = self.get_masked_api_key()[:12] + "..." if self.openai_api_key else "None"
         return f"<LLMSettings {self.id} (Key:{masked_key}, Chat:{self.chat_model}, Analysis:{self.analysis_model})>"

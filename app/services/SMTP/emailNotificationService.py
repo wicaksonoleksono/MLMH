@@ -218,3 +218,50 @@ class EmailNotificationService:
             return True
         except:
             return False
+
+    @staticmethod
+    def _send_session2_continuation_email(notification: EmailNotification, session: AssessmentSession, user: User) -> bool:
+        """Send Session 2 continuation email using real user data"""
+        try:
+            from ..SMTP.smtpService import SMTPService
+            import os
+            
+            # Get real user data from notification or database
+            user_name = notification.notification_data.get('username', user.uname) if notification.notification_data else user.uname
+            session_1_date = notification.notification_data.get('session_1_completion_date', 
+                                                              session.end_time.strftime('%d %B %Y') if session.end_time else 'beberapa waktu lalu')
+            days_since = notification.notification_data.get('days_since_session_1', '14')
+            user_email = notification.notification_data.get('user_email', user.email) if notification.notification_data else user.email
+            user_phone = notification.notification_data.get('user_phone', user.phone if user.phone else '')
+            
+            # Prepare template data using real user data
+            from flask import current_app
+            template_data = {
+                'username': user_name,  # Use 'username' as requested
+                'session_1_completion_date': session_1_date,
+                'days_since_session_1': days_since,
+                'session_2_url': current_app.config['SESSION_2_URL'],  # From config, no fallback
+                'support_email': current_app.config['EMAIL_FROM_ADDRESS'],  # From config, no fallback
+                'brand_name': 'Assessment Kesehatan Mental',
+                'current_year': datetime.utcnow().year
+            }
+            
+            # Use the session2_template.html
+            template_path = os.path.join(
+                os.path.dirname(__file__), 
+                'session2_template.html'
+            )
+            
+            subject = '🌟 Waktunya Melanjutkan Perjalanan Anda - Sesi 2 Menanti!'
+            
+            success = SMTPService.send_template_email(
+                to_email=notification.email_address,
+                subject=subject,
+                template_path=template_path,
+                template_data=template_data
+            )
+            
+            return success
+        except Exception as e:
+            print(f"Error sending Session 2 continuation email: {str(e)}")
+            return False

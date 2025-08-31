@@ -61,14 +61,14 @@ class LLMChatService:
         # Get first active settings
         settings = settings_list[0]
         
-        # Validate required fields
-        if not settings.get('openai_api_key') or not settings['openai_api_key'].strip():
+        # Validate required fields (use unmasked API key)
+        if not settings.get('openai_api_key_unmasked') or not settings['openai_api_key_unmasked'].strip():
             raise ValueError("OpenAI API key not configured in LLM settings")
         
         if not settings.get('chat_model') or not settings['chat_model'].strip():
             raise ValueError("Chat model not configured in LLM settings")
         
-        if not settings.get('depression_aspects') or not settings['depression_aspects'].get('aspects'):
+        if not settings.get('depression_aspects') or len(settings['depression_aspects']) == 0:
             raise ValueError("Depression aspects not configured in LLM settings")
         
         return settings
@@ -78,13 +78,13 @@ class LLMChatService:
         try:
             self.chat_model = ChatOpenAI(
                 model=settings['chat_model'],
-                openai_api_key=settings['openai_api_key'],
+                openai_api_key=settings['openai_api_key_unmasked'],
                 temperature=0,
                 streaming=True
             )
             
             # Build system prompt from settings
-            aspects = settings['depression_aspects']['aspects']
+            aspects = settings['depression_aspects']
             system_prompt = LLMService.build_system_prompt(aspects)
             
             # Create prompt template with system prompt from database

@@ -48,9 +48,10 @@ class LLMConversationService:
             db.add(turn)
             db.commit()
             
-            # If conversation ended, trigger analysis
-            if has_end_conversation:
-                LLMConversationService.trigger_analysis(session_id)
+            # If conversation ended, analysis will be triggered separately later
+            # Removed blocking analysis call to speed up conversation completion
+            # if has_end_conversation:
+            #     LLMConversationService.trigger_analysis(session_id)
             
             return turn
     

@@ -43,17 +43,17 @@ def stream_conversation(session_id):
         user_message = request.args.get('message', '')
 
         if not user_message:
-            yield f"data: {json.dumps({'type': 'error', 'message': 'No message provided'})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'message': 'No message provided'}, ensure_ascii=False)}\n\n"
             return
 
         # Stream the conversation
         try:
             chat_service = LLMChatService()
             for chunk in chat_service.stream_ai_response(session_id, user_message):
-                yield f"data: {json.dumps(chunk)}\n\n"
+                yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
                 time.sleep(0.01)  # Small delay to prevent overwhelming
         except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
 
     return Response(
         stream_with_context(generate()),
@@ -103,7 +103,7 @@ def stream_response(message_id):
     message_data = pending_messages.get(message_id)
     
     if not message_data:
-        return Response("data: " + json.dumps({'type': 'error', 'message': 'Message not found'}) + "\n\n", 
+        return Response("data: " + json.dumps({'type': 'error', 'message': 'Message not found'}, ensure_ascii=False) + "\n\n", 
                        mimetype='text/event-stream'), 404
 
     def generate():
@@ -112,20 +112,20 @@ def stream_response(message_id):
             user_message = message_data['user_message']
             session = SessionService.get_session(session_id)
             if not session or int(session.user_id) != int(current_user.id):
-                yield f"data: {json.dumps({'type': 'error', 'message': 'Access denied'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Access denied'}, ensure_ascii=False)}\n\n"
                 return
             chat_service = LLMChatService()
-            yield f"data: {json.dumps({'type': 'stream_start'})}\n\n"
+            yield f"data: {json.dumps({'type': 'stream_start'}, ensure_ascii=False)}\n\n"
             for chunk in chat_service.stream_ai_response(session_id, user_message):
-                yield f"data: {json.dumps({'type': 'chunk', 'data': chunk})}\n\n"
+                yield f"data: {json.dumps({'type': 'chunk', 'data': chunk}, ensure_ascii=False)}\n\n"
             if chat_service.is_conversation_complete(session_id):
-                yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': True})}\n\n"
+                yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': True}, ensure_ascii=False)}\n\n"
             else:
-                yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': False})}\n\n"
+                yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': False}, ensure_ascii=False)}\n\n"
             if message_id in pending_messages:
                 del pending_messages[message_id]
         except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
     return Response(
         stream_with_context(generate()),
         mimetype='text/event-stream',
@@ -589,31 +589,31 @@ def chat_stream_new(session_id):
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
-        return Response("data: " + json.dumps({'type': 'error', 'message': 'Session not found or access denied'}) + "\n\n",
+        return Response("data: " + json.dumps({'type': 'error', 'message': 'Session not found or access denied'}, ensure_ascii=False) + "\n\n",
                        mimetype='text/event-stream'), 403
     
     data = request.get_json()
     user_message = data.get('message', '').strip() if data else ''
     
     if not user_message:
-        return Response("data: " + json.dumps({'type': 'error', 'message': 'Message is required'}) + "\n\n",
+        return Response("data: " + json.dumps({'type': 'error', 'message': 'Message is required'}, ensure_ascii=False) + "\n\n",
                        mimetype='text/event-stream'), 400
 
     def generate():
         try:
             # Stream AI response
             for chunk in LLMChatService.stream_ai_response(session_id, user_message):
-                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk}, ensure_ascii=False)}\n\n"
                 time.sleep(0.01)  # Small delay to prevent overwhelming
             
             # Check if conversation ended
             if LLMChatService.is_conversation_complete(session_id):
-                yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': True})}\n\n"
+                yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': True}, ensure_ascii=False)}\n\n"
             else:
-                yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': False})}\n\n"
+                yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': False}, ensure_ascii=False)}\n\n"
                 
         except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
 
     response = Response(generate(), mimetype='text/event-stream')
     response.headers['Cache-Control'] = 'no-cache'

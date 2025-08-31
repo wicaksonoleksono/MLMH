@@ -75,7 +75,8 @@ def register_commands(app):
                     regular_user = User.create_user(
                         uname="user",
                         password="user",
-                        user_type_id=user_type.id
+                        user_type_id=user_type.id,
+                        email="wicaksonolxn@gmail.com"
                     )
                     db.add(regular_user)
                     click.echo("  - Default regular user created (user/user)")
@@ -439,39 +440,7 @@ def register_commands(app):
         except Exception as e:
             click.echo(f"[SNAFU] Error sending completion notification: {str(e)}")
 
-    @app.cli.command("test-email-send")
-    @click.option('--subject', default='Test Email', help='Email subject')
-    @click.option('--message', default='This is a test email from the Mental Health system', help='Email message')
-    def test_email_send(subject, message):
-        """Test sending email to wicaksonolxn@gmail.com using simple SMTP"""
-        click.echo("[OLKORECT] Testing email send to wicaksonolxn@gmail.com...")
-        
-        try:
-            from app.services.SMTP.smtpService import SMTPService
-            
-            html_content = f"""
-            <html>
-            <body>
-                <h2>{subject}</h2>
-                <p>{message}</p>
-                <p>Sent from Mental Health Assessment System</p>
-            </body>
-            </html>
-            """
-            
-            success = SMTPService.send_html_email(
-                to_email="wicaksonolxn@gmail.com",
-                subject=subject,
-                html_content=html_content
-            )
-            
-            if success:
-                click.echo("[OLKORECT] Test email sent successfully to wicaksonolxn@gmail.com!")
-            else:
-                click.echo("[SNAFU] Failed to send test email!")
-                
-        except Exception as e:
-            click.echo(f"[SNAFU] Error sending test email: {str(e)}")
+   
     @app.cli.command("test-session2-email")
     @click.option('--email', default='wicaksonolxn@gmail.com', help='Test email recipient')
     def test_session2_email(email):
@@ -485,7 +454,7 @@ def register_commands(app):
             
             # Template data - ONLY session_2_url, no cancel/reschedule
             template_data = {
-                'user_name': 'Airlangga',
+                'username': 'Airlangga',
                 'session_1_completion_date': '15 Januari 2025',
                 'days_since_session_1': '14',
                 'session_2_url': current_app.config['SESSION_2_URL'],  # NO FALLBACK
@@ -513,3 +482,87 @@ def register_commands(app):
                 
         except Exception as e:
             click.echo(f"[SNAFU] Error sending Session 2 test email: {str(e)}")
+            
+            success = SMTPService.send_template_email(
+                to_email=email,
+                subject='🌟 Waktunya Melanjutkan Perjalanan Anda - Sesi 2 Menanti!',
+                template_path=template_path,
+                template_data=template_data
+            )
+            
+            if success:
+                click.echo(f"[OLKORECT] Session 2 test email sent successfully to {email}!")
+            else:
+                click.echo(f"[SNAFU] Failed to send Session 2 test email!")
+                
+        except Exception as e:
+            click.echo(f"[SNAFU] Error sending Session 2 test email: {str(e)}")
+    @app.cli.command("process-session2-notifications")
+    def process_session2_notifications():
+        """Automatically process Session 2 notifications (for cron job)"""
+        click.echo("[OLKORECT] Processing Session 2 notifications...")
+        
+        try:
+            from app.services.SMTP.session2NotificationService import Session2NotificationService
+            
+            # Step 1: Create automatic notifications for eligible users (14+ days)
+            click.echo("  - Creating automatic notifications for eligible users...")
+            created_count = Session2NotificationService.create_automatic_notifications()
+            click.echo(f"  ✓ Created {created_count} new notifications")
+            
+            # Step 2: Send pending notifications that are due
+            click.echo("  - Sending pending notifications...")
+            sent_count = Session2NotificationService.send_pending_notifications()
+            click.echo(f"  ✓ Sent {sent_count} notifications")
+            
+            # Step 3: Get stats for summary
+            pending_count = Session2NotificationService.get_pending_notifications_count()
+            all_users = Session2NotificationService.get_all_users_with_eligibility()
+            eligible_users = [user for user in all_users if user['is_eligible']]
+            total_eligible = len(eligible_users)
+            
+            click.echo(f"[OLKORECT] Session 2 notification processing completed!")
+            click.echo(f"  - Created: {created_count} notifications")
+            click.echo(f"  - Sent: {sent_count} emails")
+            click.echo(f"  - Pending: {pending_count} notifications")
+            click.echo(f"  - Eligible users: {total_eligible} total")
+                
+        except Exception as e:
+            click.echo(f"[SNAFU] Error processing Session 2 notifications: {str(e)}")
+
+    @app.cli.command("session2-stats")
+    def get_session2_stats():
+        """Get Session 2 notification statistics"""
+        click.echo("[OLKORECT] Session 2 Notification Statistics:")
+        
+        try:
+            from app.services.SMTP.session2NotificationService import Session2NotificationService
+            
+            all_users = Session2NotificationService.get_all_users_with_eligibility()
+            eligible_users = [user for user in all_users if user['is_eligible']]
+            pending_count = Session2NotificationService.get_pending_notifications_count()
+            
+            # Calculate stats
+            total_eligible = len(eligible_users)
+            ready_to_send = len([u for u in eligible_users if u["days_since_session_1"] >= 14])
+            pending_reminders = len([u for u in eligible_users if u["days_since_session_1"] > 14])
+            
+            click.echo("-" * 50)
+            click.echo(f"Total eligible users (Session 1 completed, no Session 2): {total_eligible}")
+            click.echo(f"Ready to send (14+ days): {ready_to_send}")
+            click.echo(f"Pending scheduled notifications: {pending_count}")
+            click.echo(f"Overdue reminders (14+ days): {pending_reminders}")
+            click.echo("-" * 50)
+            if eligible_users:
+                click.echo("Recent eligible users:")
+                for user in eligible_users[:5]:  # Show first 5
+                    click.echo(
+                        f"  - {user['username']} ({user['email']}) "
+                        f"- {user['days_since_session_1']} days ago"
+                    )
+                if len(eligible_users) > 5:
+                    click.echo(f"  ... and {len(eligible_users) - 5} more users")
+
+        except Exception as e:
+            click.echo(f"[SNAFU] Error getting Session 2 stats: {str(e)}")
+

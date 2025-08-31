@@ -47,12 +47,6 @@ class LLMConversationService:
             
             db.add(turn)
             db.commit()
-            
-            # If conversation ended, analysis will be triggered separately later
-            # Removed blocking analysis call to speed up conversation completion
-            # if has_end_conversation:
-            #     LLMConversationService.trigger_analysis(session_id)
-            
             return turn
     
     @staticmethod
@@ -291,3 +285,21 @@ class LLMConversationService:
                     "model_used": analysis.analysis_model_used if analysis else None
                 } if analysis else None
             }
+
+    @staticmethod
+    def clear_session_conversations(session_id: int) -> int:
+        """Clear all LLM conversations and analysis for a session - used for restart functionality"""
+        with get_session() as db:
+            conversations = db.query(LLMConversation).filter_by(session_id=session_id).all()
+            analysis_records = db.query(LLMAnalysisResult).filter_by(session_id=session_id).all()
+            
+            total_count = len(conversations) + len(analysis_records)
+            
+            for conversation in conversations:
+                db.delete(conversation)
+                
+            for analysis in analysis_records:
+                db.delete(analysis)
+            
+            db.commit()
+            return total_count

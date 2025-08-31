@@ -109,27 +109,19 @@ endblock %} {% block content %}
             description: "kesulitan mengatur emosi",
           },
         ],
-        analysis_scale: [
-          { value: 0, description: "Tidak Ada Indikasi Jelas (Gejala tidak muncul dalam percakapan)" },
-          { value: 1, description: "Indikasi Ringan (Gejala tersirat atau disebutkan secara tidak langsung)" },
-          { value: 2, description: "Indikasi Sedang (Gejala disebutkan dengan cukup jelas, namun tidak mendominasi)" },
-          { value: 3, description: "Indikasi Kuat (Gejala disebutkan secara eksplisit, berulang, dan menjadi keluhan utama)" }
-        ]
       },
-
-      analysisScaleMax: 4,
 
       availableModels: [],
-
-      async init() {
-        this.loadDataFromTemplate();
-      },
 
       // Modal state
       showModal: false,
       modalTitle: "",
       modalMessage: "",
       modalConfirm: () => {},
+
+      async init() {
+        this.loadDataFromTemplate();
+      },
 
       loadDataFromTemplate() {
         // Load data from Jinja template context (passed via window.llmData)
@@ -148,60 +140,11 @@ endblock %} {% block content %}
               analysis_model: setting.analysis_model || "gpt-4o-mini",
               depression_aspects: setting.depression_aspects || [
                 {
-                  name: "Anhedonia",
-                  description: "kehilangan minat/kenikmatan",
-                },
-                {
-                  name: "Bias kognitif negatif",
-                  description: "hopelessness & negative thinking patterns",
-                },
-                {
-                  name: "Rumination",
-                  description: "pikiran berputar tanpa solusi",
-                },
-                {
-                  name: "Psikomotor retardation",
-                  description: "perlambatan gerakan dan bicara",
-                },
-                {
-                  name: "Gangguan tidur",
-                  description: "insomnia, kualitas tidur jelek",
-                },
-                {
-                  name: "Iritabilitas",
-                  description: "ledakan marah & mudah tersinggung",
-                },
-                {
-                  name: "Rasa bersalah berlebih",
-                  description: "self-blame & worthlessness",
-                },
-                {
-                  name: "Gangguan kognitif",
-                  description: "concentration & executive function issues",
-                },
-                {
-                  name: "Penarikan diri sosial",
-                  description: "isolasi & withdrawal",
-                },
-                {
-                  name: "Alexithymia",
-                  description: "sulit mengenali & mengungkap emosi",
-                },
-                {
-                  name: "Defisit regulasi emosi",
-                  description: "kesulitan mengatur emosi",
+                  name: "Depression Analysis",
+                  description: "General depression assessment",
                 },
               ],
-              analysis_scale: setting.analysis_scale || [
-                { value: 0, description: "Tidak Ada Indikasi Jelas (Gejala tidak muncul dalam percakapan)" },
-                { value: 1, description: "Indikasi Ringan (Gejala tersirat atau disebutkan secara tidak langsung)" },
-                { value: 2, description: "Indikasi Sedang (Gejala disebutkan dengan cukup jelas, namun tidak mendominasi)" },
-                { value: 3, description: "Indikasi Kuat (Gejala disebutkan secara eksplisit, berulang, dan menjadi keluhan utama)" }
-              ]
             };
-            
-            // Set the analysisScaleMax to match the analysis_scale length
-            this.analysisScaleMax = this.settings.analysis_scale.length;
 
             // If we have an unmasked key, use it for the display (but mask it immediately)
             if (this.settings.openai_api_key_unmasked) {
@@ -280,12 +223,6 @@ endblock %} {% block content %}
                     description: "kesulitan mengatur emosi",
                   },
                 ],
-                analysis_scale: defaults.analysis_scale || [
-                  { value: 0, description: "Tidak Ada Indikasi Jelas (Gejala tidak muncul dalam percakapan)" },
-                  { value: 1, description: "Indikasi Ringan (Gejala tersirat atau disebutkan secara tidak langsung)" },
-                  { value: 2, description: "Indikasi Sedang (Gejala disebutkan dengan cukup jelas, namun tidak mendominasi)" },
-                  { value: 3, description: "Indikasi Kuat (Gejala disebutkan secara eksplisit, berulang, dan menjadi keluhan utama)" }
-                ]
               };
             } else {
               this.settings = {
@@ -340,17 +277,8 @@ endblock %} {% block content %}
                     description: "kesulitan mengatur emosi",
                   },
                 ],
-                analysis_scale: [
-                  { value: 0, description: "Tidak Ada Indikasi Jelas (Gejala tidak muncul dalam percakapan)" },
-                  { value: 1, description: "Indikasi Ringan (Gejala tersirat atau disebutkan secara tidak langsung)" },
-                  { value: 2, description: "Indikasi Sedang (Gejala disebutkan dengan cukup jelas, namun tidak mendominasi)" },
-                  { value: 3, description: "Indikasi Kuat (Gejala disebutkan secara eksplisit, berulang, dan menjadi keluhan utama)" }
-                ]
               };
             }
-            
-            // Set the analysisScaleMax to match the analysis_scale length
-            this.analysisScaleMax = this.settings.analysis_scale.length;
           } catch (error) {
             this.settings = {
               instructions: "",
@@ -404,16 +332,7 @@ endblock %} {% block content %}
                   description: "kesulitan mengatur emosi",
                 },
               ],
-              analysis_scale: [
-                { value: 0, description: "Tidak Ada Indikasi Jelas (Gejala tidak muncul dalam percakapan)" },
-                { value: 1, description: "Indikasi Ringan (Gejala tersirat atau disebutkan secara tidak langsung)" },
-                { value: 2, description: "Indikasi Sedang (Gejala disebutkan dengan cukup jelas, namun tidak mendominasi)" },
-                { value: 3, description: "Indikasi Kuat (Gejala disebutkan secara eksplisit, berulang, dan menjadi keluhan utama)" }
-              ]
             };
-            
-            // Set the analysisScaleMax to match the analysis_scale length
-            this.analysisScaleMax = this.settings.analysis_scale.length;
           }
           this.showModal = false;
         };
@@ -468,75 +387,220 @@ endblock %} {% block content %}
         };
       },
 
-      async saveAll() {
+      async loadData() {
         this.loading = true;
         try {
-          const settingsData = {
-            instructions: this.settings.instructions,
-            chat_model: this.settings.chat_model,
-            analysis_model: this.settings.analysis_model,
-          };
-          //hahaha gajelas manual lah wireshark minta tolong
-          if (
-            this.settings.openai_api_key &&
-            !this.settings.openai_api_key.includes("•")
-          ) {
-            // NOT MASKED> XDXD ./.
-            settingsData.openai_api_key = this.settings.openai_api_key;
-          } else if (this.settings.openai_api_key_unmasked) {
-            // Use the unmasked key we stored
-            settingsData.openai_api_key = this.settings.openai_api_key_unmasked;
-          }
+          const settingsRes = await apiCall("/admin/llm/settings");
 
-          // Only include depression_aspects if it has valid data (not empty or all empty fields)
-          const validAspects = this.settings.depression_aspects.filter(
-            (aspect) =>
-              aspect.name &&
-              aspect.name.trim() &&
-              aspect.description &&
-              aspect.description.trim()
-          );
+          if (Array.isArray(settingsRes) && settingsRes.length > 0) {
+            const setting = settingsRes[0];
 
-          if (validAspects.length > 0) {
-            settingsData.depression_aspects = validAspects;
-          }
-          // If no valid aspects, don't include the field at all (null handling)
-          
-          // Include analysis_scale
-          if (this.settings.analysis_scale && this.settings.analysis_scale.length > 0) {
-            settingsData.analysis_scale = this.settings.analysis_scale;
-          }
-
-          const result = await apiCall(
-            "/admin/llm/settings",
-            "POST",
-            settingsData
-          );
-
-          if (result.status === "SNAFU") {
-            this.showModal = true;
-            this.modalTitle = "Error";
-            this.modalMessage =
-              "Error saving settings: " +
-              (result.error || result.errorMsg || "Unknown error");
-            this.modalConfirm = () => {
-              this.showModal = false;
+            this.settings = {
+              id: setting.id,
+              instructions: setting.instructions || "",
+              openai_api_key: setting.openai_api_key || "", // Masked version
+              openai_api_key_unmasked: setting.openai_api_key_unmasked || "", // Unmasked version
+              chat_model: setting.chat_model,
+              analysis_model: setting.analysis_model,
+              depression_aspects: setting.depression_aspects || [
+                {
+                  name: "Anhedonia",
+                  description: "kehilangan minat/kenikmatan",
+                },
+                {
+                  name: "Bias kognitif negatif",
+                  description: "hopelessness & negative thinking patterns",
+                },
+                {
+                  name: "Rumination",
+                  description: "pikiran berputar tanpa solusi",
+                },
+                {
+                  name: "Psikomotor retardation",
+                  description: "perlambatan gerakan dan bicara",
+                },
+                {
+                  name: "Gangguan tidur",
+                  description: "insomnia, kualitas tidur jelek",
+                },
+                {
+                  name: "Iritabilitas",
+                  description: "ledakan marah & mudah tersinggung",
+                },
+                {
+                  name: "Rasa bersalah berlebih",
+                  description: "self-blame & worthlessness",
+                },
+                {
+                  name: "Gangguan kognitif",
+                  description: "concentration & executive function issues",
+                },
+                {
+                  name: "Penarikan diri sosial",
+                  description: "isolasi & withdrawal",
+                },
+                {
+                  name: "Alexithymia",
+                  description: "sulit mengenali & mengungkap emosi",
+                },
+                {
+                  name: "Defisit regulasi emosi",
+                  description: "kesulitan mengatur emosi",
+                },
+              ],
             };
-            return;
+          } else {
+            this.settings = {
+              id: null,
+              instructions: "",
+              openai_api_key: "",
+              openai_api_key_unmasked: "", // No unmasked key
+              chat_model: "gpt-4o",
+              analysis_model: "gpt-4o-mini",
+              depression_aspects: [
+                {
+                  name: "Anhedonia",
+                  description: "kehilangan minat/kenikmatan",
+                },
+                {
+                  name: "Bias kognitif negatif",
+                  description: "hopelessness & negative thinking patterns",
+                },
+                {
+                  name: "Rumination",
+                  description: "pikiran berputar tanpa solusi",
+                },
+                {
+                  name: "Psikomotor retardation",
+                  description: "perlambatan gerakan dan bicara",
+                },
+                {
+                  name: "Gangguan tidur",
+                  description: "insomnia, kualitas tidur jelek",
+                },
+                {
+                  name: "Iritabilitas",
+                  description: "ledakan marah & mudah tersinggung",
+                },
+                {
+                  name: "Rasa bersalah berlebih",
+                  description: "self-blame & worthlessness",
+                },
+                {
+                  name: "Gangguan kognitif",
+                  description: "concentration & executive function issues",
+                },
+                {
+                  name: "Penarikan diri sosial",
+                  description: "isolasi & withdrawal",
+                },
+                {
+                  name: "Alexithymia",
+                  description: "sulit mengenali & mengungkap emosi",
+                },
+                {
+                  name: "Defisit regulasi emosi",
+                  description: "kesulitan mengatur emosi",
+                },
+              ],
+            };
           }
 
-          this.showModal = true;
-          this.modalTitle = "Berhasil";
-          this.modalMessage = "Pengaturan LLM berhasil disimpan!";
-          this.modalConfirm = () => {
-            this.showModal = false;
-            window.location.reload();
-          };
+          // Try to load available models (separate API call)
+          if (this.settings.openai_api_key_unmasked) {
+            try {
+              const models = await apiCall("/admin/llm/models");
+              this.availableModels = Array.isArray(models) ? models : [];
+            } catch (error) {
+              this.availableModels = [];
+            }
+          }
         } catch (error) {
           this.showModal = true;
-          this.modalTitle = "Error";
-          this.modalMessage = "Error saving data: " + error.message;
-          this.modalConfirm = () => {};
+          this.modalTitle = "Error Loading Data";
+          this.modalMessage = `Failed to load LLM settings: ${error.message}`;
+          this.modalConfirm = () => {
+            this.showModal = false;
+          };
+        } finally {
+          this.loading = false;
+        }
+      },
+
+      async loadData() {
+        this.loading = true;
+        try {
+          const settingsRes = await apiCall("/admin/llm/settings");
+
+          if (Array.isArray(settingsRes) && settingsRes.length > 0) {
+            const setting = settingsRes[0];
+
+            this.settings = {
+              id: setting.id,
+              instructions: setting.instructions || "",
+              openai_api_key: setting.openai_api_key || "", // Masked version
+              openai_api_key_unmasked: setting.openai_api_key_unmasked || "", // Unmasked version
+              chat_model: setting.chat_model,
+              analysis_model: setting.analysis_model,
+              depression_aspects: setting.depression_aspects || [
+                {
+                  name: "Anhedonia",
+                  description: "kehilangan minat/kenikmatan",
+                },
+                {
+                  name: "Bias kognitif negatif",
+                  description: "hopelessness & negative thinking patterns",
+                },
+                {
+                  name: "Rumination",
+                  description: "pikiran berputar tanpa solusi",
+                },
+                {
+                  name: "Psikomotor retardation",
+                  description: "perlambatan gerakan dan bicara",
+                },
+                {
+                  name: "Gangguan tidur",
+                  description: "insomnia, kualitas tidur jelek",
+                },
+                {
+                  name: "Iritabilitas",
+                  description: "ledakan marah & mudah tersinggung",
+                },
+                {
+                  name: "Rasa bersalah berlebih",
+                  description: "self-blame & worthlessness",
+                },
+                {
+                  name: "Gangguan kognitif",
+                  description: "concentration & executive function issues",
+                },
+                {
+                  name: "Penarikan diri sosial",
+                  description: "isolasi & withdrawal",
+                },
+                {
+                  name: "Alexithymia",
+                  description: "sulit mengenali & mengungkap emosi",
+                },
+                {
+                  name: "Defisit regulasi emosi",
+                  description: "kesulitan mengatur emosi",
+                },
+              ],
+            };
+          } else {
+            // Loading default config from backend
+            try {
+              const defaultConfig = await apiCall("/admin/llm/config/default");
+              if (defaultConfig.openai_api_key) {
+                this.settings.openai_api_key = defaultConfig.openai_api_key;
+                this.settings.openai_api_key_unmasked =
+                  defaultConfig.openai_api_key; // Same for default config
+              }
+            } catch (error) {}
+          }
+        } catch (error) {
         } finally {
           this.loading = false;
         }
@@ -575,11 +639,6 @@ endblock %} {% block content %}
             settingsData.depression_aspects = validAspects;
           }
           // If no valid aspects, don't include the field at all (null handling)
-          
-          // Include analysis_scale
-          if (this.settings.analysis_scale && this.settings.analysis_scale.length > 0) {
-            settingsData.analysis_scale = this.settings.analysis_scale;
-          }
 
           const result = await apiCall(
             "/admin/llm/settings",
@@ -698,103 +757,6 @@ endblock %} {% block content %}
 
       copyModelToAnalysis(modelId) {
         this.settings.analysis_model = modelId;
-      },
-
-      // Analysis Scale Methods (PHQ Style)
-
-      updateAnalysisScaleRange() {
-        const targetLength = parseInt(this.analysisScaleMax);
-        const currentLength = this.settings.analysis_scale.length;
-        
-        if (targetLength > currentLength) {
-          // Add new scales
-          for (let i = currentLength; i < targetLength; i++) {
-            this.settings.analysis_scale.push({
-              value: i,
-              description: `Deskripsi untuk skor ${i}`
-            });
-          }
-        } else if (targetLength < currentLength) {
-          // Remove excess scales
-          this.settings.analysis_scale = this.settings.analysis_scale.slice(0, targetLength);
-        }
-      },
-
-      updateScaleDescription(index, description) {
-        this.settings.analysis_scale[index].description = description;
-      },
-
-      previewAnalysisPrompt() {
-        // Preview the analysis prompt that would be generated
-        fetch('/admin/llm/analysis/preview-prompt', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            sample_conversation: [
-              {"role": "assistant", "message": "Hai! Apa kabar?"},
-              {"role": "user", "message": "Halo, biasa aja sih."}
-            ],
-            depression_aspects: this.settings.depression_aspects
-          })
-        })
-        .then(response => response.json())
-        .then(data => {
-          if (data.status === "OLKORECT") {
-            // Show the prompt in a modal or alert
-            const prompt = data.data.prompt;
-            alert("Analysis Prompt Preview:\n\n" + prompt.substring(0, 1000) + "...");
-          } else {
-            alert("Error: " + (data.error || "Failed to generate preview"));
-          }
-        })
-        .catch(error => {
-          alert("Error generating preview: " + error.message);
-        });
-      },
-
-      testAnalysis() {
-        // Test analysis functionality with sample conversation
-        fetch('/admin/llm/analysis/test', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            sample_conversation: [
-              {"role": "assistant", "message": "Hai! Apa kabar? Gimana akhir-akhir ini?"},
-              {"role": "user", "message": "Hai juga. Hmm, biasa aja sih. Agak capek akhir-akhir ini."},
-              {"role": "assistant", "message": "Oh gitu, capek kenapa emangnya? Kerjaan atau gimana?"},
-              {"role": "user", "message": "Entah ya, rasanya kayak ga ada yang menarik lagi. Dulu suka banget main game, sekarang udah ga tertarik. Kerja juga kayak robot aja."},
-              {"role": "assistant", "message": "Wah, kedengarannya berat ya. Udah berapa lama kamu merasa kayak gitu?"},
-              {"role": "user", "message": "Sejak sekitar sebulan yang lalu sih. Awalnya cuma capek biasa aja, tapi makin lama makin males ngerjain apa pun. Bahkan bangun pagi aja rasanya berat."}
-            ],
-            depression_aspects: this.settings.depression_aspects,
-            analysis_scale: this.settings.analysis_scale
-          })
-        })
-        .then(response => response.json())
-        .then(data => {
-          if (data.status === "OLKORECT") {
-            // Show the analysis result
-            const result = data.data.analysis;
-            let resultText = "Analysis Result:\n\n";
-            resultText += "Aspek Depresi yang Teridentifikasi:\n";
-            for (const [aspect, score] of Object.entries(result.depression_scores)) {
-              const scaleDesc = this.settings.analysis_scale.find(s => s.value === score)?.description || `Skor ${score}`;
-              resultText += `- ${aspect}: ${scaleDesc}\n`;
-            }
-            resultText += "\nTingkat Depresi Keseluruhan: ${result.overall_depression_level}\n";
-            resultText += "\nRingkasan: ${result.summary}\n";
-            alert(resultText);
-          } else {
-            alert("Error: " + (data.error || "Failed to generate analysis"));
-          }
-        })
-        .catch(error => {
-          alert("Error generating analysis: " + error.message);
-        });
       },
     };
   }

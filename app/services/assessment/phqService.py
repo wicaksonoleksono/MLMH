@@ -376,3 +376,16 @@ class PHQResponseService:
 
             expected_responses = PHQResponseService.get_expected_response_count(session_id)
             return expected_responses * scale_max
+
+    @staticmethod
+    def clear_session_responses(session_id: int) -> int:
+        """Clear all PHQ responses for a session - used for restart functionality"""
+        with get_session() as db:
+            responses = db.query(PHQResponse).filter_by(session_id=session_id).all()
+            count = len(responses)
+            
+            for response in responses:
+                db.delete(response)
+            
+            db.commit()
+            return count

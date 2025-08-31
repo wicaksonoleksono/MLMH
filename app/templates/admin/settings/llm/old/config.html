@@ -1,7 +1,34 @@
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-  <!-- Left Column: Instructions and API Key -->
-  <div class="space-y-6">
-    <!-- Instructions Section -->
+<!-- LLM Configuration Component -->
+<div
+  class="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl p-8 border border-indigo-100"
+>
+  <h3 class="text-2xl font-semibold text-gray-900 mb-4 flex items-center">
+    <div
+      class="w-10 h-10 bg-indigo-500 rounded-lg flex items-center justify-center mr-4"
+    >
+      <svg
+        class="w-6 h-6 text-white"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+        />
+      </svg>
+    </div>
+    Konfigurasi Model AI & Aspek Depresi
+  </h3>
+  <p class="text-gray-600 mb-8">
+    Konfigurasikan OpenAI API key, model AI, dan aspek analisis depresi untuk
+    percakapan dengan Anisa.
+  </p>
+
+  <div class="space-y-8">
+    <!-- 📋 INSTRUKSI PENGISIAN -->
     <div class="bg-white rounded-lg p-6 border border-indigo-200">
       <div class="flex items-center mb-4">
         <div
@@ -38,7 +65,7 @@
         >
         <textarea
           x-model="settings.instructions"
-          rows="6"
+          rows="4"
           class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-vertical"
           placeholder="Masukkan instruksi untuk responden sebelum memulai percakapan dengan AI..."
         ></textarea>
@@ -49,97 +76,7 @@
       </div>
     </div>
 
-    <!-- Analysis Scale Section (PHQ Style) -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-      <div class="flex items-center space-x-2 mb-4">
-        <div
-          class="w-8 h-8 bg-orange-500 rounded flex items-center justify-center"
-        >
-          <svg
-            class="w-4 h-4 text-white"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2-2V7a2 2 0 012-2h2a2 2 0 002 2v2a2 2 0 002 2h2a2 2 0 012-2V7a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 00-2 2v6a2 2 0 01-2 2H9z"
-            ></path>
-          </svg>
-        </div>
-        <h2 class="text-lg font-bold text-gray-800">Skala Analisis LLM</h2>
-        <div class="ml-auto flex gap-2">
-          <button
-            @click="previewAnalysisPrompt()"
-            class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
-          >
-            📄 Preview
-          </button>
-          <button
-            @click="testAnalysis()"
-            class="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
-          >
-            🧪 Test
-          </button>
-        </div>
-      </div>
-
-      <div class="space-y-4">
-        <!-- Scale Range -->
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2"
-            >Jumlah Tingkat Skala:
-            <span x-text="analysisScaleMax"></span> (0 -
-            <span
-              x-text="analysisScaleMax > 0 ? analysisScaleMax - 1 : 0"
-            ></span
-            >)</label
-          >
-          <input
-            type="range"
-            x-model="analysisScaleMax"
-            @change="updateAnalysisScaleRange()"
-            min="2"
-            max="10"
-            class="w-full h-2 bg-orange-200 rounded-lg appearance-none cursor-pointer slider"
-          />
-        </div>
-
-        <!-- Scale Labels -->
-        <div class="bg-orange-50 rounded p-3 border border-orange-200">
-          <div class="text-sm font-medium text-gray-700 mb-2">Label Skala</div>
-          <div class="space-y-2 max-h-48 overflow-y-auto">
-            <template
-              x-for="(scale, index) in settings.analysis_scale"
-              :key="index"
-            >
-              <div class="flex items-center space-x-2">
-                <div
-                  class="w-8 h-8 bg-orange-500 rounded flex items-center justify-center"
-                >
-                  <span
-                    class="text-white font-bold text-xs"
-                    x-text="scale.value"
-                  ></span>
-                </div>
-                <input
-                  type="text"
-                  x-model="scale.description"
-                  class="flex-1 px-2 py-1 border border-orange-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-500 text-sm"
-                  :placeholder="'Label untuk nilai ' + scale.value"
-                />
-              </div>
-            </template>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Right Column: API Key and Models -->
-  <div class="space-y-6">
+    <!-- 🔑 OPENAI API KEY -->
     <div class="bg-white rounded-lg p-6 border border-indigo-200">
       <div class="flex items-center mb-4">
         <div
@@ -189,7 +126,7 @@
             x-show="settings.openai_api_key && settings.openai_api_key.includes('•')"
             class="text-green-600"
           >
-            OK Encrypted API key stored securely. Enter new key to replace.
+            ✓ Encrypted API key stored securely. Enter new key to replace.
           </span>
           <span
             x-show="!settings.openai_api_key || !settings.openai_api_key.includes('•')"
@@ -202,6 +139,7 @@
       </div>
     </div>
 
+    <!-- 🤖 AI MODEL SELECTION -->
     <div class="bg-white rounded-lg p-6 border border-indigo-200">
       <div class="flex items-center mb-4">
         <div
@@ -232,7 +170,8 @@
         yang tedari model yang tersedia
       </p>
 
-      <div class="space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Chat Model -->
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-2"
             >Model Chat (Percakapan)</label
@@ -248,6 +187,7 @@
           </p>
         </div>
 
+        <!-- Analysis Model -->
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-2"
             >Model Analisis (Evaluasi)</label
@@ -264,6 +204,7 @@
         </div>
       </div>
 
+      <!-- Model Action Buttons -->
       <div class="mt-4 flex justify-start gap-3">
         <button
           @click="refreshModels()"
@@ -279,6 +220,7 @@
         </button>
       </div>
 
+      <!-- Model Status -->
       <div class="mt-4 p-4 bg-gray-50 rounded-lg">
         <div class="text-center">
           <p class="text-sm text-gray-600 mb-3">Current Models</p>
@@ -301,6 +243,7 @@
         </div>
       </div>
 
+      <!-- Available Models List -->
       <div
         class="mt-6 p-4 bg-gray-50 rounded-lg"
         x-show="availableModels.length > 0"
@@ -309,7 +252,7 @@
           Available Models (click to copy)
         </h5>
         <div
-          class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 max-h-48 overflow-y-auto"
+          class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 max-h-40 overflow-y-auto"
         >
           <template x-for="model in availableModels" :key="model">
             <div class="bg-white p-2 rounded border text-xs">
@@ -335,118 +278,96 @@
         </div>
       </div>
     </div>
-  </div>
-</div>
 
-<!-- Full Width Sections -->
-<div class="space-y-6 mt-6">
-  <div class="bg-white rounded-lg p-6 border border-indigo-200">
-    <div class="flex items-center justify-between mb-4">
-      <div class="flex items-center">
-        <div
-          class="w-8 h-8 bg-purple-500 rounded-lg flex items-center justify-center mr-3"
-        >
-          <svg
-            class="w-5 h-5 text-white"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+    <!-- 🧠 DEPRESSION ASPECTS EDITOR -->
+    <div class="bg-white rounded-lg p-6 border border-indigo-200">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center">
+          <div
+            class="w-8 h-8 bg-purple-500 rounded-lg flex items-center justify-center mr-3"
           >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-            />
-          </svg>
-        </div>
-        <h4 class="font-medium text-gray-900">Aspek Analisis Depresi</h4>
-        <span
-          class="ml-2 bg-purple-100 text-purple-800 text-xs font-medium px-2.5 py-0.5 rounded"
-          >Dinamis</span
-        >
-      </div>
-      <button
-        @click="addAspect()"
-        class="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700"
-      >
-        + Tambah Aspek
-      </button>
-    </div>
-    <p class="text-gray-600 mb-6">
-      Indikator-indikator gejala depresi yang akan dieksplorasi Anisa dalam
-      percakapan
-    </p>
-
-    <div class="space-y-3">
-      <template
-        x-for="(aspect, index) in settings.depression_aspects"
-        :key="index"
-      >
-        <div class="bg-purple-50 p-4 rounded-lg border border-purple-200">
-          <div class="flex items-start gap-3">
-            <div
-              class="flex-shrink-0 w-8 h-8 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center text-sm font-medium"
-              x-text="index + 1"
-            ></div>
-            <div class="flex-1 space-y-2">
-              <input
-                type="text"
-                x-model="aspect.name"
-                class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm font-medium"
-                placeholder="Nama aspek (contoh: Anhedonia)"
-              />
-              <input
-                type="text"
-                x-model="aspect.description"
-                class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm"
-                placeholder="Deskripsi aspek (contoh: kehilangan minat/kenikmatan)"
-              />
-            </div>
-            <button
-              @click="removeAspect(index)"
-              class="flex-shrink-0 w-8 h-8 bg-red-100 text-red-600 rounded-full flex items-center justify-center hover:bg-red-200"
-              x-show="settings.depression_aspects.length > 1"
+            <svg
+              class="w-5 h-5 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              <svg
-                class="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                />
-              </svg>
-            </button>
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
           </div>
+          <h4 class="font-medium text-gray-900">Aspek Analisis Depresi</h4>
+          <span
+            class="ml-2 bg-purple-100 text-purple-800 text-xs font-medium px-2.5 py-0.5 rounded"
+            >Dinamis</span
+          >
         </div>
-      </template>
+        <button
+          @click="addAspect()"
+          class="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700"
+        >
+          + Tambah Aspek
+        </button>
+      </div>
+      <p class="text-gray-600 mb-6">
+        Indikator-indikator gejala depresi yang akan dieksplorasi Anisa dalam
+        percakapan
+      </p>
+
+      <div class="space-y-3">
+        <template
+          x-for="(aspect, index) in settings.depression_aspects"
+          :key="index"
+        >
+          <div class="bg-purple-50 p-4 rounded-lg border border-purple-200">
+            <div class="flex items-start gap-3">
+              <div
+                class="flex-shrink-0 w-8 h-8 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center text-sm font-medium"
+                x-text="index + 1"
+              ></div>
+              <div class="flex-1 space-y-2">
+                <input
+                  type="text"
+                  :value="aspect.name"
+                  @input="updateAspectName(index, $event.target.value)"
+                  class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm font-medium"
+                  placeholder="Nama aspek (contoh: Anhedonia)"
+                />
+                <input
+                  type="text"
+                  :value="aspect.description"
+                  @input="updateAspectDescription(index, $event.target.value)"
+                  class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm"
+                  placeholder="Deskripsi aspek (contoh: kehilangan minat/kenikmatan)"
+                />
+              </div>
+              <button
+                @click="removeAspect(index)"
+                class="flex-shrink-0 w-8 h-8 bg-red-100 text-red-600 rounded-full flex items-center justify-center hover:bg-red-200"
+                x-show="settings.depression_aspects.length > 1"
+              >
+                <svg
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
     </div>
   </div>
 </div>
-
-<style>
-  .slider::-webkit-slider-thumb {
-    appearance: none;
-    height: 20px;
-    width: 20px;
-    border-radius: 50%;
-    background: #f97316;
-    cursor: pointer;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  }
-
-  .slider::-moz-range-thumb {
-    height: 20px;
-    width: 20px;
-    border-radius: 50%;
-    background: #f97316;
-    cursor: pointer;
-    border: none;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  }
-</style>

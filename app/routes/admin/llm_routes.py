@@ -56,6 +56,7 @@ def create_settings():
             chat_model=data.get('chat_model', 'gpt-4o'),
             analysis_model=data.get('analysis_model', 'gpt-4o-mini'),
             depression_aspects=data.get('depression_aspects'),
+            analysis_scale=data.get('analysis_scale'),
             instructions=data.get('instructions'),
             is_default=True
         )

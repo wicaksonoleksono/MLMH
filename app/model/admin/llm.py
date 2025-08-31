@@ -15,6 +15,7 @@ class LLMSettings(BaseModel, StatusMixin):
     chat_model: Mapped[str] = mapped_column(String(50), default="gpt-4o", nullable=False)
     analysis_model: Mapped[str] = mapped_column(String(50), default="gpt-4o-mini", nullable=False)
     depression_aspects: Mapped[dict] = mapped_column(JSON, nullable=False)
+    analysis_scale: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Shared scale for all aspects
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     

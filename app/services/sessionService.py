@@ -254,7 +254,7 @@ class SessionService:
     
     @staticmethod
     def complete_llm_assessment(session_id: str) -> AssessmentSession:
-        """Mark LLM assessment as completed"""
+        """Mark LLM assessment as completed and trigger analysis"""
         with get_session() as db:
             session = db.query(AssessmentSession).filter_by(id=session_id).first()
             if not session:
@@ -262,6 +262,22 @@ class SessionService:
             
             session.complete_llm()
             db.commit()
+            
+            # Trigger LLM conversation analysis asynchronously
+            try:
+                from ..services.llm.analysisService import LLMAnalysisService
+                print(f"🚀 Triggering analysis for completed LLM session {session_id}")
+                
+                # Run analysis in background (could be made async in production)
+                analysis_result = LLMAnalysisService.run_conversation_analysis(session_id)
+                if analysis_result:
+                    print(f"✅ Analysis completed for session {session_id}: {analysis_result.id}")
+                else:
+                    print(f"⚠️  Analysis failed for session {session_id}")
+            except Exception as e:
+                # Don't fail the completion if analysis fails
+                print(f"❌ Analysis error for session {session_id}: {str(e)}")
+            
             return session
     
     @staticmethod
@@ -431,4 +447,42 @@ class SessionService:
             sessions = db.query(AssessmentSession).filter_by(status=status).order_by(desc(AssessmentSession.created_at)).offset((page-1)*per_page).limit(per_page).all()
             total = db.query(func.count(AssessmentSession.id)).filter_by(status=status).scalar()
             return {'sessions': sessions, 'total': total, 'page': page, 'per_page': per_page}
+
+    @staticmethod
+    def reset_phq_completion(session_id: str) -> bool:
+        """Reset PHQ completion status - used for restart functionality"""
+        with get_session() as db:
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                return False
+            
+            session.phq_completed_at = None
+            
+            # Update session status based on what's still completed
+            if session.llm_completed_at:
+                session.status = 'PHQ_IN_PROGRESS'
+            else:
+                session.status = 'BOTH_IN_PROGRESS'
+                
+            db.commit()
+            return True
+
+    @staticmethod
+    def reset_llm_completion(session_id: str) -> bool:
+        """Reset LLM completion status - used for restart functionality"""
+        with get_session() as db:
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                return False
+            
+            session.llm_completed_at = None
+            
+            # Update session status based on what's still completed
+            if session.phq_completed_at:
+                session.status = 'LLM_IN_PROGRESS'
+            else:
+                session.status = 'BOTH_IN_PROGRESS'
+                
+            db.commit()
+            return True
     

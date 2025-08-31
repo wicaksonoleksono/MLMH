@@ -127,32 +127,69 @@ class ExportService:
 
     @staticmethod
     def _add_camera_captures(zip_file: zipfile.ZipFile, session_id: str):
-        """Add camera captures to ZIP"""
+        """Add camera captures to ZIP with PHQ/LLM organization"""
         with get_session() as db:
             captures = db.query(CameraCapture).filter_by(assessment_session_id=session_id).all()
             
             if not captures:
                 return
             
-            # Create metadata for all images
-            metadata = {
-                'total_captures': len(captures),
-                'captures': []
-            }
+            # Organize captures by assessment type
+            phq_captures = []
+            llm_captures = []
+            unknown_captures = []
             
             upload_path = current_app.media_save
             
-            for i, capture in enumerate(captures):
-                # Add image file
+            for capture in captures:
+                # Determine assessment type
+                if capture.phq_response_id:
+                    assessment_type = "PHQ"
+                    folder_path = "images/phq/"
+                    phq_captures.append(capture)
+                elif capture.llm_conversation_id:
+                    assessment_type = "LLM"
+                    folder_path = "images/llm/"
+                    llm_captures.append(capture)
+                else:
+                    assessment_type = "UNKNOWN"
+                    folder_path = "images/unknown/"
+                    unknown_captures.append(capture)
+                
+                # Add image file to appropriate folder
                 image_path = os.path.join(upload_path, capture.filename)
                 if os.path.exists(image_path):
                     with open(image_path, 'rb') as img_file:
-                        zip_file.writestr(f'images/{capture.filename}', img_file.read())
+                        zip_file.writestr(f'{folder_path}{capture.filename}', img_file.read())
+            
+            # Create comprehensive metadata
+            metadata = {
+                'total_captures': len(captures),
+                'phq_captures': len(phq_captures),
+                'llm_captures': len(llm_captures),
+                'unknown_captures': len(unknown_captures),
+                'captures': []
+            }
+            
+            # Add all captures to metadata with assessment type identification
+            for capture in captures:
+                # Determine assessment type and folder
+                if capture.phq_response_id:
+                    assessment_type = "PHQ"
+                    folder_path = "phq/"
+                elif capture.llm_conversation_id:
+                    assessment_type = "LLM"
+                    folder_path = "llm/"
+                else:
+                    assessment_type = "UNKNOWN"
+                    folder_path = "unknown/"
                 
-                # Add to metadata
                 metadata['captures'].append({
                     'filename': capture.filename,
+                    'assessment_type': assessment_type,
+                    'folder_path': folder_path,
                     'full_path': os.path.join(current_app.media_save, capture.filename),
+                    'zip_path': f'images/{folder_path}{capture.filename}',
                     'timestamp': capture.timestamp.isoformat(),
                     'trigger': capture.capture_trigger,
                     'file_size_bytes': capture.file_size_bytes,
@@ -160,8 +197,43 @@ class ExportService:
                     'llm_conversation_id': capture.llm_conversation_id
                 })
             
-            # Add metadata file
+            # Add main metadata file
             zip_file.writestr('images/metadata.json', json.dumps(metadata, indent=2))
+            
+            # Add assessment-specific metadata files
+            if phq_captures:
+                phq_metadata = {
+                    'assessment_type': 'PHQ',
+                    'total_captures': len(phq_captures),
+                    'captures': [
+                        {
+                            'filename': capture.filename,
+                            'timestamp': capture.timestamp.isoformat(),
+                            'trigger': capture.capture_trigger,
+                            'file_size_bytes': capture.file_size_bytes,
+                            'phq_response_id': capture.phq_response_id
+                        }
+                        for capture in phq_captures
+                    ]
+                }
+                zip_file.writestr('images/phq/metadata.json', json.dumps(phq_metadata, indent=2))
+            
+            if llm_captures:
+                llm_metadata = {
+                    'assessment_type': 'LLM',
+                    'total_captures': len(llm_captures),
+                    'captures': [
+                        {
+                            'filename': capture.filename,
+                            'timestamp': capture.timestamp.isoformat(),
+                            'trigger': capture.capture_trigger,
+                            'file_size_bytes': capture.file_size_bytes,
+                            'llm_conversation_id': capture.llm_conversation_id
+                        }
+                        for capture in llm_captures
+                    ]
+                }
+                zip_file.writestr('images/llm/metadata.json', json.dumps(llm_metadata, indent=2))
 
     @staticmethod
     def _generate_summary(session: AssessmentSession, phq_data: Dict = None) -> str:
@@ -193,11 +265,24 @@ PHQ Results Summary:
 - Categories Assessed: {len(phq_data['responses'])}
 """
         
+        # Get image organization info
+        with get_session() as db:
+            captures = db.query(CameraCapture).filter_by(assessment_session_id=session.id).all()
+            phq_images = len([c for c in captures if c.phq_response_id])
+            llm_images = len([c for c in captures if c.llm_conversation_id])
+            unknown_images = len([c for c in captures if not c.phq_response_id and not c.llm_conversation_id])
+        
         summary += f"""
 Export Details:
 - Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-- Files Included: session_info.json, phq_responses.json, llm_conversation.json, images/
-- Format: ZIP archive with JSON data and image files
+- Files Included: session_info.json, phq_responses.json, llm_conversation.json
+- Images Organization:
+  * PHQ Assessment Images: {phq_images} files in images/phq/
+  * LLM Assessment Images: {llm_images} files in images/llm/
+  * Unknown Images: {unknown_images} files in images/unknown/
+  * Total Images: {len(captures)} files
+  * Metadata: images/metadata.json (main), images/phq/metadata.json, images/llm/metadata.json
+- Format: ZIP archive with organized JSON data and assessment-specific image folders
 
 Note: This export contains sensitive mental health data. Handle with appropriate confidentiality.
 """

@@ -12,14 +12,16 @@ consent_bp = Blueprint('consent', __name__, url_prefix='/consent')
 @raw_response
 def get_consent_form():
     """Get consent form for user"""
-    settings = ConsentService.get_default_settings()
+    db_settings = ConsentService.get_settings()
     
-    # Remove signature requirement and form settings fields
+    if not db_settings:
+        return jsonify({"error": "Consent settings not configured"}), 400
+    
+    setting = db_settings[0]  # Get first active setting
     consent_data = {
-        'title': settings.get('title', ''),
-        'content': settings.get('content', ''),
-        'footer_text': settings.get('footer_text', ''),
-        'allow_withdrawal': settings.get('allow_withdrawal', True)
+        'title': setting.get('title', ''),
+        'content': setting.get('content', ''),
+        'footer_text': setting.get('footer_text', '')
     }
     
     return jsonify(consent_data)

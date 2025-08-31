@@ -26,6 +26,14 @@ class LLMService:
         {"name": "Defisit regulasi emosi", "description": "kesulitan mengatur emosi"}
     ]
 
+    # Default analysis scale (shared across all aspects)
+    DEFAULT_ANALYSIS_SCALE = [
+        {"value": 0, "description": "Tidak Ada Indikasi Jelas (Gejala tidak muncul dalam percakapan)"},
+        {"value": 1, "description": "Indikasi Ringan (Gejala tersirat atau disebutkan secara tidak langsung)"},
+        {"value": 2, "description": "Indikasi Sedang (Gejala disebutkan dengan cukup jelas, namun tidak mendominasi)"},
+        {"value": 3, "description": "Indikasi Kuat (Gejala disebutkan secara eksplisit, berulang, dan menjadi keluhan utama)"}
+    ]
+
 
     
     # Hard-coded Anisa system prompt - TIDAK BISA DIUBAH
@@ -55,6 +63,7 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                 'chat_model': setting.chat_model,
                 'analysis_model': setting.analysis_model,
                 'depression_aspects': setting.depression_aspects.get('aspects', []) if setting.depression_aspects else [],
+                'analysis_scale': setting.analysis_scale.get('scale', []) if setting.analysis_scale else [],
                 'is_default': setting.is_default
             } for setting in settings]
 
@@ -62,6 +71,7 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
     def create_settings(openai_api_key: Optional[str] = None, chat_model: str = "gpt-4o", 
                        analysis_model: str = "gpt-4o-mini",
                        depression_aspects: Optional[List[Dict]] = None,
+                       analysis_scale: Optional[List[Dict]] = None,
                        instructions: str = None,
                        is_default: bool = False) -> Dict[str, Any]:
         """Create or update LLM settings - no streaming validation"""
@@ -77,6 +87,11 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                     aspect["name"] = aspect["name"].replace(" ", "_").lower()
                 # Store aspects as JSON
                 aspects_json = {"aspects": depression_aspects}
+            
+            # Handle analysis_scale separately  
+            scale_json = None
+            if analysis_scale is not None and len(analysis_scale) > 0:
+                scale_json = {"scale": analysis_scale}
             
             # Null handling for instructions - don't save if null/empty
             final_instructions = instructions if instructions and instructions.strip() else None
@@ -99,6 +114,7 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                 existing.chat_model = chat_model
                 existing.analysis_model = analysis_model
                 existing.depression_aspects = aspects_json
+                existing.analysis_scale = scale_json
                 existing.is_default = is_default
                 
                 # Set is_active based on field completeness (API key NOT required)
@@ -123,6 +139,7 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
                     chat_model=chat_model,
                     analysis_model=analysis_model,
                     depression_aspects=aspects_json,
+                    analysis_scale=scale_json,
                     is_default=is_default
                 )
                 if openai_api_key is not None:  # Only set if API key provided
@@ -246,7 +263,8 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
             "openai_api_key": "",
             "chat_model": "gpt-4o",
             "analysis_model": "gpt-4o-mini",
-            "depression_aspects": {"aspects": LLMService.DEFAULT_ASPECTS},
+            "depression_aspects": LLMService.DEFAULT_ASPECTS,
+            "analysis_scale": LLMService.DEFAULT_ANALYSIS_SCALE,
             "is_default": True
         }
 

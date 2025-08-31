@@ -218,6 +218,12 @@ def phq_assessment():
         else:
             # PHQ is not first, redirect to LLM
             return redirect(url_for('assessment.llm_assessment'))
+    
+    # Check if PHQ assessment is already completed
+    if session.phq_completed_at:
+        flash('PHQ assessment sudah selesai. Tidak bisa mengulang.', 'info')
+        return redirect(url_for('assessment.assessment_dashboard'))
+    
     next_assessment = session.next_assessment_type
     if next_assessment != 'phq':
         if next_assessment == 'llm':
@@ -267,6 +273,11 @@ def llm_assessment():
         else:
             # LLM is not first, redirect to PHQ
             return redirect(url_for('assessment.phq_assessment'))
+
+    # Check if LLM assessment is already completed
+    if session.llm_completed_at:
+        flash('LLM assessment sudah selesai. Tidak bisa mengulang.', 'info')
+        return redirect(url_for('assessment.assessment_dashboard'))
 
     # Check session should do LLM now based on status and completion
     next_assessment = session.next_assessment_type
@@ -593,3 +604,68 @@ def get_session_camera_captures(session_id):
 
     except Exception as e:
         return jsonify({"status": "SNAFU", "error": str(e)}), 500
+
+
+@assessment_bp.route("/restart-phq/<session_id>", methods=["POST"])
+@login_required
+def restart_phq_assessment(session_id):
+    """Restart PHQ assessment by clearing previous data"""
+    try:
+        # Validate session belongs to current user
+        session = SessionService.get_session(session_id)
+        if not session or str(session.user_id) != str(current_user.id):
+            flash("Session tidak ditemukan atau akses ditolak.", "error")
+            return redirect(url_for("assessment.assessment_dashboard"))
+
+        # Clear PHQ data and reset status
+        from ..services.assessment.phqService import PHQResponseService
+        
+        # Delete existing PHQ responses
+        PHQResponseService.clear_session_responses(session_id)
+        
+        # Reset PHQ completion status
+        SessionService.reset_phq_completion(session_id)
+        
+        flash("PHQ assessment berhasil direset. Silakan mulai ulang.", "success")
+        return redirect(url_for("main.serve_index"))
+        
+    except Exception as e:
+        flash(f"Gagal mereset PHQ assessment: {str(e)}", "error")
+        return redirect(url_for("assessment.assessment_dashboard"))
+
+
+@assessment_bp.route("/restart-llm/<session_id>", methods=["POST"])
+@login_required
+def restart_llm_assessment(session_id):
+    """Restart LLM assessment by clearing previous data"""
+    try:
+        # Validate session belongs to current user
+        session = SessionService.get_session(session_id)
+        if not session or str(session.user_id) != str(current_user.id):
+            flash("Session tidak ditemukan atau akses ditolak.", "error")
+            return redirect(url_for("assessment.assessment_dashboard"))
+
+        # Clear LLM data and reset status
+        from ..services.assessment.llmService import LLMConversationService
+        from ..services.llm.chatService import LLMChatService
+        
+        # Delete existing LLM conversations
+        LLMConversationService.clear_session_conversations(session_id)
+        
+        # Clear LangChain memory
+        from ..services.llm.chatService import get_by_session_id, store
+        history = get_by_session_id(str(session_id))
+        history.clear()
+        if str(session_id) in store:
+            del store[str(session_id)]
+        
+        # Reset LLM completion status
+        SessionService.reset_llm_completion(session_id)
+        
+        flash("LLM assessment berhasil direset. Silakan mulai ulang.", "success")
+        return redirect(url_for("main.serve_index"))
+        
+    except Exception as e:
+        flash(f"Gagal mereset LLM assessment: {str(e)}", "error")
+        return redirect(url_for("assessment.assessment_dashboard"))
+

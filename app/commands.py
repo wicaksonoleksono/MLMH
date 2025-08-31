@@ -281,6 +281,102 @@ def register_commands(app):
             except Exception as e:
                 click.echo(f"[SNAFU] Error creating admin user: {str(e)}")
 
+    @app.cli.command("create-admin-random")
+    @click.argument("username")
+    def create_admin_random(username):
+        """Create a new admin user with a randomly generated 13-character password."""
+        import secrets
+        import string
+        
+        # Generate a random 13-character password
+        alphabet = string.ascii_letters + string.digits
+        password = ''.join(secrets.choice(alphabet) for _ in range(13))
+        
+        with get_session() as db:
+            admin_type = db.query(UserType).filter_by(name="admin").first()
+            if not admin_type:
+                click.echo("[SNAFU] Admin user type not found. Run 'seed-db' first.")
+                return
+
+            existing = db.query(User).filter_by(uname=username).first()
+            if existing:
+                click.echo(f"[SNAFU] User '{username}' already exists.")
+                return
+
+            try:
+                admin_user = User.create_user(
+                    uname=username,
+                    password=password,
+                    user_type_id=admin_type.id
+                )
+                db.add(admin_user)
+                click.echo(f"[OLKORECT] Admin user '{username}' created successfully!")
+                click.echo(f"[OLKORECT] Generated password: {password}")
+            except Exception as e:
+                click.echo(f"[SNAFU] Error creating admin user: {str(e)}")
+
+    @app.cli.command("create-bulk-admins")
+    def create_bulk_admins():
+        """Create predefined admin users with random passwords and print credentials."""
+        import secrets
+        import string
+        
+        # Predefined usernames
+        usernames = [
+            "samudera",
+            "rangga",
+            "fadhil",
+            "baqi",
+            "oriza",
+            "wicak",
+            "waffiq"
+        ]
+        
+        # Generate a random 13-character password
+        def generate_password():
+            alphabet = string.ascii_letters + string.digits
+            return ''.join(secrets.choice(alphabet) for _ in range(13))
+        
+        created_users = []
+        
+        with get_session() as db:
+            admin_type = db.query(UserType).filter_by(name="admin").first()
+            if not admin_type:
+                click.echo("[SNAFU] Admin user type not found. Run 'seed-db' first.")
+                return
+
+            for username in usernames:
+                existing = db.query(User).filter_by(uname=username).first()
+                if existing:
+                    click.echo(f"[SNAFU] User '{username}' already exists, skipping...")
+                    continue
+
+                try:
+                    password = generate_password()
+                    admin_user = User.create_user(
+                        uname=username,
+                        password=password,
+                        user_type_id=admin_type.id
+                    )
+                    db.add(admin_user)
+                    created_users.append((username, password))
+                    click.echo(f"[OLKORECT] Admin user '{username}' created successfully!")
+                except Exception as e:
+                    click.echo(f"[SNAFU] Error creating admin user '{username}': {str(e)}")
+            
+            db.commit()
+            
+        if created_users:
+            click.echo("\n[OLKORECT] All admin users created successfully!")
+            click.echo("\nGenerated credentials:")
+            click.echo("-" * 40)
+            for username, password in created_users:
+                click.echo(f"Username: {username}")
+                click.echo(f"Password: {password}")
+                click.echo("-" * 40)
+        else:
+            click.echo("[SNAFU] No new admin users were created.")
+
     @app.cli.command("reset-db")
     @click.confirmation_option(prompt="Are you sure you want to drop all tables?")
     def reset_db():

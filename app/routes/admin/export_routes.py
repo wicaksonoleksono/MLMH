@@ -55,3 +55,24 @@ def export_bulk_sessions():
         
     except Exception as e:
         return jsonify({"error": f"Bulk export failed: {str(e)}"}), 500
+
+
+@export_bp.route('/all-sessions')
+@login_required
+@admin_required
+@raw_response
+def export_all_sessions():
+    """Export all sessions organized by session number"""
+    try:
+        zip_buffer = ExportService.export_sessions_by_session_number()
+        filename = ExportService.get_all_sessions_export_filename()
+        
+        return send_file(
+            zip_buffer,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/zip'
+        )
+        
+    except Exception as e:
+        return jsonify({"error": f"All sessions export failed: {str(e)}"}), 500

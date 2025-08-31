@@ -58,6 +58,7 @@ class ExportService:
             'session_id': session.id,
             'user_id': session.user_id,
             'username': session.user.uname if session.user else 'Unknown',
+            'session_number': session.session_number,
             'created_at': session.created_at.isoformat(),
             'completed_at': session.completed_at.isoformat() if session.completed_at else None,
             'status': session.status,
@@ -172,6 +173,7 @@ MENTAL HEALTH ASSESSMENT EXPORT
 Session Information:
 - Session ID: {session.id}
 - User: {session.user.uname if session.user else 'Unknown'} (ID: {session.user_id})
+- Session Number: {session.session_number}
 - Created: {session.created_at.strftime('%Y-%m-%d %H:%M:%S')}
 - Status: {session.status}
 - Assessment Order: {session.is_first} first
@@ -209,30 +211,158 @@ Note: This export contains sensitive mental health data. Handle with appropriate
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            session_info_list = []
+            
             for session_id in session_ids:
                 try:
                     session_zip = ExportService.export_session(session_id)
-                    zip_file.writestr(f'session_{session_id}_{timestamp}.zip', session_zip.getvalue())
+                    # Get session info for the summary
+                    with get_session() as db:
+                        session = db.query(AssessmentSession).filter_by(id=session_id).first()
+                        if session and session.user:
+                            username = session.user.uname
+                            user_id = session.user_id
+                            session_number = session.session_number
+                            # Create a clean filename-safe version of the username
+                            clean_username = "".join(c for c in username if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                            clean_username = clean_username.replace(' ', '_')
+                            filename = f'user_{user_id}_session{session_number}_{session_id}.zip'
+                            session_info_list.append({
+                                'user_id': user_id,
+                                'username': username,
+                                'session_id': session_id,
+                                'session_number': session_number,
+                                'filename': filename
+                            })
+                        else:
+                            filename = f'session_{session_id}_{timestamp}.zip'
+                            session_info_list.append({
+                                'user_id': 'Unknown',
+                                'username': 'Unknown',
+                                'session_id': session_id,
+                                'session_number': 'Unknown',
+                                'filename': filename
+                            })
+                    
+                    zip_file.writestr(filename, session_zip.getvalue())
                 except Exception as e:
                     # Add error log for failed exports
                     error_msg = f"Failed to export session {session_id}: {str(e)}"
                     zip_file.writestr(f'ERROR_session_{session_id}.txt', error_msg)
             
-            # Add bulk summary
-            summary = f"Bulk Export Summary\n==================\nExported: {len(session_ids)} sessions\nGenerated: {datetime.now().isoformat()}"
+            # Add bulk summary with user information
+            summary = f"Bulk Export Summary\n==================\nExported: {len(session_ids)} sessions\nGenerated: {datetime.now().isoformat()}\n\nSession Details:\n"
+            for info in session_info_list:
+                summary += f"- User {info['user_id']} ({info['username']}) - Session {info['session_number']} - File: {info['filename']}\n"
+            
             zip_file.writestr('bulk_summary.txt', summary)
         
         zip_buffer.seek(0)
         return zip_buffer
 
     @staticmethod
-    def get_export_filename(session_id: str) -> str:
-        """Generate export filename"""
+    def export_sessions_by_session_number() -> BytesIO:
+        """Export all sessions organized by session number into folders"""
+        zip_buffer = BytesIO()
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        return f'session_{session_id}_{timestamp}.zip'
+        
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            # Get all completed sessions
+            with get_session() as db:
+                sessions = db.query(AssessmentSession).filter_by(status='COMPLETED').all()
+                
+                session_info_list = []
+                session1_count = 0
+                session2_count = 0
+                
+                for session in sessions:
+                    try:
+                        session_zip = ExportService.export_session(session.id)
+                        # Get user info
+                        if session.user:
+                            username = session.user.uname
+                            user_id = session.user_id
+                            session_number = session.session_number
+                            # Create a clean filename-safe version of the username
+                            clean_username = "".join(c for c in username if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                            clean_username = clean_username.replace(' ', '_')
+                            filename = f'user_{user_id}_{clean_username}_session{session_number}_{session.id}_{timestamp}.zip'
+                            
+                            # Organize by session number
+                            if session_number == 1:
+                                folder_path = f'session_1/{filename}'
+                                session1_count += 1
+                            elif session_number == 2:
+                                folder_path = f'session_2/{filename}'
+                                session2_count += 1
+                            else:
+                                folder_path = filename  # Fallback
+                            
+                            session_info_list.append({
+                                'user_id': user_id,
+                                'username': username,
+                                'session_id': session.id,
+                                'session_number': session_number,
+                                'filename': filename,
+                                'folder_path': folder_path
+                            })
+                            
+                            zip_file.writestr(folder_path, session_zip.getvalue())
+                        else:
+                            # Handle sessions without user info
+                            filename = f'session_{session.id}_{timestamp}.zip'
+                            folder_path = f'unknown_user/{filename}'
+                            session_info_list.append({
+                                'user_id': 'Unknown',
+                                'username': 'Unknown',
+                                'session_id': session.id,
+                                'session_number': 'Unknown',
+                                'filename': filename,
+                                'folder_path': folder_path
+                            })
+                            zip_file.writestr(folder_path, session_zip.getvalue())
+                            
+                    except Exception as e:
+                        # Add error log for failed exports
+                        error_msg = f"Failed to export session {session.id}: {str(e)}"
+                        zip_file.writestr(f'ERROR_session_{session.id}.txt', error_msg)
+                
+                # Add summary
+                summary = f"All Sessions Export Summary\n========================\nExported: {len(sessions)} sessions\nGenerated: {datetime.now().isoformat()}\n\nSession 1: {session1_count} sessions\nSession 2: {session2_count} sessions\n\nSession Details:\n"
+                for info in session_info_list:
+                    summary += f"- User {info['user_id']} ({info['username']}) - Session {info['session_number']} - File: {info['folder_path']}\n"
+                
+                zip_file.writestr('all_sessions_summary.txt', summary)
+        
+        zip_buffer.seek(0)
+        return zip_buffer
+
+    @staticmethod
+    def get_export_filename(session_id: str) -> str:
+        """Generate export filename with user identification and session number"""
+        with get_session() as db:
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if session and session.user:
+                username = session.user.uname
+                user_id = session.user_id
+                session_number = session.session_number
+                # Create a clean filename-safe version of the username
+                clean_username = "".join(c for c in username if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                clean_username = clean_username.replace(' ', '_')
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                return f'user_{user_id}_{clean_username}_session{session_number}_{session_id}_{timestamp}.zip'
+            else:
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                return f'session_{session_id}_{timestamp}.zip'
 
     @staticmethod
     def get_bulk_export_filename() -> str:
         """Generate bulk export filename"""
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        return f'bulk_export_{timestamp}.zip'
+        return f'bulk_sessions_export_{timestamp}.zip'
+
+    @staticmethod
+    def get_all_sessions_export_filename() -> str:
+        """Generate all sessions export filename"""
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        return f'all_sessions_export_{timestamp}.zip'

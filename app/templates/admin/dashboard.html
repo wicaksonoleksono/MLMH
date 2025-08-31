@@ -8,37 +8,77 @@
         <!-- System Stats Grid -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <!-- User Stats -->
-            <div class="bg-blue-50 rounded-2xl p-4 border border-blue-200">
-                <h3 class="text-sm font-medium text-blue-800 mb-2">Pengguna</h3>
-                <div class="space-y-1">
-                    <div class="text-2xl font-bold text-blue-900">{{ stats.users.total }}</div>
-                    <div class="text-sm text-blue-700">Total Pengguna</div>
-                    <div class="text-xs text-blue-600">
-                        {{ stats.users.admins }} Admin, {{ stats.users.regular }} User
+            <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-5 border border-blue-200 shadow-sm">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-xl bg-blue-500 bg-opacity-10">
+                        <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-sm font-medium text-blue-800">Pengguna</h3>
+                        <div class="text-2xl font-bold text-blue-900 mt-1">{{ stats.users.total }}</div>
+                    </div>
+                </div>
+                <div class="mt-3 text-xs text-blue-700">
+                    <div class="flex justify-between">
+                        <span>Admin:</span>
+                        <span class="font-medium">{{ stats.users.admins }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>User:</span>
+                        <span class="font-medium">{{ stats.users.regular }}</span>
                     </div>
                 </div>
             </div>
             
             <!-- Assessment Stats -->
-            <div class="bg-green-50 rounded-2xl p-4 border border-green-200">
-                <h3 class="text-sm font-medium text-green-800 mb-2">Asesmen</h3>
-                <div class="space-y-1">
-                    <div class="text-2xl font-bold text-green-900">{{ stats.assessments.total_sessions }}</div>
-                    <div class="text-sm text-green-700">Total Sesi</div>
-                    <div class="text-xs text-green-600">
-                        {{ stats.assessments.completed_sessions }} selesai ({{ stats.assessments.completion_rate }}%)
+            <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-5 border border-green-200 shadow-sm">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-xl bg-green-500 bg-opacity-10">
+                        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-sm font-medium text-green-800">Asesmen</h3>
+                        <div class="text-2xl font-bold text-green-900 mt-1">{{ stats.assessments.total_sessions }}</div>
+                    </div>
+                </div>
+                <div class="mt-3 text-xs text-green-700">
+                    <div class="flex justify-between">
+                        <span>Selesai:</span>
+                        <span class="font-medium">{{ stats.assessments.completed_sessions }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Rate:</span>
+                        <span class="font-medium">{{ stats.assessments.completion_rate }}%</span>
                     </div>
                 </div>
             </div>
             
             <!-- Settings Stats -->
-            <div class="bg-purple-50 rounded-2xl p-4 border border-purple-200">
-                <h3 class="text-sm font-medium text-purple-800 mb-2">Konfigurasi</h3>
-                <div class="space-y-1">
-                    <div class="text-2xl font-bold text-purple-900">{{ stats.settings.total_settings }}</div>
-                    <div class="text-sm text-purple-700">Pengaturan Sistem</div>
-                    <div class="text-xs text-purple-600">
-                        {{ stats.settings.assessment_configs }} Asesmen, {{ stats.settings.media_settings }} Media
+            <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-5 border border-purple-200 shadow-sm">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-xl bg-purple-500 bg-opacity-10">
+                        <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-sm font-medium text-purple-800">Konfigurasi</h3>
+                        <div class="text-2xl font-bold text-purple-900 mt-1">{{ stats.settings.total_settings }}</div>
+                    </div>
+                </div>
+                <div class="mt-3 text-xs text-purple-700">
+                    <div class="flex justify-between">
+                        <span>Asesmen:</span>
+                        <span class="font-medium">{{ stats.settings.assessment_configs }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Media:</span>
+                        <span class="font-medium">{{ stats.settings.media_settings }}</span>
                     </div>
                 </div>
             </div>
@@ -46,112 +86,375 @@
         
         <!-- Quick Peek: User Sessions -->
         <div class="mb-8">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Peek - User Sessions</h3>
-            <div class="overflow-x-auto">
-                <table class="w-full bg-white rounded-lg border border-gray-200">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">Quick Peek - User Sessions</h3>
+                <div class="flex items-center space-x-3">
+                    <span class="text-sm text-gray-500">{{ user_sessions|length }} users</span>
+                    <a href="{{ url_for('export.export_all_sessions') }}" 
+                       class="inline-flex items-center px-3 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-sm font-medium rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all shadow-sm">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                        </svg>
+                        Bulk Download All
+                    </a>
+                </div>
+            </div>
+            <div class="overflow-x-auto rounded-xl border border-gray-200">
+                <table class="w-full bg-white rounded-lg">
                     <thead class="bg-gray-50">
                         <tr>
                             <th class="text-left py-3 px-4 font-medium text-gray-700">User ID</th>
                             <th class="text-left py-3 px-4 font-medium text-gray-700">Username</th>
-                            <th class="text-left py-3 px-4 font-medium text-gray-700">Session 1</th>
-                            <th class="text-left py-3 px-4 font-medium text-gray-700">Session 2</th>
-                            <th class="text-left py-3 px-4 font-medium text-gray-700">Download All</th>
+                            <th class="text-left py-3 px-4 font-medium text-gray-700">Session</th>
+                            <th class="text-left py-3 px-4 font-medium text-gray-700">Status</th>
+                            <th class="text-left py-3 px-4 font-medium text-gray-700">PHQ-Sum</th>
+                            <th class="text-left py-3 px-4 font-medium text-gray-700">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for user_session in user_sessions %}
-                        <tr class="border-b border-gray-100">
-                            <td class="py-3 px-4 text-gray-900">{{ user_session.user_id }}</td>
-                            <td class="py-3 px-4 text-gray-900">{{ user_session.username }}</td>
-                            <td class="py-3 px-4">
-                                {% if user_session.session1 == 'COMPLETED' and user_session.session1_id %}
-                                    <a href="{{ url_for('export.export_session', session_id=user_session.session1_id) }}" 
-                                       class="inline-flex items-center px-3 py-2 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition-colors">
-                                        📥 Download
-                                    </a>
-                                {% else %}
-                                    <span class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                                        {{ user_session.session1 }}
-                                    </span>
-                                {% endif %}
-                            </td>
-                            <td class="py-3 px-4">
-                                {% if user_session.session2 == 'COMPLETED' and user_session.session2_id %}
-                                    <a href="{{ url_for('export.export_session', session_id=user_session.session2_id) }}" 
-                                       class="inline-flex items-center px-3 py-2 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition-colors">
-                                        📥 Download
-                                    </a>
-                                {% else %}
-                                    <span class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                                        {{ user_session.session2 }}
-                                    </span>
-                                {% endif %}
-                            </td>
-                            <td class="py-3 px-4">
-                                {% if user_session.session1 == 'COMPLETED' and user_session.session2 == 'COMPLETED' and user_session.session1_id and user_session.session2_id %}
-                                    <button onclick="downloadBothSessions('{{ user_session.session1_id }}', '{{ user_session.session2_id }}')" 
-                                            class="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors">
-                                        📥 All Sessions
-                                    </button>
-                                {% else %}
-                                    <span class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                                        ⏸️ Disabled
-                                    </span>
-                                {% endif %}
+                            <!-- Session 1 Row -->
+                            <tr class="border-b border-gray-200 bg-gray-50">
+                                <td class="py-3 px-4 font-medium text-gray-900">{{ user_session.user_id }}</td>
+                                <td class="py-3 px-4 font-medium text-gray-900">{{ user_session.username }}</td>
+                                <td class="py-3 px-4 text-gray-900">
+                                    <div class="flex items-center">
+                                        <div class="w-3 h-3 rounded-full bg-blue-500 mr-2"></div>
+                                        <span class="font-medium">Session 1</span>
+                                    </div>
+                                </td>
+                                <td class="py-3 px-4">
+                                    {% if user_session.session1 == 'COMPLETED' and user_session.session1_id %}
+                                        <span class="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            {{ user_session.session1 }}
+                                        </span>
+                                    {% elif user_session.session1 == 'Not done' %}
+                                        <span class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                            Not Started
+                                        </span>
+                                    {% else %}
+                                        <span class="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                            {{ user_session.session1 }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="py-3 px-4 text-gray-900">
+                                    {% if user_session.session1_phq_score is not none %}
+                                        <span class="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                            {{ user_session.session1_phq_score }}
+                                        </span>
+                                    {% else %}
+                                        <span class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                            N/A
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="py-3 px-4">
+                                    {% if user_session.session1 == 'COMPLETED' and user_session.session1_id %}
+                                        <a href="{{ url_for('export.export_session', session_id=user_session.session1_id) }}" 
+                                           class="inline-flex items-center px-3 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white text-xs font-medium rounded-lg hover:from-green-700 hover:to-green-800 transition-all shadow-sm">
+                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                            </svg>
+                                            Download
+                                        </a>
+                                    {% else %}
+                                        <span class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                            ⏸️ Disabled
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            
+                            <!-- Session 2 Row -->
+                            <tr class="border-b border-gray-200 bg-gray-50">
+                                <td class="py-3 px-4 font-medium text-gray-900">{{ user_session.user_id }}</td>
+                                <td class="py-3 px-4 font-medium text-gray-900">{{ user_session.username }}</td>
+                                <td class="py-3 px-4 text-gray-900">
+                                    <div class="flex items-center">
+                                        <div class="w-3 h-3 rounded-full bg-purple-500 mr-2"></div>
+                                        <span class="font-medium">Session 2</span>
+                                    </div>
+                                </td>
+                                <td class="py-3 px-4">
+                                    {% if user_session.session2 == 'COMPLETED' and user_session.session2_id %}
+                                        <span class="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            {{ user_session.session2 }}
+                                        </span>
+                                    {% elif user_session.session2 == 'Not done' %}
+                                        <span class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                            Not Started
+                                        </span>
+                                    {% else %}
+                                        <span class="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                            {{ user_session.session2 }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="py-3 px-4 text-gray-900">
+                                    {% if user_session.session2_phq_score is not none %}
+                                        <span class="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                            {{ user_session.session2_phq_score }}
+                                        </span>
+                                    {% else %}
+                                        <span class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                            N/A
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="py-3 px-4">
+                                    {% if user_session.session2 == 'COMPLETED' and user_session.session2_id %}
+                                        <a href="{{ url_for('export.export_session', session_id=user_session.session2_id) }}" 
+                                           class="inline-flex items-center px-3 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white text-xs font-medium rounded-lg hover:from-green-700 hover:to-green-800 transition-all shadow-sm">
+                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                            </svg>
+                                            Download
+                                        </a>
+                                    {% else %}
+                                        <span class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                            ⏸️ Disabled
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            
+                            <!-- Spacer Row -->
+                            <tr class="border-b border-gray-100">
+                                <td colspan="6" class="py-1 px-4 bg-white"></td>
+                            </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="py-12 text-center text-gray-500">
+                                <div class="flex flex-col items-center justify-center">
+                                    <svg class="w-12 h-12 text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                    </svg>
+                                    <span class="text-lg font-medium text-gray-400">No user sessions found</span>
+                                    <p class="text-sm text-gray-500 mt-1">Users will appear here once they start assessments</p>
+                                </div>
                             </td>
                         </tr>
                         {% endfor %}
-                        {% if not user_sessions %}
-                        <tr>
-                            <td colspan="5" class="py-8 text-center text-gray-500">No users found</td>
-                        </tr>
-                        {% endif %}
                     </tbody>
                 </table>
             </div>
         </div>
+        
+        <!-- Assessment Statistics -->
+        <div class="bg-white rounded-3xl shadow-sm border border-gray-200 p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Assessment Statistics</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- PHQ Score Distribution -->
+                <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-4 border border-blue-200">
+                    <h4 class="text-sm font-medium text-blue-800 mb-3">PHQ-9 Score Distribution</h4>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center">
+                                <div class="w-3 h-3 rounded-full bg-blue-500 mr-2"></div>
+                                <span class="text-sm text-blue-700">Minimal (0-4)</span>
+                            </div>
+                            <span class="font-medium text-blue-900">{{ phq_stats.minimal if phq_stats else 0 }}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center">
+                                <div class="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
+                                <span class="text-sm text-blue-700">Mild (5-9)</span>
+                            </div>
+                            <span class="font-medium text-blue-900">{{ phq_stats.mild if phq_stats else 0 }}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center">
+                                <div class="w-3 h-3 rounded-full bg-yellow-500 mr-2"></div>
+                                <span class="text-sm text-blue-700">Moderate (10-14)</span>
+                            </div>
+                            <span class="font-medium text-blue-900">{{ phq_stats.moderate if phq_stats else 0 }}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center">
+                                <div class="w-3 h-3 rounded-full bg-orange-500 mr-2"></div>
+                                <span class="text-sm text-blue-700">Moderately Severe (15-19)</span>
+                            </div>
+                            <span class="font-medium text-blue-900">{{ phq_stats.moderate_severe if phq_stats else 0 }}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center">
+                                <div class="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
+                                <span class="text-sm text-blue-700">Severe (20-27)</span>
+                            </div>
+                            <span class="font-medium text-blue-900">{{ phq_stats.severe if phq_stats else 0 }}</span>
+                        </div>
+                    </div>
+                    {% if phq_stats and phq_stats.total_scores > 0 %}
+                    <div class="mt-3 pt-3 border-t border-blue-200">
+                        <div class="text-xs text-blue-600">Average Score: <span class="font-medium">{{ phq_stats.average_score }}</span></div>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Session Completion Stats -->
+                <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-4 border border-green-200">
+                    <h4 class="text-sm font-medium text-green-800 mb-3">Session Completion</h4>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-green-700">Total Sessions</span>
+                            <span class="font-medium text-green-900">{{ stats.assessments.total_sessions if stats else 0 }}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-green-700">Completed</span>
+                            <span class="font-medium text-green-900">{{ stats.assessments.completed_sessions if stats else 0 }}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-green-700">Completion Rate</span>
+                            <span class="font-medium text-green-900">{{ stats.assessments.completion_rate if stats else 0 }}%</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-green-700">Session 1 Only</span>
+                            <span class="font-medium text-green-900">{{ session_stats.session1_only if session_stats else 0 }}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-green-700">Both Sessions</span>
+                            <span class="font-medium text-green-900">{{ session_stats.both_sessions if session_stats else 0 }}</span>
+                        </div>
+                    </div>
+                    {% if stats and stats.assessments.total_sessions > 0 %}
+                    <div class="mt-3 pt-3 border-t border-green-200">
+                        <div class="w-full bg-green-200 rounded-full h-2">
+                            <div class="bg-green-600 h-2 rounded-full" style="width: {{ stats.assessments.completion_rate if stats else 0 }}%"></div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <!-- User Engagement -->
+                <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-4 border border-purple-200">
+                    <h4 class="text-sm font-medium text-purple-800 mb-3">User Engagement</h4>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-purple-700">Total Users</span>
+                            <span class="font-medium text-purple-900">{{ stats.users.total if stats else 0 }}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-purple-700">Active Users</span>
+                            <span class="font-medium text-purple-900">{{ user_stats.active_users if user_stats else 0 }}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-purple-700">Avg Sessions/User</span>
+                            <span class="font-medium text-purple-900">{{ user_stats.avg_sessions_per_user if user_stats else 0 }}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-purple-700">High Engagement</span>
+                            <span class="font-medium text-purple-900">{{ user_stats.high_engagement if user_stats else 0 }}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-purple-700">Low Engagement</span>
+                            <span class="font-medium text-purple-900">{{ user_stats.low_engagement if user_stats else 0 }}</span>
+                        </div>
+                    </div>
+                    {% if stats and stats.users.total > 0 %}
+                    <div class="mt-3 pt-3 border-t border-purple-200">
+                        <div class="text-xs text-purple-600">
+                            Active Rate: 
+                            <span class="font-medium">
+                                {% if stats.users.total > 0 %}
+                                    {{ ((user_stats.active_users if user_stats else 0) / (stats.users.total if stats else 1) * 100) | round(1) }}%
+                                {% else %}
+                                    0%
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Empty State Message -->
+            {% if (stats and stats.assessments.total_sessions == 0) or (not phq_stats) or (not session_stats) or (not user_stats) %}
+            <div class="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+                <div class="flex items-center">
+                    <svg class="w-5 h-5 text-yellow-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                    </svg>
+                    <span class="text-sm text-yellow-700">
+                        No assessment data available yet. Statistics will update as users complete their sessions.
+                    </span>
+                </div>
+            </div>
+            {% endif %}
+        </div>
     </div>
-    
 
-</div>
-
-<script>
-function downloadBothSessions(session1Id, session2Id) {
-    // Use the existing bulk export endpoint
-    fetch('/admin/export/bulk', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            session_ids: [session1Id, session2Id]
+    <script>
+    // We don't need the downloadBothSessions function anymore since we're showing sessions separately
+    // But we'll keep it in case we want to add a "Download Both" button later
+    function downloadBothSessions(session1Id, session2Id) {
+        // Use the existing bulk export endpoint
+        fetch('/admin/export/bulk', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                session_ids: [session1Id, session2Id]
+            })
         })
-    })
-    .then(response => {
-        if (response.ok) {
-            // Create download link
-            const filename = response.headers.get('Content-Disposition') || 'bulk_export.zip';
-            response.blob().then(blob => {
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = filename.includes('filename=') ? 
-                    filename.split('filename=')[1].replace(/"/g, '') : 
-                    'bulk_export.zip';
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-            });
-        } else {
+        .then(response => {
+            if (response.ok) {
+                // Create download link
+                const filename = response.headers.get('Content-Disposition') || 'bulk_export.zip';
+                response.blob().then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = filename.includes('filename=') ? 
+                        filename.split('filename=')[1].replace(/"/g, '') : 
+                        'bulk_export.zip';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                });
+            } else {
+                alert('Export failed. Please try again.');
+            }
+        })
+        .catch(error => {
+            // Export failed
             alert('Export failed. Please try again.');
+        });
+    }
+    
+    // Function to handle bulk download with loading indicator
+    function downloadAllSessions() {
+        // Show loading indicator
+        const downloadBtn = document.querySelector('a[href="' + "{{ url_for('export.export_all_sessions') }}" + '"]');
+        const originalText = downloadBtn.innerHTML;
+        downloadBtn.innerHTML = '<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Preparing...';
+        downloadBtn.disabled = true;
+        
+        // Start download
+        setTimeout(() => {
+            // Reset button after a short delay to allow download to start
+            downloadBtn.innerHTML = originalText;
+            downloadBtn.disabled = false;
+        }, 2000);
+    }
+    
+    // Add event listener to bulk download button
+    document.addEventListener('DOMContentLoaded', function() {
+        const bulkDownloadBtn = document.querySelector('a[href="' + "{{ url_for('export.export_all_sessions') }}" + '"]');
+        if (bulkDownloadBtn) {
+            bulkDownloadBtn.addEventListener('click', function(e) {
+                // Show confirmation dialog
+                if (confirm('This will download all completed sessions organized by session number. This may take a while. Continue?')) {
+                    downloadAllSessions();
+                } else {
+                    e.preventDefault();
+                }
+            });
         }
-    })
-    .catch(error => {
-        // Export failed
-        alert('Export failed. Please try again.');
     });
-}
-</script>
+    </script>
+</div>
 {% endblock %}

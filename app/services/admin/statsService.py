@@ -1,64 +1,231 @@
 from ...db import get_session
 from ...model.shared.users import User
 from ...model.shared.enums import UserType
-from ...model.assessment.sessions import AssessmentSession
+from ...model.assessment.sessions import AssessmentSession, PHQResponse
+from sqlalchemy import func
 
 class StatsService:
     @staticmethod
     def get_dashboard_stats():
         """Get basic stats for admin dashboard"""
-        with get_session() as db:
-            # User stats
-            total_users = db.query(User).count()
-            admin_users = db.query(User).join(UserType).filter(UserType.name == 'admin').count()
-            regular_users = total_users - admin_users
-            
-            # Session stats
-            total_sessions = db.query(AssessmentSession).count()
-            completed_sessions = db.query(AssessmentSession).filter(AssessmentSession.status == 'COMPLETED').count()
-            completion_rate = int((completed_sessions / total_sessions * 100)) if total_sessions > 0 else 0
-            
+        try:
+            with get_session() as db:
+                # User stats
+                total_users = db.query(User).count()
+                admin_users = db.query(User).join(UserType).filter(UserType.name == 'admin').count()
+                regular_users = total_users - admin_users
+                
+                # Session stats
+                total_sessions = db.query(AssessmentSession).count()
+                completed_sessions = db.query(AssessmentSession).filter(AssessmentSession.status == 'COMPLETED').count()
+                completion_rate = int((completed_sessions / total_sessions * 100)) if total_sessions > 0 else 0
+                
+                return {
+                    'users': {
+                        'total': total_users,
+                        'admins': admin_users,
+                        'regular': regular_users
+                    },
+                    'assessments': {
+                        'total_sessions': total_sessions,
+                        'completed_sessions': completed_sessions,
+                        'completion_rate': completion_rate
+                    },
+                    'settings': {
+                        'total_settings': 4,
+                        'assessment_configs': 2,
+                        'media_settings': 1
+                    }
+                }
+        except Exception as e:
+            # Return default values if there's an error
             return {
                 'users': {
-                    'total': total_users,
-                    'admins': admin_users,
-                    'regular': regular_users
+                    'total': 0,
+                    'admins': 0,
+                    'regular': 0
                 },
                 'assessments': {
-                    'total_sessions': total_sessions,
-                    'completed_sessions': completed_sessions,
-                    'completion_rate': completion_rate
+                    'total_sessions': 0,
+                    'completed_sessions': 0,
+                    'completion_rate': 0
                 },
                 'settings': {
-                    'total_settings': 4,
-                    'assessment_configs': 2,
-                    'media_settings': 1
+                    'total_settings': 0,
+                    'assessment_configs': 0,
+                    'media_settings': 0
                 }
             }
     
     @staticmethod
     def get_user_sessions_preview():
-        """Get user sessions preview: UserID | Username | Session1 | Session2"""
-        with get_session() as db:
-            # Get regular users only
-            users = db.query(User).join(UserType).filter(UserType.name == 'user').all()
-            
-            preview_data = []
-            for user in users:
-                # Get user's sessions
-                sessions = db.query(AssessmentSession).filter(AssessmentSession.user_id == user.id).order_by(AssessmentSession.created_at).all()
+        """Get user sessions preview: UserID | Username | Session1 | Session2 | PHQ-Sum"""
+        try:
+            with get_session() as db:
+                # Get regular users only
+                users = db.query(User).join(UserType).filter(UserType.name == 'user').all()
                 
-                # Just rawdog the backend status values
-                session1_status = sessions[0].status if len(sessions) >= 1 else "Not done"
-                session2_status = sessions[1].status if len(sessions) >= 2 else "Not done"
+                preview_data = []
+                for user in users:
+                    # Get user's sessions
+                    sessions = db.query(AssessmentSession).filter(
+                        AssessmentSession.user_id == user.id
+                    ).order_by(AssessmentSession.created_at).all()
+                    
+                    # Get PHQ scores for each session
+                    session1_phq_score = None
+                    session2_phq_score = None
+                    
+                    if len(sessions) >= 1:
+                        # Calculate PHQ sum for session 1
+                        session1_responses = db.query(PHQResponse).filter(
+                            PHQResponse.session_id == sessions[0].id
+                        ).all()
+                        session1_phq_score = sum(response.response_value for response in session1_responses) if session1_responses else None
+                    
+                    if len(sessions) >= 2:
+                        # Calculate PHQ sum for session 2
+                        session2_responses = db.query(PHQResponse).filter(
+                            PHQResponse.session_id == sessions[1].id
+                        ).all()
+                        session2_phq_score = sum(response.response_value for response in session2_responses) if session2_responses else None
+                    
+                    # Just rawdog the backend status values
+                    session1_status = sessions[0].status if len(sessions) >= 1 else "Not done"
+                    session2_status = sessions[1].status if len(sessions) >= 2 else "Not done"
 
-                preview_data.append({
-                    'user_id': user.id,
-                    'username': user.uname,
-                    'session1': session1_status,
-                    'session2': session2_status,
-                    'session1_id': sessions[0].id if len(sessions) >= 1 else None,
-                    'session2_id': sessions[1].id if len(sessions) >= 2 else None
-                })
-            
-            return preview_data
+                    preview_data.append({
+                        'user_id': user.id,
+                        'username': user.uname,
+                        'session1': session1_status,
+                        'session2': session2_status,
+                        'session1_phq_score': session1_phq_score,
+                        'session2_phq_score': session2_phq_score,
+                        'session1_id': sessions[0].id if len(sessions) >= 1 else None,
+                        'session2_id': sessions[1].id if len(sessions) >= 2 else None
+                    })
+                
+                return preview_data
+        except Exception as e:
+            # Return empty list if there's an error
+            return []
+    
+    @staticmethod
+    def get_phq_statistics():
+        """Get PHQ-9 score distribution statistics"""
+        try:
+            with get_session() as db:
+                # Get all completed sessions with PHQ responses
+                completed_sessions = db.query(AssessmentSession).filter(
+                    AssessmentSession.status == 'COMPLETED'
+                ).all()
+                
+                # Calculate PHQ scores for each session
+                phq_scores = []
+                for session in completed_sessions:
+                    responses = db.query(PHQResponse).filter(
+                        PHQResponse.session_id == session.id
+                    ).all()
+                    if responses:
+                        score = sum(response.response_value for response in responses)
+                        phq_scores.append(score)
+                
+                # Categorize scores according to PHQ-9 severity levels
+                minimal = len([score for score in phq_scores if 0 <= score <= 4])
+                mild = len([score for score in phq_scores if 5 <= score <= 9])
+                moderate = len([score for score in phq_scores if 10 <= score <= 14])
+                moderate_severe = len([score for score in phq_scores if 15 <= score <= 19])
+                severe = len([score for score in phq_scores if 20 <= score <= 27])
+                
+                return {
+                    'minimal': minimal,
+                    'mild': mild,
+                    'moderate': moderate,
+                    'moderate_severe': moderate_severe,
+                    'severe': severe,
+                    'total_scores': len(phq_scores),
+                    'average_score': round(sum(phq_scores) / len(phq_scores), 2) if phq_scores else 0
+                }
+        except Exception as e:
+            # Return default values if there's an error
+            return {
+                'minimal': 0,
+                'mild': 0,
+                'moderate': 0,
+                'moderate_severe': 0,
+                'severe': 0,
+                'total_scores': 0,
+                'average_score': 0
+            }
+    
+    @staticmethod
+    def get_session_statistics():
+        """Get session completion statistics"""
+        try:
+            with get_session() as db:
+                # Count users by number of sessions
+                user_session_counts = db.query(
+                    User.id,
+                    func.count(AssessmentSession.id).label('session_count')
+                ).outerjoin(AssessmentSession).group_by(User.id).all()
+                
+                # Count users with only session 1, both sessions, etc.
+                session1_only = len([u for u in user_session_counts if u.session_count == 1])
+                both_sessions = len([u for u in user_session_counts if u.session_count >= 2])
+                
+                return {
+                    'session1_only': session1_only,
+                    'both_sessions': both_sessions
+                }
+        except Exception as e:
+            # Return default values if there's an error
+            return {
+                'session1_only': 0,
+                'both_sessions': 0
+            }
+    
+    @staticmethod
+    def get_user_statistics():
+        """Get user engagement statistics"""
+        try:
+            with get_session() as db:
+                # Total users
+                total_users = db.query(User).join(UserType).filter(UserType.name == 'user').count()
+                
+                # Active users (users with at least one session)
+                active_users = db.query(User).join(UserType).join(AssessmentSession).filter(
+                    UserType.name == 'user'
+                ).distinct().count()
+                
+                # Average sessions per user
+                total_sessions = db.query(AssessmentSession).count()
+                avg_sessions_per_user = round(total_sessions / total_users, 2) if total_users > 0 else 0
+                
+                # High engagement (users with 2+ sessions)
+                high_engagement_users = db.query(
+                    User.id
+                ).join(AssessmentSession).group_by(User.id).having(
+                    func.count(AssessmentSession.id) >= 2
+                ).count()
+                
+                # Low engagement (users with 0 sessions)
+                low_engagement_users = db.query(User).join(UserType).filter(
+                    UserType.name == 'user'
+                ).outerjoin(AssessmentSession).filter(
+                    AssessmentSession.id.is_(None)
+                ).count()
+                
+                return {
+                    'active_users': active_users,
+                    'avg_sessions_per_user': avg_sessions_per_user,
+                    'high_engagement': high_engagement_users,
+                    'low_engagement': low_engagement_users
+                }
+        except Exception as e:
+            # Return default values if there's an error
+            return {
+                'active_users': 0,
+                'avg_sessions_per_user': 0,
+                'high_engagement': 0,
+                'low_engagement': 0
+            }

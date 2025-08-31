@@ -15,7 +15,10 @@ def serve_index():
         if current_user.is_admin():
             stats = StatsService.get_dashboard_stats()
             user_sessions = StatsService.get_user_sessions_preview()
-            return render_template("admin/dashboard.html", user=current_user, stats=stats, user_sessions=user_sessions)
+            phq_stats = StatsService.get_phq_statistics()
+            session_stats = StatsService.get_session_statistics()
+            user_stats = StatsService.get_user_statistics()
+            return render_template("admin/dashboard.html", user=current_user, stats=stats, user_sessions=user_sessions, phq_stats=phq_stats, session_stats=session_stats, user_stats=user_stats)
         else:
             return render_template("user/dashboard.html", user=current_user)
     return redirect(url_for('main.auth_page'))

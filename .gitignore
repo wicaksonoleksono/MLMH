@@ -232,3 +232,4 @@ venv/
 .env
 .jpg
 /uploads
+app/static/uploads

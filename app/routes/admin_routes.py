@@ -16,11 +16,17 @@ def dashboard():
     
     stats = StatsService.get_dashboard_stats()
     user_sessions = StatsService.get_user_sessions_preview()
+    phq_stats = StatsService.get_phq_statistics()
+    session_stats = StatsService.get_session_statistics()
+    user_stats = StatsService.get_user_statistics()
     
     return render_template('admin/dashboard.html', 
                          user=current_user,
                          stats=stats,
-                         user_sessions=user_sessions)
+                         user_sessions=user_sessions,
+                         phq_stats=phq_stats,
+                         session_stats=session_stats,
+                         user_stats=user_stats)
 
 
 @admin_bp.route('/phq')

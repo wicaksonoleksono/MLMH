@@ -115,9 +115,31 @@ def consent_page():
     if not active_session:
         return redirect(url_for('main.serve_index'))
 
+    # Get consent settings from database
+    from ..services.admin.consentService import ConsentService
+    db_settings = ConsentService.get_settings()
+    
+    if db_settings:
+        # Get first active setting
+        consent_setting = db_settings[0]
+        consent_data = {
+            'title': consent_setting.get('title', ''),
+            'content': consent_setting.get('content', ''),
+            'footer_text': consent_setting.get('footer_text', '')
+        }
+    else:
+        # Fallback to default settings
+        default_settings = ConsentService.get_default_settings()
+        consent_data = {
+            'title': default_settings.get('title', ''),
+            'content': default_settings.get('content', ''),
+            'footer_text': default_settings.get('footer_text', '')
+        }
+
     return render_template('assessment/consent.html',
                            user=current_user,
-                           session=active_session)
+                           session=active_session,
+                           consent_data=consent_data)
 
 
 @assessment_bp.route('/consent', methods=['POST'])

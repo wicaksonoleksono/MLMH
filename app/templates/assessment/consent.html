@@ -1,123 +1,128 @@
-{% extends "base.html" %}
-
-{% block title %}Informed Consent{% endblock %}
-
-{% block content %}
+{% extends "base.html" %} {% block title %}Informed Consent{% endblock %} {%
+block content %}
 <div class="min-h-full bg-gray-50 py-8 px-4" x-data="consentForm()">
-    <div class="max-w-3xl mx-auto">
-        <!-- Header -->
-        <div class="text-center mb-8">
-            <h1 class="text-3xl font-bold text-gray-900">Formulir Persetujuan</h1>
-            <p class="text-gray-600 mt-2">Silakan baca dengan seksama sebelum melanjutkan</p>
-        </div>
-
-        <!-- Consent Content -->
-        <div class="bg-white rounded-lg shadow-sm border p-8 mb-6">
-            <div x-show="!consentData" class="text-center py-8">
-                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                <p class="text-gray-500 mt-2">Memuat formulir persetujuan...</p>
-            </div>
-
-            <div x-show="consentData" class="space-y-6">
-                <div>
-                    <h2 class="text-2xl font-bold text-gray-900 mb-4" x-text="consentData?.title"></h2>
-                    <div class="prose max-w-none text-gray-700" x-html="formatContent(consentData?.content)"></div>
-                </div>
-
-                <div x-show="consentData?.footer_text" class="border-t pt-4">
-                    <p class="text-sm text-gray-600" x-text="consentData?.footer_text"></p>
-                </div>
-
-                <!-- Agreement Checkbox -->
-                <div class="border-t pt-6">
-                    <label class="flex items-start space-x-3 cursor-pointer">
-                        <input 
-                            type="checkbox" 
-                            x-model="agreed" 
-                            class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                        <span class="text-sm text-gray-700">
-                            Saya telah membaca dan memahami informasi di atas. Saya setuju untuk berpartisipasi dalam penelitian ini secara sukarela.
-                        </span>
-                    </label>
-                </div>
-            </div>
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="flex justify-between">
-            <button 
-                @click="goBack()"
-                class="bg-gray-500 hover:bg-gray-600 text-white font-medium py-3 px-6 rounded-lg transition-colors">
-                ← Kembali
-            </button>
-            
-            <button 
-                @click="submitConsent()"
-                :disabled="!agreed || submitting"
-                :class="agreed && !submitting ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-300 cursor-not-allowed'"
-                class="text-white font-medium py-3 px-6 rounded-lg transition-colors">
-                <span x-show="!submitting">Lanjutkan</span>
-                <span x-show="submitting">Memproses...</span>
-            </button>
-        </div>
+  <div class="max-w-3xl mx-auto">
+    <!-- Header -->
+    <div class="text-center mb-8">
+      <h1 class="text-3xl font-bold text-gray-900">Formulir Persetujuan</h1>
+      <p class="text-gray-600 mt-2">
+        Silakan baca dengan seksama sebelum melanjutkan
+      </p>
     </div>
+
+    <!-- Consent Content -->
+    <div class="bg-white rounded-lg shadow-sm border p-8 mb-6">
+      <div x-show="!consentLoaded" class="text-center py-8">
+        <div
+          class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"
+        ></div>
+        <p class="text-gray-500 mt-2">Memuat formulir persetujuan...</p>
+      </div>
+
+      <div x-show="consentLoaded" class="space-y-6">
+        <div>
+          <h2
+            class="text-2xl font-bold text-gray-900 mb-4"
+            x-text="consentData.title"
+          ></h2>
+          <div
+            class="prose max-w-none text-gray-700"
+            x-html="formatContent(consentData.content)"
+          ></div>
+        </div>
+
+        <div x-show="consentData.footer_text" class="border-t pt-4">
+          <p class="text-sm text-gray-600" x-text="consentData.footer_text"></p>
+        </div>
+
+        <!-- Agreement Checkbox -->
+        <div class="border-t pt-6">
+          <label class="flex items-start space-x-3 cursor-pointer">
+            <input
+              type="checkbox"
+              x-model="agreed"
+              class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+            <span class="text-sm text-gray-700">
+              Saya telah membaca dan memahami informasi di atas. Saya setuju
+              untuk berpartisipasi dalam penelitian ini secara sukarela.
+            </span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="flex justify-between">
+      <button
+        @click="goBack()"
+        class="bg-gray-500 hover:bg-gray-600 text-white font-medium py-3 px-6 rounded-lg transition-colors"
+      >
+        ← Kembali
+      </button>
+
+      <button
+        @click="submitConsent()"
+        :disabled="!agreed || submitting"
+        :class="agreed && !submitting ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-300 cursor-not-allowed'"
+        class="text-white font-medium py-3 px-6 rounded-lg transition-colors"
+      >
+        <span x-show="!submitting">Lanjutkan</span>
+        <span x-show="submitting">Memproses...</span>
+      </button>
+    </div>
+  </div>
 </div>
-{% endblock %}
-
-{% block scripts %}
+{% endblock %} {% block scripts %}
 <script>
-function consentForm() {
+  function consentForm() {
     return {
-        sessionId: "{{ session.id }}",
-        consentData: null,
-        agreed: false,
-        submitting: false,
+      sessionId: "{{ session.id }}",
+      consentData: {
+        title: "{{ consent_data.title|safe }}",
+        content: `{{ consent_data.content|safe }}`,
+        footer_text: "{{ consent_data.footer_text|safe }}",
+      },
+      consentLoaded: true,
+      agreed: false,
+      submitting: false,
 
-        async init() {
-            await this.loadConsentForm();
-        },
+      init() {
+        // Consent data is already loaded from the server
+      },
 
-        async loadConsentForm() {
-            try {
-                const result = await apiCall('/consent/form', 'GET');
-                this.consentData = result;
-            } catch (error) {
-                alert('Gagal memuat formulir persetujuan: ' + error.message);
-            }
-        },
+      formatContent(content) {
+        if (!content) return "";
+        return content.replace(/\n/g, "<br>");
+      },
 
-        formatContent(content) {
-            if (!content) return '';
-            return content.replace(/\n/g, '<br>');
-        },
+      async submitConsent() {
+        if (!this.agreed || this.submitting) return;
 
-        async submitConsent() {
-            if (!this.agreed || this.submitting) return;
-            
-            this.submitting = true;
-            try {
-                const result = await apiCall('/assessment/consent', 'POST', {
-                    session_id: this.sessionId,
-                    consent_agreed: true,
-                    timestamp: new Date().toISOString()
-                });
+        this.submitting = true;
+        try {
+          const result = await apiCall("/assessment/consent", "POST", {
+            session_id: this.sessionId,
+            consent_agreed: true,
+            timestamp: new Date().toISOString(),
+          });
 
-                if (result.status === 'OLKORECT') {
-                    window.location.href = '/assessment/camera-check';
-                } else {
-                    alert(result.error || 'Gagal menyimpan persetujuan');
-                }
-            } catch (error) {
-                alert('Kesalahan: ' + error.message);
-            } finally {
-                this.submitting = false;
-            }
-        },
-
-        goBack() {
-            window.location.href = '/assessment';
+          if (result.status === "OLKORECT") {
+            window.location.href = "/assessment/camera-check";
+          } else {
+            alert(result.error || "Gagal menyimpan persetujuan");
+          }
+        } catch (error) {
+          alert("Kesalahan: " + error.message);
+        } finally {
+          this.submitting = false;
         }
+      },
+
+      goBack() {
+        window.location.href = "/assessment";
+      },
     };
-}
+  }
 </script>
 {% endblock %}

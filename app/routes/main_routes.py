@@ -24,13 +24,9 @@ def serve_index():
     return redirect(url_for('main.auth_page'))
 
 @main_bp.route('/auth')
-@raw_response
 def auth_page():
-    """Authentication page (login/register)."""
-    if current_user.is_authenticated:
-        return redirect(url_for('main.serve_index'))
-
-    return render_template('auth/login_register.html')
+    """Redirect to login page."""
+    return redirect(url_for('auth.login'))
 
 
 @main_bp.route('/error/settings-not-configured')

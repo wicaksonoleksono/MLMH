@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Masuk - Penilaian Kesehatan Mental{% endblock %}
+
+{% block content %}
+<div class="min-h-full flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+  <div class="max-w-md w-full space-y-8">
+    <div>
+      <h2 class="mt-6 text-center text-3xl font-bold tracking-tight text-gray-900">
+        Masuk ke akun Anda
+      </h2>
+      <p class="mt-2 text-center text-sm text-gray-600">
+        Penilaian Kesehatan Mental
+      </p>
+    </div>
+    
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="rounded-md p-4 {% if category == 'error' %}bg-red-50{% else %}bg-green-50{% endif %}">
+            <div class="flex">
+              <div class="flex-shrink-0">
+                {% if category == 'error' %}
+                  <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                  </svg>
+                {% else %}
+                  <svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                  </svg>
+                {% endif %}
+              </div>
+              <div class="ml-3">
+                <p class="text-sm font-medium {% if category == 'error' %}text-red-800{% else %}text-green-800{% endif %}">
+                  {{ message }}
+                </p>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    
+    <form class="mt-8 space-y-6" method="POST">
+      <div class="space-y-4">
+        <div>
+          <label for="username" class="block text-sm font-medium text-gray-700">
+            Nama Pengguna
+          </label>
+          <input 
+            id="username" 
+            name="username" 
+            type="text" 
+            required 
+            value="{{ request.form.username if request.form.username else '' }}"
+            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm 
+                   focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500
+                   placeholder-gray-400">
+        </div>
+        
+        <div>
+          <label for="password" class="block text-sm font-medium text-gray-700">
+            Kata Sandi
+          </label>
+          <input 
+            id="password" 
+            name="password" 
+            type="password" 
+            required 
+            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm 
+                   focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500
+                   placeholder-gray-400">
+        </div>
+      </div>
+
+      <div>
+        <button 
+          type="submit" 
+          class="group relative w-full flex justify-center py-3 px-4 border border-transparent 
+                 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 
+                 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500
+                 transition-colors">
+          Masuk
+        </button>
+      </div>
+      
+      <div class="text-center">
+        <a href="{{ url_for('auth.register') }}" class="text-sm text-indigo-600 hover:text-indigo-500">
+          Belum punya akun? Daftar
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

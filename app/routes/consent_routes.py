@@ -15,13 +15,20 @@ def get_consent_form():
     db_settings = ConsentService.get_settings()
     
     if not db_settings:
-        return jsonify({"error": "Consent settings not configured"}), 400
-    
-    setting = db_settings[0]  # Get first active setting
-    consent_data = {
-        'title': setting.get('title', ''),
-        'content': setting.get('content', ''),
-        'footer_text': setting.get('footer_text', '')
-    }
+        # Return default settings if no active settings found
+        default_settings = ConsentService.get_default_settings()
+        consent_data = {
+            'title': default_settings.get('title', ''),
+            'content': default_settings.get('content', ''),
+            'footer_text': default_settings.get('footer_text', '')
+        }
+    else:
+        # Get first active setting
+        setting = db_settings[0]
+        consent_data = {
+            'title': setting.get('title', ''),
+            'content': setting.get('content', ''),
+            'footer_text': setting.get('footer_text', '')
+        }
     
     return jsonify(consent_data)

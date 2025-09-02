@@ -1,4 +1,4 @@
-from flask import Blueprint, request, redirect, url_for, jsonify
+from flask import Blueprint, request, redirect, url_for, jsonify, render_template, flash
 from flask_login import login_user, logout_user, login_required, current_user
 from ..services.shared.usManService import UserManagerService
 from ..decorators import raw_response, api_response
@@ -7,11 +7,112 @@ from ..utils.jwt_utils import JWTManager
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 
 
-@auth_bp.route('/register', methods=['POST'])
-@api_response
+@auth_bp.route('/login', methods=['GET', 'POST'])
+@raw_response
+def login():
+    """User login with JWT token."""
+    if request.method == 'GET':
+        if current_user.is_authenticated:
+            return redirect(url_for('main.serve_index'))
+        return render_template('auth/login.html')
+    
+    # Handle POST request
+    if request.is_json:
+        # Handle API request (JSON)
+        data = request.get_json()
+        username = data['uname']
+        password = data['password']
+    else:
+        # Handle form submission
+        username = request.form.get('username')
+        password = request.form.get('password')
+
+    user_data = UserManagerService.authenticate_user(username, password)
+
+    if user_data:
+        token = JWTManager.generate_token(user_data)
+
+        # Create SimpleUser for Flask-Login session support (for templates)
+        from ..utils.auth_models import SimpleUser
+        simple_user = SimpleUser(user_data)
+        login_user(simple_user)
+
+        # If this was a form submission, redirect to index
+        if not request.is_json:
+            return redirect(url_for('main.serve_index'))
+
+        # If this was an API request, return JSON
+        return {
+            "status": "OLKORECT",
+            "message": "Login berhasil",
+            "data": {
+                "token": token,
+                "user": {
+                    "id": user_data['id'],
+                    "uname": user_data['uname'],
+                    "type": user_data['user_type_name'],
+                    "is_admin": user_data['is_admin']
+                }
+            }
+        }
+
+    # If this was a form submission, show error and redisplay form
+    if not request.is_json:
+        flash('Nama pengguna atau kata sandi salah.', 'error')
+        return render_template('auth/login.html'), 401
+
+    # If this was an API request, return JSON error
+    return {"status": "SNAFU", "error": "Nama pengguna atau kata sandi salah"}, 401
+
+
+@auth_bp.route('/register', methods=['GET', 'POST'])
+@raw_response
 def register():
     """User registration."""
-    data = request.get_json()
+    if request.method == 'GET':
+        if current_user.is_authenticated:
+            return redirect(url_for('main.serve_index'))
+        return render_template('auth/register.html')
+    
+    # Handle POST request
+    if request.is_json:
+        # Handle API request (JSON)
+        data = request.get_json()
+    else:
+        # Handle form submission
+        # Validate required fields
+        required_fields = ['username', 'email', 'password', 'confirm_password', 'age', 'gender', 'educational_level', 'cultural_background']
+        for field in required_fields:
+            if not request.form.get(field):
+                flash(f'Field {field} harus diisi.', 'error')
+                return render_template('auth/register.html'), 400
+        
+        # Validate password confirmation
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        
+        if password != confirm_password:
+            flash('Kata sandi dan konfirmasi kata sandi tidak cocok.', 'error')
+            return render_template('auth/register.html'), 400
+            
+        if len(password) < 6:
+            flash('Kata sandi harus minimal 6 karakter.', 'error')
+            return render_template('auth/register.html'), 400
+        
+        # Create data dict from form
+        data = {
+            'uname': request.form.get('username'),
+            'password': password,
+            'email': request.form.get('email'),
+            'phone': None,  # We don't collect phone in the new form
+            'age': int(request.form.get('age')) if request.form.get('age') else None,
+            'gender': request.form.get('gender') or None,
+            'educational_level': request.form.get('educational_level') or None,
+            'cultural_background': request.form.get('cultural_background') or None,
+            'medical_conditions': request.form.get('medical_conditions') or None,
+            'medications': request.form.get('medications') or None,
+            'emergency_contact': request.form.get('emergency_contact') or None
+        }
 
     # Extract extended profile fields (only for regular users)
     try:
@@ -29,41 +130,22 @@ def register():
             medications=data.get('medications') or None,
             emergency_contact=data.get('emergency_contact') or None
         )
+        
+        # If this was a form submission, show success message and redirect
+        if not request.is_json:
+            flash('Pendaftaran berhasil! Silakan masuk dengan akun Anda.', 'success')
+            return redirect(url_for('auth.login'))
+        
+        # If this was an API request, return JSON
         return {"message": "Pendaftaran berhasil!"}
     except ValueError as e:
+        # If this was a form submission, show error message
+        if not request.is_json:
+            flash(str(e), 'error')
+            return render_template('auth/register.html'), 400
+        
+        # If this was an API request, return JSON error
         return {"error": str(e)}, 400
-
-
-@auth_bp.route('/login', methods=['POST'])
-@raw_response
-def login():
-    """User login with JWT token."""
-    data = request.get_json()
-    user_data = UserManagerService.authenticate_user(data['uname'], data['password'])
-
-    if user_data:
-        token = JWTManager.generate_token(user_data)
-
-        # Create SimpleUser for Flask-Login session support (for templates)
-        from ..utils.auth_models import SimpleUser
-        simple_user = SimpleUser(user_data)
-        login_user(simple_user)
-
-        return {
-            "status": "OLKORECT",
-            "message": "Login berhasil",
-            "data": {
-                "token": token,
-                "user": {
-                    "id": user_data['id'],
-                    "uname": user_data['uname'],
-                    "type": user_data['user_type_name'],
-                    "is_admin": user_data['is_admin']
-                }
-            }
-        }
-
-    return {"status": "SNAFU", "error": "Nama pengguna atau kata sandi salah"}, 401
 
 
 @auth_bp.route('/logout', methods=['GET', 'POST'])

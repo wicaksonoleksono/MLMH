@@ -206,6 +206,7 @@ class CameraManager {
             const captureIds = this.captures.map(capture => capture.capture_id);
 
             if (responseIds && responseIds.length > 0) {
+                // Build proper linking data structure
                 const linkData = {
                     capture_ids: captureIds,
                     phq_response_ids: this.assessmentType === 'phq' ? responseIds : [],

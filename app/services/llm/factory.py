@@ -13,10 +13,9 @@ class LLMFactory:
     
     # Default configurations
     DEFAULT_STREAMING_CONFIG = {
-        "temperature": 0.2,
+        "temperature": 0.1,
         "streaming": True,
-        "max_tokens": 1000,
-        "timeout": 30
+        "max_tokens": 2000
     }
     
     DEFAULT_ANALYSIS_CONFIG = {

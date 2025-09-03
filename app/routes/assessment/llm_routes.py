@@ -29,42 +29,7 @@ def start_conversation_route(session_id):
     return result
 
 
-@llm_assessment_bp.route('/stream/<int:session_id>')
-@user_required
-def stream_conversation(session_id):
-    """SSE endpoint for streaming LLM responses"""
-    # Validate session belongs to current user
-    session = SessionService.get_session(session_id)
-    if not session or int(session.user_id) != int(current_user.id):
-        return jsonify({"error": "Session not found or access denied"}), 403
 
-    def generate():
-        # Get the user message from query parameter
-        user_message = request.args.get('message', '')
-
-        if not user_message:
-            yield f"data: {json.dumps({'type': 'error', 'message': 'No message provided'}, ensure_ascii=False)}\n\n"
-            return
-
-        # Stream the conversation
-        try:
-            chat_service = LLMChatService()
-            for chunk in chat_service.stream_ai_response(session_id, user_message):
-                yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
-                time.sleep(0.01)  # Small delay to prevent overwhelming
-        except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
-
-    return Response(
-        stream_with_context(generate()),
-        mimetype='text/event-stream',
-        headers={
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Headers': 'Cache-Control'
-        }
-    )
 
 
 @llm_assessment_bp.route('/send-message/<session_id>', methods=['POST'])
@@ -138,30 +103,7 @@ def stream_response(message_id):
     )
 
 
-@llm_assessment_bp.route('/message/<int:session_id>', methods=['POST'])
-@user_required
-@api_response
-def send_message_route(session_id):
-    """Send user message and get AI response (non-streaming)"""
-    # Validate session belongs to current user
-    session = SessionService.get_session(session_id)
-    if not session or int(session.user_id) != int(current_user.id):
-        return {"message": "Session not found or access denied"}, 403
-    data = request.get_json()
-    user_message = data.get('message', '')
-    if not user_message:
-        return {"message": "Message is required"}, 400
-    # Collect streaming response into single result
-    chat_service = LLMChatService()
-    full_response = ""
-    for chunk in chat_service.stream_ai_response(session_id, user_message):
-        full_response += chunk
-    
-    return {
-        "status": "success", 
-        "ai_response": full_response,
-        "conversation_ended": LLMChatService.is_conversation_complete(session_id)
-    }
+
 
 
 @llm_assessment_bp.route('/conversations/<int:session_id>', methods=['GET'])
@@ -380,118 +322,10 @@ def check_conversation_complete(session_id):
     }
 
 
-@llm_assessment_bp.route('/current-turn/<int:session_id>', methods=['GET'])
-@user_required
-@api_response
-def get_current_turn(session_id):
-    """Get current conversation turn for simple UI flow"""
-    # Validate session belongs to current user
-    session = SessionService.get_session(session_id)
-    if not session or session.user_id != int(current_user.id):
-        return {"message": "Session not found or access denied"}, 403
-
-    try:
-        # Check if conversation is complete
-        is_complete = LLMConversationService.check_conversation_complete(session_id)
-        if is_complete:
-            analysis = LLMConversationService.get_session_analysis(session_id)
-            total_turns = LLMConversationService.get_total_turns(session_id)
-            return {
-                "conversation_ended": True,
-                "total_turns": total_turns,
-                "analysis": {
-                    "total_aspects_detected": analysis.total_aspects_detected if analysis else 0,
-                    "average_severity": analysis.average_severity_score if analysis else 0.0
-                } if analysis else None
-            }
-
-        # Get current turn or start new conversation
-        current_turn_data = LLMConversationService.get_current_turn_for_session(session_id)
-        if not current_turn_data:
-            # Start new conversation
-            result = LLMChatService.start_conversation(session_id)
-            if result.get('status') != 'success':
-                return {"message": "Failed to start conversation"}, 500
-
-            return {
-                "conversation_ended": False,
-                "turn_number": 1,
-                "ai_message": result['data']['ai_response']
-            }
-
-        return {
-            "conversation_ended": False,
-            "turn_number": current_turn_data['turn_number'],
-            "ai_message": current_turn_data['ai_message']
-        }
-
-    except Exception as e:
-        return {"message": str(e)}, 500
 
 
-@llm_assessment_bp.route('/submit-turn/<int:session_id>', methods=['POST'])
-@user_required
-@api_response
-def submit_turn(session_id):
-    """Submit user response and get next turn"""
-    # Validate session belongs to current user
-    session = SessionService.get_session(session_id)
-    if not session or session.user_id != int(current_user.id):
-        return {"message": "Session not found or access denied"}, 403
 
-    data = request.get_json()
-    turn_number = data.get('turn_number')
-    user_message = data.get('user_message', '').strip()
 
-    if not user_message:
-        return {"message": "User message is required"}, 400
-
-    try:
-        # Send message and get response via streaming
-        chat_service = LLMChatService()
-        full_response = ""
-        for chunk in chat_service.stream_ai_response(session_id, user_message):
-            full_response += chunk
-        
-        result = {
-            "status": "success",
-            "ai_response": full_response,
-            "conversation_ended": LLMChatService.is_conversation_complete(session_id)
-        }
-        if result.get('status') != 'success':
-            return {"message": "Failed to send message"}, 500
-
-        # Check if conversation ended
-        if result['data'].get('has_end_conversation'):
-            # Get analysis and total turns for reference
-            analysis = LLMConversationService.get_session_analysis(session_id)
-            total_turns = LLMConversationService.get_total_turns(session_id)
-            
-            # Complete LLM assessment and get next step directly
-            from ...services.sessionService import SessionService
-            completion_result = SessionService.complete_llm_and_get_next_step(session_id)
-
-            return {
-                "conversation_ended": True,
-                "total_turns": total_turns,
-                "analysis": {
-                    "total_aspects_detected": analysis.total_aspects_detected if analysis else 0,
-                    "average_severity": analysis.average_severity_score if analysis else 0.0
-                } if analysis else None,
-                "next_redirect": completion_result["next_redirect"],
-                "session_status": completion_result["session_status"],
-                "message": completion_result["message"]
-            }
-
-        # Return next turn
-        return {
-            "conversation_ended": False,
-            "next_turn": turn_number + 1,
-            "ai_message": result['data']['ai_response']
-        }
-
-    except Exception as e:
-        return {"message": str(e)}, 500
 
 
 @llm_assessment_bp.route('/save-conversation/<int:session_id>', methods=['POST'])
@@ -565,6 +399,126 @@ def debug_session_status(session_id):
 # NEW SSE STREAMING ENDPOINTS (AssessmentOrchestrator Integration)
 # ============================================================================
 
+@llm_assessment_bp.route('/initial-greeting/<int:session_id>')
+@user_required
+def initial_greeting(session_id):
+    """SSE endpoint for streaming the initial AI greeting"""
+    # Validate session belongs to current user
+    session = SessionService.get_session(session_id)
+    if not session or int(session.user_id) != int(current_user.id):
+        return Response("data: " + json.dumps({'type': 'error', 'message': 'Session not found or access denied'}, ensure_ascii=False) + "\n\n",
+                       mimetype='text/event-stream'), 403
+
+    def generate():
+        try:
+            yield f"data: {json.dumps({'type': 'stream_start'}, ensure_ascii=False)}\n\n"
+            
+            # Check if this is a special trigger message for initial greeting
+            if user_message == '-':
+                # Get the system prompt to extract the greeting
+                chat_history = session.session_metadata.get('chat_history', {}) if session.session_metadata else {}
+                system_prompt = chat_history.get('system_prompt', '') if chat_history else ''
+                
+                # Extract the initial greeting from the system prompt
+                greeting = ""
+                if system_prompt:
+                    try:
+                        # Look for the first complete sentence that introduces Anisa
+                        import re
+                        # Pattern to match the introduction sentence
+                        pattern = r'(Anda adalah Anisa.*?psikologi yang supportive.*?mendengarkan curhatan orang lain)'
+                        match = re.search(pattern, system_prompt)
+                        if match:
+                            greeting = match.group(1)
+                        else:
+                            # Alternative: Get the first few lines that don't contain aspect indicators
+                            lines = system_prompt.split('\n')
+                            greeting_lines = []
+                            for line in lines:
+                                line = line.strip()
+                                if line and not line.startswith('-') and 'indikator-indikators' not in line.lower() and 'berikut adalah' not in line.lower():
+                                    greeting_lines.append(line)
+                                elif 'indikator-indikators' in line.lower() or 'berikut adalah' in line.lower():
+                                    break
+                            
+                            if greeting_lines:
+                                greeting = ' '.join(greeting_lines[:2]).strip()  # Take first 2 lines
+                        
+                    except Exception as extract_error:
+                        pass  # Silently fail and use fallback
+                
+                # If we still don't have a greeting, use a simple one
+                if not greeting or len(greeting.strip()) < 10:
+                    greeting = "Halo! Saya Anisa, teman kamu untuk ngobrol. Ada yang ingin kamu curahkan hari ini?"
+                
+                # Add the greeting to LangChain history and database
+                from langchain_core.messages import AIMessage
+                from ...services.llm.chatService import get_by_session_id
+                history = get_by_session_id(str(session_id))
+                history.add_messages([AIMessage(content=greeting)])
+                
+                # Save to database
+                try:
+                    from ...services.assessment.llmService import LLMConversationService
+                    LLMConversationService.create_conversation_turn(
+                        session_id=session_id,
+                        turn_number=1,
+                        ai_message=greeting,
+                        user_message="",  # No user message for initial greeting
+                        ai_model_used="system_greeting"  # Special identifier for initial greeting
+                    )
+                except Exception as db_error:
+                    pass  # Silently fail - logging is handled elsewhere
+                
+                # Stream the greeting character by character
+                for char in greeting:
+                    yield f"data: {json.dumps({'type': 'chunk', 'content': char}, ensure_ascii=False)}\n\n"
+                    time.sleep(0.02)  # Small delay for natural typing effect
+                
+                # Add a small pause before ending
+                time.sleep(0.5)
+                yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': False}, ensure_ascii=False)}\n\n"
+            
+            # Add the initial greeting to the LangChain history
+            from langchain_core.messages import AIMessage
+            from ...services.llm.chatService import get_by_session_id
+            from ...services.assessment.llmService import LLMConversationService
+            history = get_by_session_id(str(session_id))
+            history.add_messages([AIMessage(content=greeting)])
+            
+            # Save the initial greeting to the database
+            try:
+                LLMConversationService.create_conversation_turn(
+                    session_id=session_id,
+                    turn_number=1,
+                    ai_message=greeting,
+                    user_message="",  # No user message for initial greeting
+                    ai_model_used="system_greeting"  # Special identifier for initial greeting
+                )
+            except Exception as db_error:
+                # Log the error but don't fail the streaming
+                print(f"Warning: Failed to save initial greeting to database: {db_error}")
+            
+            # Stream the greeting character by character for a natural effect
+            for char in greeting:
+                yield f"data: {json.dumps({'type': 'chunk', 'data': char}, ensure_ascii=False)}\n\n"
+                time.sleep(0.02)  # Small delay for natural typing effect
+            
+            # Add a small pause before ending
+            time.sleep(0.5)
+            yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': False}, ensure_ascii=False)}\n\n"
+            
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
+
+    response = Response(stream_with_context(generate()), mimetype='text/event-stream')
+    response.headers['Cache-Control'] = 'no-cache'
+    response.headers['X-Accel-Buffering'] = 'no'
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Cache-Control'
+    return response
+
+
 @llm_assessment_bp.route('/start-chat/<session_id>', methods=['POST'])
 @user_required
 @api_response
@@ -582,7 +536,7 @@ def start_chat(session_id):
         return {"status": "error", "message": str(e)}, 500
 
 
-@llm_assessment_bp.route('/chat-stream-new/<int:session_id>', methods=['POST'])
+@llm_assessment_bp.route('/chat-stream-new/<session_id>', methods=['POST'])
 @user_required
 def chat_stream_new(session_id):
     """SSE streaming endpoint for real-time chat"""
@@ -601,16 +555,83 @@ def chat_stream_new(session_id):
 
     def generate():
         try:
-            # Stream AI response
-            for chunk in LLMChatService.stream_ai_response(session_id, user_message):
-                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk}, ensure_ascii=False)}\n\n"
-                time.sleep(0.01)  # Small delay to prevent overwhelming
-            
-            # Check if conversation ended
-            if LLMChatService.is_conversation_complete(session_id):
-                yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': True}, ensure_ascii=False)}\n\n"
-            else:
+            # Check if this is a special trigger message for initial greeting
+            if user_message == '-':
+                # Get the system prompt to extract the greeting
+                chat_history = session.session_metadata.get('chat_history', {}) if session.session_metadata else {}
+                system_prompt = chat_history.get('system_prompt', '') if chat_history else ''
+                
+                # Extract the initial greeting from the system prompt
+                greeting = ""
+                if system_prompt:
+                    try:
+                        # Look for the first complete sentence that introduces Anisa
+                        import re
+                        # Pattern to match the introduction sentence
+                        pattern = r'(Anda adalah Anisa.*?psikologi yang supportive.*?mendengarkan curhatan orang lain)'
+                        match = re.search(pattern, system_prompt)
+                        if match:
+                            greeting = match.group(1)
+                        else:
+                            # Alternative: Get the first few lines that don't contain aspect indicators
+                            lines = system_prompt.split('\n')
+                            greeting_lines = []
+                            for line in lines:
+                                line = line.strip()
+                                if line and not line.startswith('-') and 'indikator-indikator' not in line.lower() and 'berikut adalah' not in line.lower():
+                                    greeting_lines.append(line)
+                                elif 'indikator-indikator' in line.lower() or 'berikut adalah' in line.lower():
+                                    break
+                            
+                            if greeting_lines:
+                                greeting = ' '.join(greeting_lines[:2]).strip()  # Take first 2 lines
+                        
+                    except Exception as extract_error:
+                        pass  # Silently fail and use fallback
+                
+                # If we still don't have a greeting, use a simple one
+                if not greeting or len(greeting.strip()) < 10:
+                    greeting = "Halo! Saya Anisa, teman kamu untuk ngobrol. Ada yang ingin kamu curahkan hari ini?"
+                
+                # Add the greeting to LangChain history and database
+                from langchain_core.messages import AIMessage
+                from ...services.llm.chatService import get_by_session_id
+                history = get_by_session_id(str(session_id))
+                history.add_messages([AIMessage(content=greeting)])
+                
+                # Save to database
+                try:
+                    from ...services.assessment.llmService import LLMConversationService
+                    LLMConversationService.create_conversation_turn(
+                        session_id=session_id,
+                        turn_number=1,
+                        ai_message=greeting,
+                        user_message="",  # No user message for initial greeting
+                        ai_model_used="system_greeting"  # Special identifier for initial greeting
+                    )
+                except Exception as db_error:
+                    pass  # Silently fail - logging is handled elsewhere
+                
+                # Stream the greeting character by character
+                for char in greeting:
+                    yield f"data: {json.dumps({'type': 'chunk', 'content': char}, ensure_ascii=False)}\n\n"
+                    time.sleep(0.02)  # Small delay for natural typing effect
+                
+                # Add a small pause before ending
+                time.sleep(0.5)
                 yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': False}, ensure_ascii=False)}\n\n"
+            else:
+                # Regular message handling
+                # Stream AI response
+                for chunk in LLMChatService.stream_ai_response(session_id, user_message):
+                    yield f"data: {json.dumps({'type': 'chunk', 'content': chunk}, ensure_ascii=False)}\n\n"
+                    time.sleep(0.01)  # Small delay to prevent overwhelming
+                
+                # Check if conversation ended
+                if LLMChatService.is_conversation_complete(session_id):
+                    yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': True}, ensure_ascii=False)}\n\n"
+                else:
+                    yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': False}, ensure_ascii=False)}\n\n"
                 
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
@@ -640,18 +661,4 @@ def finish_chat(session_id):
         return {"status": "error", "message": str(e)}, 500
 
 
-@llm_assessment_bp.route('/chat-history/<int:session_id>', methods=['GET'])
-@user_required
-@api_response  
-def get_chat_history(session_id):
-    """Get chat history for session"""
-    # Validate session belongs to current user
-    session = SessionService.get_session(session_id)
-    if not session or int(session.user_id) != int(current_user.id):
-        return {"message": "Session not found or access denied"}, 403
-    
-    try:
-        result = LLMChatService.get_session_chat_history(session_id)
-        return result
-    except Exception as e:
-        return {"status": "error", "message": str(e)}, 500
+

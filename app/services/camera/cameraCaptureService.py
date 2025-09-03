@@ -217,16 +217,11 @@ class CameraCaptureService:
             old_captures = db.query(CameraCapture).filter(
                 CameraCapture.timestamp < cutoff_date
             ).all()
-            
             for capture in old_captures:
-                # Delete file if it exists
                 file_path = os.path.join(upload_path, capture.filename)
                 if os.path.exists(file_path):
                     os.remove(file_path)
-                
-                # Delete database record
                 db.delete(capture)
-            
             db.commit()
             return len(old_captures)
 

@@ -1,15 +1,15 @@
-{% extends "base.html" %} {% block title %}Open Question Assessment - Chat dengan Anisa{%
-endblock %} {% block content %}
-<div class="min-h-screen bg-gray-50" x-data="chatInterface()">
+{% extends "base.html" %} {% block title %}Open Question Assessment - Chat
+dengan Anisa{% endblock %} {% block content %}
+<div class="min-h-screen bg-gray-50" x-data="chatInterface()" x-init="init()">
   <!-- Navigation -->
   <nav class="bg-white shadow-sm border-b border-gray-200">
     <div class="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
       <div class="flex items-center space-x-4">
         <h1 class="text-xl font-semibold text-gray-900">Chat dengan Anisa</h1>
-        <div
-          class="bg-gradient-to-r from-green-500 to-teal-500 rounded-lg px-3 py-1"
-        >
-          <span class="text-white font-medium text-sm">Open Question Assessment</span>
+        <div class="bg-green-600 rounded-lg px-3 py-1">
+          <span class="text-white font-medium text-sm"
+            >Open Question Assessment</span
+          >
         </div>
       </div>
       <div class="flex items-center space-x-4">
@@ -75,7 +75,7 @@ endblock %} {% block content %}
             <!-- AI Avatar -->
             <div
               x-show="message.type === 'ai'"
-              class="w-10 h-10 bg-gradient-to-r from-green-500 to-teal-500 rounded-full flex items-center justify-center flex-shrink-0"
+              class="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0"
             >
               <svg
                 class="w-5 h-5 text-white"
@@ -123,7 +123,7 @@ endblock %} {% block content %}
             <!-- User Avatar -->
             <div
               x-show="message.type === 'user'"
-              class="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center flex-shrink-0"
+              class="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0"
             >
               <span class="text-white font-medium"
                 >{{ current_user.uname[0].upper() }}</span
@@ -148,7 +148,7 @@ endblock %} {% block content %}
           <button
             type="submit"
             :disabled="!currentMessage.trim() || isTyping || conversationEnded"
-            class="px-6 py-3 bg-gradient-to-r from-green-500 to-teal-500 text-white rounded-lg font-medium hover:from-green-600 hover:to-teal-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+            class="px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
           >
             <span x-show="!isTyping" class="flex items-center">
               <span>Kirim</span>
@@ -175,23 +175,17 @@ endblock %} {% block content %}
           </button>
         </form>
 
-        <!-- Chat Status and Controls -->
         <div class="mt-4 flex justify-between items-center">
-          <div class="flex items-center space-x-4 text-gray-600">
-            <span class="text-sm"
-              >Pertukaran: <span x-text="exchangeCount" class="font-mono"></span
-            ></span>
-            <span class="text-sm"
-              >Pesan: <span x-text="messages.length" class="font-mono"></span
-            ></span>
-          </div>
+            <div class="flex items-center space-x-4 text-gray-600">
+              <span class="text-sm"
+                >Pertukaran: <span x-text="exchangeCount" class="font-mono"></span
+              ></span>
+              <span class="text-sm"
+                >Pesan: <span x-text="messages.length" class="font-mono"></span
+              ></span>
+            </div>
 
-
-          <!-- Conversation Ended Message -->
-          <div x-show="conversationEnded" class="text-green-600 font-medium">
-            ✅ Percakapan selesai! Mengarahkan ke tahap selanjutnya...
-          </div>
-        </div>
+            <!-- Conversation Ended Message -->
       </div>
     </div>
   </div>
@@ -220,47 +214,101 @@ endblock %} {% block content %}
 
       // Initialize
       async init() {
+        console.log("Chat interface initializing...");
         this.startConversationTimer();
         await this.initCamera();
-        this.initializeChat();
+        console.log("About to initialize chat...");
+        await this.initializeChat();
         this.setupAbandonTracking();
+        // Check if this is a legitimate refresh that should trigger reset
+        await this.checkForRefreshReset();
+        console.log("Chat interface initialized");
       },
 
       async initCamera() {
         try {
-          const cameraResult = await apiCall(`/assessment/camera/settings/${this.sessionId}`);
+          const cameraResult = await apiCall(
+            `/assessment/camera/settings/${this.sessionId}`
+          );
           const cameraSettings = cameraResult?.data?.data?.settings || {};
-          
-          this.cameraManager = new CameraManager(this.sessionId, 'llm', cameraSettings);
+
+          this.cameraManager = new CameraManager(
+            this.sessionId,
+            "llm",
+            cameraSettings
+          );
           await this.cameraManager.initialize();
         } catch (error) {
           // Camera initialization failed - continue without camera
         }
       },
 
+      async checkForRefreshReset() {
+        // Check if this is a legitimate refresh that should trigger a session reset
+        const isRefreshing = sessionStorage.getItem(
+          "refreshingSession_{{ session.id }}"
+        );
+        if (isRefreshing === "true") {
+          sessionStorage.removeItem("refreshingSession_{{ session.id }}");
+
+          // Only reset if we're not in the middle of a normal navigation flow
+          // Check if we're coming from another assessment page (normal navigation)
+          const referrer = document.referrer;
+          const isFromAssessmentPage =
+            referrer.includes("/assessment/phq") ||
+            referrer.includes("/assessment/llm");
+
+          if (!isFromAssessmentPage) {
+            console.log(
+              "Resetting session {{ session.id }} due to page refresh"
+            );
+            try {
+              await fetch(
+                `/assessment/reset-session-on-refresh/{{ session.id }}`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                }
+              );
+            } catch (error) {
+              console.log("Session reset failed:", error);
+            } finally {
+              // Redirect to main menu
+              window.location.href = `/`;
+            }
+          }
+        }
+      },
+
       setupAbandonTracking() {
         // Track when user leaves the page
         let assessmentCompleted = false;
-        window.addEventListener('beforeunload', () => {
+        window.addEventListener("beforeunload", () => {
           if (!assessmentCompleted && !this.conversationEnded) {
             // Use sendBeacon for reliable tracking when page unloads
-            navigator.sendBeacon(`/assessment/abandon/${this.sessionId}`,
-              JSON.stringify({ reason: 'User left LLM assessment page' }));
+            navigator.sendBeacon(
+              `/assessment/abandon/${this.sessionId}`,
+              JSON.stringify({ reason: "User left LLM assessment page" })
+            );
           }
         });
 
         // Track when user navigates away
-        window.addEventListener('pagehide', () => {
+        window.addEventListener("pagehide", () => {
           if (!assessmentCompleted && !this.conversationEnded) {
             fetch(`/assessment/abandon/${this.sessionId}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ reason: 'User navigated away from LLM assessment' }),
-              keepalive: true
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                reason: "User navigated away from LLM assessment",
+              }),
+              keepalive: true,
             }).catch(() => {}); // Ignore errors
           }
         });
-        
+
         // Set completion flag to prevent abandon calls on successful redirect
         this.markAsCompleted = () => {
           assessmentCompleted = true;
@@ -272,6 +320,7 @@ endblock %} {% block content %}
       },
 
       async initializeChat() {
+        console.log("Initializing chat...");
         try {
           // Start chat session
           const response = await fetch(
@@ -286,67 +335,24 @@ endblock %} {% block content %}
           );
 
           const result = await response.json();
+          console.log("Start chat response:", result);
 
-          if (result.status === "success" && result.initial_message) {
-            // Add initial AI greeting
-            this.messages.push({
-              id: this.messageId++,
-              type: "ai",
-              content: result.initial_message,
-              streaming: false,
-              timestamp: new Date(),
-            });
+          if (result.status === "success") {
+            // Send special trigger message to get initial greeting
+            console.log("Sending trigger message for initial greeting...");
+            await this.sendTriggerMessage();
           }
-
-          // Load existing chat history if available
-          await this.loadChatHistory();
 
           this.loading = false;
           this.scrollToBottom();
         } catch (error) {
+          console.error("Error initializing chat:", error);
           this.loading = false;
           alert("Error starting conversation. Please refresh the page.");
         }
       },
 
-      async loadChatHistory() {
-        try {
-          // Load chat history from server
-          const response = await fetch(
-            `/assessment/llm/chat-history/{{ session.id }}`,
-            {
-              method: "GET",
-              headers: { "Content-Type": "application/json" },
-            }
-          );
-
-          const result = await response.json();
-
-          if (
-            result.status === "success" &&
-            result.chat_history &&
-            result.chat_history.messages
-          ) {
-            // Add existing messages to UI
-            result.chat_history.messages.forEach((msg, index) => {
-              this.messages.push({
-                id: this.messageId++,
-                type: msg.type,
-                content: msg.content,
-                streaming: false,
-                timestamp: new Date(),
-              });
-            });
-
-            // Update exchange count
-            this.exchangeCount = result.chat_history.exchange_count || 0;
-          }
-
-          this.scrollToBottom();
-        } catch (error) {
-          // Error loading chat history - continue with fresh chat
-        }
-      },
+      async sendTriggerMessage() {\n        console.log(\"Sending trigger message...\");\n        try {\n          // Add AI response placeholder\n          const botMessageId = this.messageId++;\n          this.messages.push({\n            id: botMessageId,\n            type: \"ai\",\n            content: \"\",\n            streaming: true,\n            timestamp: new Date(),\n          });\n\n          this.isTyping = true;\n          this.scrollToBottom();\n\n          // Create and send the request manually instead of using EventSource\n          // EventSource doesn't support POST, so we'll use fetch with streaming\n          const url = `/assessment/llm/chat-stream-new/${this.sessionId}`;\n          console.log(\"Sending POST request to:\", url);\n          const response = await fetch(url, {\n            method: 'POST',\n            headers: {\n              'Content-Type': 'application/json',\n            },\n            body: JSON.stringify({\n              message: '-',  // Special trigger message\n              exchange_count: this.exchangeCount\n            })\n          });\n\n          if (!response.ok) {\n            throw new Error(`HTTP error! status: ${response.status}`);\n          }\n\n          // Get reference to the bot message we just added\n          const botMessage = this.messages[this.messages.length - 1];\n\n          // Read the streaming response\n          const reader = response.body.getReader();\n          const decoder = new TextDecoder('utf-8');\n          let buffer = '';\n\n          try {\n            while (true) {\n              const { done, value } = await reader.read();\n              if (done) break;\n\n              buffer += decoder.decode(value, { stream: true });\n              \n              // Process complete lines\n              const lines = buffer.split('\\n');\n              buffer = lines.pop(); // Keep incomplete line in buffer\n\n              for (const line of lines) {\n                if (line.startsWith('data: ')) {\n                  try {\n                    const data = JSON.parse(line.slice(6)); // Remove 'data: ' prefix\n                    console.log(\"Received SSE data:\", data);\n\n                    if (data.type === \"chunk\") {\n                      // Use data.content format from existing SSE implementation\n                      botMessage.content += data.content;\n                      this.scrollToBottom();\n                    } else if (data.type === \"complete\") {\n                      botMessage.streaming = false;\n                      this.isTyping = false;\n                      this.exchangeCount = data.exchange_count || this.exchangeCount;\n\n                      if (data.conversation_ended) {\n                        this.handleConversationEnd();\n                      }\n                      break; // Done processing\n                    } else if (data.type === \"error\") {\n                      botMessage.content =\n                        data.message || \"Maaf, terjadi kesalahan. Silakan coba lagi.\";\n                      botMessage.streaming = false;\n                      this.isTyping = false;\n                      break; // Done processing\n                    }\n                  } catch (e) {\n                    console.error(\"Error parsing SSE data:\", e);\n                  }\n                }\n              }\n            }\n          } finally {\n            reader.releaseLock();\n          }\n        } catch (error) {\n          console.error(\"Error sending trigger message:\", error);\n          this.isTyping = false;\n          // Add error message to chat\n          if (this.messages.length > 0) {\n            const botMessage = this.messages[this.messages.length - 1];\n            botMessage.content = \"Maaf, terjadi kesalahan saat memulai percakapan. Silakan coba lagi.\";\n            botMessage.streaming = false;\n          }\n        }\n      },
 
       async sendMessage() {
         if (
@@ -449,14 +455,41 @@ endblock %} {% block content %}
           };
 
           eventSource.onerror = (error) => {
-            botMessage.content = "Kesalahan koneksi. Silakan coba lagi.";
+            console.error("SSE Connection Error:", error);
+            botMessage.content =
+              "Koneksi terputus. Silakan coba kirim pesan lagi.";
             botMessage.streaming = false;
             this.isTyping = false;
             eventSource.close();
           };
         } catch (error) {
           const botMessage = this.messages[this.messages.length - 1];
-          botMessage.content = `ERROR: ${error.message || error}`;
+          let errorMessage = "Terjadi kesalahan saat mengirim pesan. ";
+
+          // Provide more specific error information
+          if (error.message) {
+            if (
+              error.message.includes("timeout") ||
+              error.message.includes("timed out")
+            ) {
+              errorMessage += "Waktu koneksi habis. Silakan coba lagi.";
+            } else if (
+              error.message.includes("network") ||
+              error.message.includes("Network")
+            ) {
+              errorMessage +=
+                "Masalah koneksi jaringan. Periksa koneksi internet Anda.";
+            } else if (error.message.includes("429")) {
+              errorMessage +=
+                "Terlalu banyak permintaan. Silakan tunggu sebentar dan coba lagi.";
+            } else {
+              errorMessage += error.message;
+            }
+          } else {
+            errorMessage += "Silakan coba lagi.";
+          }
+
+          botMessage.content = errorMessage;
           botMessage.streaming = false;
           this.isTyping = false;
         }
@@ -487,11 +520,13 @@ endblock %} {% block content %}
 
           if (actualResult.status === "success" && actualResult.next_redirect) {
             this.markAsCompleted();
-            
+
             if (this.cameraManager) {
-              await this.cameraManager.uploadBatch(actualResult.conversation_ids);
+              await this.cameraManager.uploadBatch(
+                actualResult.conversation_ids
+              );
             }
-            
+
             setTimeout(() => {
               window.location.href = actualResult.next_redirect;
             }, 2000);
@@ -534,8 +569,29 @@ endblock %} {% block content %}
             this.$refs.chatContainer.scrollHeight;
         });
       },
+
+      async resetAssessment() {
+        if (confirm('Apakah Anda yakin ingin mereset assessment ini dan memulai dari awal? Semua jawaban yang belum disimpan akan hilang.')) {
+          try {
+            const response = await fetch(`/assessment/reset-session-on-refresh/${this.sessionId}`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            // Redirect to main menu
+            window.location.href = '/';
+          } catch (error) {
+            alert('Gagal mereset assessment: ' + error.message);
+          }
+        }
+      }
     };
   }
+  // Initialize refresh detection for this session
+  setupRefreshDetection("{{ session.id }}");
 </script>
+<script src="{{ url_for('static', filename='js/refreshDetection.js') }}"></script>
 <script src="{{ url_for('static', filename='js/cameraManager.js') }}"></script>
 {% endblock %}

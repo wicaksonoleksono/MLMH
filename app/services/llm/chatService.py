@@ -125,14 +125,20 @@ class LLMChatService:
         response_content = ""
         config = {"configurable": {"session_id": session_id}}
         
+        # Stream directly without timeout/retry interference
         for chunk in self.chain_with_history.stream(
             {"input": user_message},
             config=config
         ):
-            if chunk.content:
+            # Handle None or empty chunks properly
+            if chunk is not None and hasattr(chunk, 'content') and chunk.content:
                 content = chunk.content
                 response_content += content
                 yield content
+            # Also handle the case where chunk might be a string directly
+            elif isinstance(chunk, str) and chunk:
+                response_content += chunk
+                yield chunk
         
         # After streaming completes, save turn to database immediately
         self._save_conversation_turn(session_id, user_message, response_content, settings)
@@ -189,7 +195,7 @@ class LLMChatService:
     @staticmethod
     def start_conversation(session_id: str) -> Dict[str, Any]:
         """
-        Start a new conversation with initial AI greeting from database settings
+        Start a new conversation - prepares for initial greeting but doesn't hardcode it
         """
         try:
             settings_list = LLMService.get_settings()
@@ -201,12 +207,12 @@ class LLMChatService:
             
             history = get_by_session_id(str(session_id))
             history.clear()
-            initial_greeting = "Hai! Nama aku Anisa, temanmu yang siap mendengarkan curhatanmu. Lagi ngapain nih? Cerita dong tentang hari-harimu akhir-akhir ini!"
-            history.add_messages([AIMessage(content=initial_greeting)])
+            
+            # Return success but don't hardcode initial message
+            # Let the frontend trigger the first AI response
             return {
                 'status': 'success',
                 'conversation_started': True,
-                'initial_message': initial_greeting,
                 'session_id': session_id
             }
         except Exception as e:
@@ -220,10 +226,15 @@ class LLMChatService:
         Finish conversation and prepare for completion handler
         """
         if LLMChatService.is_conversation_complete(session_id):
+            # Get conversation IDs before completing
+            conversations = LLMConversationService.get_session_conversations(session_id)
+            conversation_ids = [conv.id for conv in conversations] if conversations else []
+            
             completion_result = SessionService.complete_llm_and_get_next_step(session_id)
             return {
                 'status': 'success',
                 'conversation_completed': True,
+                'conversation_ids': conversation_ids,
                 'next_redirect': completion_result["next_redirect"],
                 'session_status': completion_result["session_status"],
                 'message': completion_result["message"]

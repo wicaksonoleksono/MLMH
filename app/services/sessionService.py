@@ -165,7 +165,7 @@ class SessionService:
                     status_class = 'success'
                 else:
                     # All other statuses show as "Gagal" for users
-                    status_indicator = '❌'
+                    status_indicator = ''
                     status_text = 'Gagal'
                     status_class = 'failed'
                 
@@ -271,12 +271,12 @@ class SessionService:
                 # Run analysis in background (could be made async in production)
                 analysis_result = LLMAnalysisService.run_conversation_analysis(session_id)
                 if analysis_result:
-                    print(f"✅ Analysis completed for session {session_id}: {analysis_result.id}")
+                    print(f" Analysis completed for session {session_id}: {analysis_result.id}")
                 else:
-                    print(f"⚠️  Analysis failed for session {session_id}")
+                    print(f"  Analysis failed for session {session_id}")
             except Exception as e:
                 # Don't fail the completion if analysis fails
-                print(f"❌ Analysis error for session {session_id}: {str(e)}")
+                print(f" Analysis error for session {session_id}: {str(e)}")
             
             return session
     
@@ -288,7 +288,7 @@ class SessionService:
             if not session:
                 raise ValueError("Session not found")
             
-            print(f"🔍 PHQ Completion - Before: session_id={session_id}, status={session.status}, phq_completed={session.phq_completed_at}, llm_completed={session.llm_completed_at}")
+            print(f" PHQ Completion - Before: session_id={session_id}, status={session.status}, phq_completed={session.phq_completed_at}, llm_completed={session.llm_completed_at}")
             
             # Complete PHQ assessment
             session.complete_phq()
@@ -296,7 +296,7 @@ class SessionService:
             
             # Get updated session to check status
             updated_session = db.query(AssessmentSession).filter_by(id=session_id).first()
-            print(f"🔍 PHQ Completion - After: session_id={session_id}, status={updated_session.status}, phq_completed={updated_session.phq_completed_at}, llm_completed={updated_session.llm_completed_at}")
+            print(f" PHQ Completion - After: session_id={session_id}, status={updated_session.status}, phq_completed={updated_session.phq_completed_at}, llm_completed={updated_session.llm_completed_at}")
             
             # Determine next redirect based on session status
             if updated_session.status == 'LLM_IN_PROGRESS':
@@ -329,7 +329,7 @@ class SessionService:
             if not session:
                 raise ValueError("Session not found")
             
-            print(f"🔍 LLM Completion - Before: session_id={session_id}, status={session.status}, phq_completed={session.phq_completed_at}, llm_completed={session.llm_completed_at}")
+            print(f" LLM Completion - Before: session_id={session_id}, status={session.status}, phq_completed={session.phq_completed_at}, llm_completed={session.llm_completed_at}")
             
             # Complete LLM assessment
             session.complete_llm()
@@ -337,7 +337,7 @@ class SessionService:
             
             # Get updated session to check status
             updated_session = db.query(AssessmentSession).filter_by(id=session_id).first()
-            print(f"🔍 LLM Completion - After: session_id={session_id}, status={updated_session.status}, phq_completed={updated_session.phq_completed_at}, llm_completed={updated_session.llm_completed_at}")
+            print(f" LLM Completion - After: session_id={session_id}, status={updated_session.status}, phq_completed={updated_session.phq_completed_at}, llm_completed={updated_session.llm_completed_at}")
             
             # Determine next redirect based on session status
             if updated_session.status == 'PHQ_IN_PROGRESS':

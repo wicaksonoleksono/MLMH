@@ -131,6 +131,12 @@ block content %}
         >
           Mulai {% if session.is_first == 'llm' %}Open Question{% else %}{{ session.is_first.upper() }}{% endif %} Assessment
         </button>
+        <button
+          @click="resetSession()"
+          class="bg-gray-500 hover:bg-gray-600 text-white font-medium py-3 px-8 rounded-xl transition-colors mt-4"
+        >
+          Reset Session dan Mulai dari Awal
+        </button>
       </div>
 
       {% else %}
@@ -153,10 +159,57 @@ block content %}
 </div>
 {% endblock %} {% block scripts %}
 <script>
+  // Direct refresh detection - redirect with reset parameter
+  window.addEventListener('beforeunload', function() {
+    // Only set the flag if there's an active session
+    const sessionId = "{{ session.id }}";
+    if (sessionId) {
+      // Set a flag in sessionStorage (cleared on tab close)
+      sessionStorage.setItem('refreshingSession', sessionId);
+    }
+  });
+
   function assessmentDashboard() {
       return {
           sessionId: "{{ session.id }}",
           sessionType: '{{ session.is_first }}',
+
+          async init() {
+              // Check if we're coming from a refresh
+              await this.handleRefreshRedirect();
+          },
+
+          async handleRefreshRedirect() {
+              // Check if we're coming from a refresh
+              const refreshingSession = sessionStorage.getItem('refreshingSession');
+              if (refreshingSession === this.sessionId) {
+                  sessionStorage.removeItem('refreshingSession');
+                  // Redirect to dashboard with reset parameter
+                  window.location.href = `/assessment/?reset_session=${this.sessionId}`;
+              }
+          },
+
+          async resetSession() {
+              if (confirm('Apakah Anda yakin ingin mereset session assessment ini dan memulai dari awal? Semua data yang belum disimpan akan hilang.')) {
+                  try {
+                      await this.performReset();
+                  } catch (error) {
+                      alert('Gagal mereset session: ' + error.message);
+                  }
+              }
+          },
+
+          async performReset() {
+              const response = await fetch(`/assessment/reset-session-on-refresh/${this.sessionId}`, {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json'
+                  }
+              });
+              
+              // Redirect to main menu
+              window.location.href = '/';
+          },
 
           goToConsent() {
               window.location.href = '/assessment/consent';
@@ -171,5 +224,8 @@ block content %}
           }
       };
   }
+  // Initialize refresh detection for this session
+  setupRefreshDetection("{{ session.id }}");
 </script>
+<script src="{{ url_for('static', filename='js/refreshDetection.js') }}"></script>
 {% endblock %}

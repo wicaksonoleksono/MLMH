@@ -375,7 +375,7 @@ Format output JSON:
                 'https://api.openai.com/v1/chat/completions', 
                 headers=headers, 
                 json=payload, 
-                timeout=10
+                timeout=None
             )
             return response.status_code == 200
         except Exception as e:

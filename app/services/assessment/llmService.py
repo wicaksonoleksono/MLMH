@@ -188,7 +188,7 @@ class LLMConversationService:
                 {'role': 'system', 'content': analysis_prompt},
                 {'role': 'user', 'content': conversation_text}
             ],
-            'temperature': 0.3,  # Lower temperature for more consistent analysis
+            'temperature': 0,  # Lower temperature for more consistent analysis
             'max_tokens': 2000
         }
         

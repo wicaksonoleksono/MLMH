@@ -14,6 +14,34 @@ endblock %} {% block content %}
     </div>
   </nav>
 
+  <!-- Flash Messages -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="max-w-4xl mx-auto px-4 py-4">
+        {% for category, message in messages %}
+          <div class="rounded-lg p-4 mb-4 {% if category == 'error' %}bg-red-50 text-red-800 border border-red-200{% elif category == 'success' %}bg-green-50 text-green-800 border border-green-200{% else %}bg-blue-50 text-blue-800 border border-blue-200{% endif %}">
+            <div class="flex items-center">
+              {% if category == 'error' %}
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+              {% elif category == 'success' %}
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+              {% else %}
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+              {% endif %}
+              <span>{{ message }}</span>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
   <div
     class="max-w-4xl mx-auto px-4 py-8 space-y-8"
     x-data="dashboardManager()"
@@ -70,7 +98,7 @@ endblock %} {% block content %}
             Anda memiliki assessment yang belum diselesaikan. Klik tombol di bawah untuk memulai ulang dengan urutan assessment yang sama.
           </p>
           <div class="flex flex-col sm:flex-row gap-3">
-            <form method="POST" :action="`{{ url_for('assessment.reset_session_to_new_attempt', session_id='TOKEN') }}`.replace('TOKEN', recoverableSession.id)" style="display: inline;">
+            <form method="POST" :action="recoverableSession ? `{{ url_for('assessment.reset_session_to_new_attempt', session_id='TOKEN') }}`.replace('TOKEN', recoverableSession.id) : '#'" style="display: inline;">
               <input type="hidden" name="reason" value="USER_RECOVERY_RESTART">
               <button
                 type="submit"
@@ -245,7 +273,7 @@ endblock %} {% block content %}
                   x-show="session.status_class === 'failed' && session.can_reset"
                   class="mt-3"
                 >
-                  <form method="POST" :action="`{{ url_for('assessment.reset_session_to_new_attempt', session_id='TOKEN') }}`.replace('TOKEN', session.id)" style="display: inline;">
+                  <form method="POST" :action="session && session.id ? `{{ url_for('assessment.reset_session_to_new_attempt', session_id='TOKEN') }}`.replace('TOKEN', session.id) : '#'" style="display: inline;">
                     <input type="hidden" name="reason" value="USER_INITIATED_RESET">
                     <button
                       type="submit"

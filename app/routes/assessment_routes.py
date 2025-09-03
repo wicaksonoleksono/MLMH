@@ -13,6 +13,10 @@ assessment_bp = Blueprint('assessment', __name__, url_prefix='/assessment')
 def start_assessment():
     """Start assessment - auto-reset incomplete sessions or create new one"""
     try:
+        # Clear any existing refresh flags for this user
+        # This prevents old session flags from interfering with new sessions
+        # We'll handle this in the template with JavaScript
+        
         # Check for recoverable sessions first
         recoverable_session = SessionManager.get_user_recoverable_session(current_user.id)
         
@@ -69,6 +73,18 @@ def assessment_dashboard():
 
     session = active_session
     
+    # Check if this is a reset request from refresh
+    reset_session_id = request.args.get('reset_session')
+    if reset_session_id and reset_session_id == str(session.id):
+        try:
+            # Reset the session to new attempt
+            result = SessionService.reset_session_to_new_attempt(session.id, "PAGE_REFRESH")
+            flash("Session berhasil direset. Anda dapat memulai assessment baru.", "success")
+            return redirect(url_for('assessment.assessment_dashboard'))
+        except Exception as e:
+            flash(f"Gagal mereset session: {str(e)}", "error")
+            return redirect(url_for('assessment.assessment_dashboard'))
+
     print(f"🏠 Dashboard - session_id={session.id}, status={session.status}, phq_completed={session.phq_completed_at}, llm_completed={session.llm_completed_at}, is_first={session.is_first}")
 
     # Direct redirect logic based on session flow
@@ -684,10 +700,34 @@ def restart_llm_assessment(session_id):
         # Reset LLM completion status
         SessionService.reset_llm_completion(session_id)
         
-        flash("LLM assessment berhasil direset. Silakan mulai ulang.", "success")
+        flash(f"LLM assessment berhasil direset. Silakan mulai ulang.", "success")
         return redirect(url_for("main.serve_index"))
         
     except Exception as e:
+        flash(f"Gagal mereset LLM assessment: {str(e)}", "error")
+        return redirect(url_for("assessment.assessment_dashboard"))
+
+
+@assessment_bp.route("/reset-session-on-refresh/<session_id>", methods=["POST"])
+@login_required
+def reset_session_on_refresh(session_id):
+    """Reset session when user refreshes the page"""
+    try:
+        # Validate session belongs to current user
+        session = SessionService.get_session(session_id)
+        if not session or str(session.user_id) != str(current_user.id):
+            flash("Session tidak ditemukan atau akses ditolak.", "error")
+            return redirect(url_for("main.serve_index"))
+
+        # Reset the session to new attempt
+        result = SessionService.reset_session_to_new_attempt(session_id, "PAGE_REFRESH")
+        
+        flash("Session berhasil direset. Silakan refresh browser Anda untuk memulai assessment baru.", "success")
+        return redirect(url_for("main.serve_index"))
+        
+    except Exception as e:
+        flash(f"Gagal mereset session: {str(e)}", "error")
+        return redirect(url_for("assessment.assessment_dashboard"))
         flash(f"Gagal mereset LLM assessment: {str(e)}", "error")
         return redirect(url_for("assessment.assessment_dashboard"))
 

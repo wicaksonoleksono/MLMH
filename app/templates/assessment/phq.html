@@ -165,14 +165,8 @@ content %}
     <div
       x-show="submitted"
       class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center"
+      style="display: none;"
     >
-      <div class="text-6xl mb-4">✅</div>
-      <h2 class="text-2xl font-bold text-gray-900 mb-3">
-        PHQ Assessment Selesai
-      </h2>
-      <p class="text-gray-600 mb-4">
-        Mengarahkan ke assessment berikutnya...
-      </p>
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
     </div>
   </div>
@@ -203,6 +197,8 @@ content %}
               await this.loadQuestions();
               await this.initCamera();
               this.setupAbandonTracking();
+              // Check if this is a legitimate refresh that should trigger reset
+              await this.checkForRefreshReset();
           },
 
           async initCamera() {
@@ -217,6 +213,35 @@ content %}
               }
           },
 
+          async checkForRefreshReset() {
+              // Check if this is a legitimate refresh that should trigger a session reset
+              const isRefreshing = sessionStorage.getItem('refreshingSession_{{ session.id }}');
+              if (isRefreshing === 'true') {
+                  sessionStorage.removeItem('refreshingSession_{{ session.id }}');
+                  
+                  // Only reset if we're not in the middle of a normal navigation flow
+                  // Check if we're coming from another assessment page (normal navigation)
+                  const referrer = document.referrer;
+                  const isFromAssessmentPage = referrer.includes('/assessment/phq') || referrer.includes('/assessment/llm');
+                  
+                  if (!isFromAssessmentPage) {
+                      console.log('Resetting session {{ session.id }} due to page refresh');
+                      try {
+                          await fetch(`/assessment/reset-session-on-refresh/{{ session.id }}`, {
+                              method: 'POST',
+                              headers: {
+                                  'Content-Type': 'application/json'
+                              }
+                          });
+                      } catch (error) {
+                          console.log('Session reset failed:', error);
+                      } finally {
+                          // Redirect to main menu
+                          window.location.href = `/`;
+                      }
+                  }
+              }
+          },
 
           setupAbandonTracking() {
               // Track when user leaves the page
@@ -351,8 +376,29 @@ content %}
               } finally {
                   this.submitting = false;
               }
+          },
+
+          async resetAssessment() {
+              if (confirm('Apakah Anda yakin ingin mereset assessment ini dan memulai dari awal? Semua jawaban yang belum disimpan akan hilang.')) {
+                  try {
+                      const response = await fetch(`/assessment/reset-session-on-refresh/${this.sessionId}`, {
+                          method: 'POST',
+                          headers: {
+                              'Content-Type': 'application/json'
+                          }
+                      });
+                      
+                      // Redirect to main menu
+                      window.location.href = '/';
+                  } catch (error) {
+                      alert('Gagal mereset assessment: ' + error.message);
+                  }
+              }
           }
       };
   }
+  // Initialize refresh detection for this session
+  setupRefreshDetection("{{ session.id }}");
 </script>
+<script src="{{ url_for('static', filename='js/refreshDetection.js') }}"></script>
 {% endblock %}

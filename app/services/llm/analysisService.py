@@ -95,11 +95,11 @@ class LLMAnalysisService:
             if response.choices and len(response.choices) > 0:
                 return response.choices[0].message.content
             else:
-                print("❌ No response choices returned from OpenAI")
+                print(" No response choices returned from OpenAI")
                 return None
                 
         except Exception as e:
-            print(f"❌ OpenAI API call failed: {str(e)}")
+            print(f" OpenAI API call failed: {str(e)}")
             return None
     
     @staticmethod
@@ -117,11 +117,11 @@ class LLMAnalysisService:
             session = db.query(AssessmentSession).filter(AssessmentSession.id == session_id).first()
             
             if not session:
-                print(f"❌ Session {session_id} not found")
+                print(f" Session {session_id} not found")
                 return None
             
             if not session.llm_completed_at:
-                print(f"❌ Session {session_id} has not completed LLM assessment yet")
+                print(f" Session {session_id} has not completed LLM assessment yet")
                 return None
             
             # Check if analysis already exists
@@ -157,12 +157,12 @@ class LLMAnalysisService:
         # 2. Get LLM settings
         llm_settings = cls.get_llm_settings()
         if not llm_settings:
-            print("❌ No active LLM settings found")
+            print(" No active LLM settings found")
             return None
         
         api_key = llm_settings.get_api_key()
         if not api_key:
-            print("❌ No valid API key in LLM settings")
+            print(" No valid API key in LLM settings")
             return None
         
         # 3. Get depression aspects configuration
@@ -182,13 +182,13 @@ class LLMAnalysisService:
                 analysis_scale = llm_settings.analysis_scale
         
         if not depression_aspects:
-            print("❌ No depression aspects configured in LLM settings")
+            print(" No depression aspects configured in LLM settings")
             return None
         
         # 4. Get conversation messages
         conversation_messages = cls.get_conversation_messages(session_id)
         if not conversation_messages:
-            print(f"❌ No conversation messages found for session {session_id}")
+            print(f" No conversation messages found for session {session_id}")
             return None
         
         print(f"📝 Found {len(conversation_messages)} conversation messages")
@@ -211,7 +211,7 @@ class LLMAnalysisService:
         )
         
         if not raw_response:
-            print("❌ Failed to get response from OpenAI")
+            print(" Failed to get response from OpenAI")
             return None
         
         print(f"🤖 Got response from OpenAI ({len(raw_response)} characters)")
@@ -231,7 +231,7 @@ class LLMAnalysisService:
             print(f"   Aspects detected: {result.total_aspects_detected}")
             print(f"   Average severity: {result.average_severity_score}")
         else:
-            print(f"❌ Failed to process analysis results for session {session_id}")
+            print(f" Failed to process analysis results for session {session_id}")
         
         return result
     

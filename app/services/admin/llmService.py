@@ -274,27 +274,6 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
         aspects_text = "\n".join(f"- {aspect['name']}: {aspect['description']}" for aspect in aspects)
         return LLMService.ANISA_SYSTEM_PROMPT.format(aspects=aspects_text)
     
-    @staticmethod
-    def build_analysis_prompt(aspects: List[dict]) -> str:
-        """Build analysis prompt for depression assessment"""
-        key_aspects = "\n".join(f"{aspect['name']}: {aspect['description']}" for aspect in aspects)
-        
-        return f"""Berdasarkan indikator-indikator dari gejala depresi berikut:
-{key_aspects}
-
-Buatlah analisa jawaban "Teman" diatas untuk setiap indikator tersebut beserta penilaian skala angka (0-3) yang diberikan untuk menunjukkan sejauh mana indikasi gejala tersebut muncul dalam percakapan:
-0: Tidak Ada Indikasi Jelas (Gejala tidak muncul dalam percakapan)
-1: Indikasi Ringan (Gejala tersirat atau disebutkan secara tidak langsung)
-2: Indikasi Sedang (Gejala disebutkan dengan cukup jelas, namun tidak mendominasi)
-3: Indikasi Kuat (Gejala disebutkan secara eksplisit, berulang, dan menjadi keluhan utama)
-
-Format output JSON:
-{{
-  "indicator_name": {{
-    "explanation": "penjelasan detail",
-    "indicator_score": 0-3
-  }}
-}}"""
 
     @staticmethod
     def get_available_models(api_key: str = None) -> List[str]:

@@ -60,11 +60,9 @@ def stream_response(message_id):
     """EventSource endpoint for streaming AI response to a specific message"""
     pending_messages = getattr(send_message_proper, 'pending_messages', {})
     message_data = pending_messages.get(message_id)
-    
     if not message_data:
         return Response("data: " + json.dumps({'type': 'error', 'message': 'Message not found'}, ensure_ascii=False) + "\n\n", 
                        mimetype='text/event-stream'), 404
-
     def generate():
         try:
             session_id = message_data['session_id']
@@ -95,8 +93,6 @@ def stream_response(message_id):
             'Access-Control-Allow-Headers': 'Cache-Control'
         }
     )
-
-
 
 
 

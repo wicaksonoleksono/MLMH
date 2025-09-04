@@ -6,6 +6,7 @@ from datetime import datetime
 from ...model.assessment.sessions import AssessmentSession, LLMConversation, LLMAnalysisResult
 from ...db import get_session
 from ...services.admin.llmService import LLMService as AdminLLMService
+from ...services.llm.analysisPromptBuilder import LLMAnalysisPromptBuilder
 
 
 class LLMConversationService:
@@ -110,16 +111,46 @@ class LLMConversationService:
             if not conversations:
                 raise ValueError("No conversation turns found for analysis")
             
-            # Build conversation text for analysis
-            conversation_text = LLMConversationService._build_conversation_text(conversations)
-            
             # Get LLM settings used for this session
             llm_settings = session.llm_settings
             
-            # Get aspects and standardize keys
+            # Get aspects and analysis scale
             aspects = llm_settings.depression_aspects.get('aspects', [])
-            standardized_aspects = []
             
+            # Extract analysis scale from settings - REQUIRED
+            analysis_scale = None
+            if llm_settings.analysis_scale:
+                if isinstance(llm_settings.analysis_scale, dict) and 'scale' in llm_settings.analysis_scale:
+                    analysis_scale = llm_settings.analysis_scale['scale']
+                elif isinstance(llm_settings.analysis_scale, list):
+                    analysis_scale = llm_settings.analysis_scale
+            
+            if not analysis_scale:
+                raise ValueError("Analysis scale not configured in LLM settings")
+            
+            # Convert conversations to message format for modern prompt builder
+            conversation_messages = []
+            for turn in conversations:
+                if turn.ai_message:
+                    conversation_messages.append({
+                        "role": "assistant",
+                        "message": turn.ai_message
+                    })
+                if turn.user_message:
+                    conversation_messages.append({
+                        "role": "user",
+                        "message": turn.user_message
+                    })
+            
+            # Build analysis prompt using modern prompt builder with configurable scale
+            analysis_prompt = LLMAnalysisPromptBuilder.build_full_analysis_prompt(
+                conversation_messages=conversation_messages,
+                depression_aspects=aspects,
+                analysis_scale=analysis_scale
+            )
+            
+            # Get standardized aspects for result processing
+            standardized_aspects = []
             for aspect in aspects:
                 if isinstance(aspect, dict):
                     std_key = LLMConversationService.standardize_aspect_key(aspect.get('name', ''))
@@ -129,12 +160,8 @@ class LLMConversationService:
                         "description": aspect.get('description', '')
                     })
             
-            # Build analysis prompt with standardized keys
-            analysis_prompt = AdminLLMService.build_analysis_prompt(aspects)
-            
             # Call OpenAI for analysis
             analysis_result = LLMConversationService._call_analysis_api(
-                conversation_text,
                 analysis_prompt,
                 llm_settings.get_api_key(),
                 llm_settings.analysis_model
@@ -175,8 +202,8 @@ class LLMConversationService:
         return "\n\n".join(conversation_parts)
     
     @staticmethod
-    def _call_analysis_api(conversation_text: str, analysis_prompt: str, api_key: str, model: str) -> Dict[str, Any]:
-        """Call OpenAI API for conversation analysis"""
+    def _call_analysis_api(analysis_prompt: str, api_key: str, model: str) -> Dict[str, Any]:
+        """Call OpenAI API for conversation analysis using modern prompt builder"""
         headers = {
             'Authorization': f'Bearer {api_key}',
             'Content-Type': 'application/json'
@@ -185,8 +212,8 @@ class LLMConversationService:
         payload = {
             'model': model,
             'messages': [
-                {'role': 'system', 'content': analysis_prompt},
-                {'role': 'user', 'content': conversation_text}
+                {'role': 'system', 'content': 'You are a professional psychologist analyzing conversation transcripts. Respond only with the requested JSON format.'},
+                {'role': 'user', 'content': analysis_prompt}
             ],
             'temperature': 0,  # Lower temperature for more consistent analysis
             'max_tokens': 2000

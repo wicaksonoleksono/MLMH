@@ -174,7 +174,7 @@ class LLMAnalysisService:
             elif isinstance(llm_settings.depression_aspects, list):
                 depression_aspects = llm_settings.depression_aspects
         
-        # Get analysis scale if available
+        # Get analysis scale - REQUIRED
         if llm_settings.analysis_scale:
             if isinstance(llm_settings.analysis_scale, dict) and 'scale' in llm_settings.analysis_scale:
                 analysis_scale = llm_settings.analysis_scale['scale']
@@ -183,6 +183,10 @@ class LLMAnalysisService:
         
         if not depression_aspects:
             print(" No depression aspects configured in LLM settings")
+            return None
+        
+        if not analysis_scale:
+            print(" No analysis scale configured in LLM settings")
             return None
         
         # 4. Get conversation messages
@@ -269,6 +273,8 @@ class LLMAnalysisService:
                     analysis_scale = llm_settings.analysis_scale
             if not depression_aspects:
                 return {"status": "error", "message": "No depression aspects configured"}
+            if not analysis_scale:
+                return {"status": "error", "message": "No analysis scale configured"}
             analysis_prompt = LLMAnalysisPromptBuilder.build_full_analysis_prompt(
                 conversation_messages=sample_conversation,
                 depression_aspects=depression_aspects,

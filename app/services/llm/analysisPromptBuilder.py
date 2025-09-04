@@ -54,45 +54,34 @@ class LLMAnalysisPromptBuilder:
         return "\n".join(aspects_lines)
 
     @staticmethod
-    def build_scoring_section(depression_aspects: List[Dict[str, Any]], analysis_scale: Optional[List[Dict[str, Any]]] = None) -> str:
+    def build_scoring_section(depression_aspects: List[Dict[str, Any]], analysis_scale: List[Dict[str, Any]]) -> str:
         """
-        Build the scoring scale descriptions section.
+        Build the scoring scale descriptions section using shared analysis scale.
         
         Args:
             depression_aspects: List of depression aspects
-            analysis_scale: Shared analysis scale configuration (if available)
+            analysis_scale: Shared analysis scale configuration (REQUIRED)
             
         Returns:
             Formatted scoring descriptions
         """
-        # Get default scale descriptions (will be same for all aspects initially)
-        default_scales = {
-            "0": "Tidak Ada Indikasi Jelas (Gejala tidak muncul dalam percakapan)",
-            "1": "Indikasi Ringan (Gejala tersirat atau disebutkan secara tidak langsung)",
-            "2": "Indikasi Sedang (Gejala disebutkan dengan cukup jelas, namun tidak mendominasi)",
-            "3": "Indikasi Kuat (Gejala disebutkan secara eksplisit, berulang, dan menjadi keluhan utama)"
-        }
+        if not analysis_scale or len(analysis_scale) == 0:
+            raise ValueError("analysis_scale is required and cannot be empty")
         
-        # Use custom analysis_scale if provided, otherwise check old format or use defaults
-        scale_descriptions = default_scales
-        if analysis_scale and len(analysis_scale) > 0:
-            # Use the new shared analysis_scale format
-            scale_dict = {}
-            for scale_item in analysis_scale:
-                if 'value' in scale_item and 'description' in scale_item:
-                    scale_dict[str(scale_item['value'])] = scale_item['description']
-            if scale_dict:
-                scale_descriptions = scale_dict
-        elif depression_aspects and len(depression_aspects) > 0:
-            # Fallback to old format for backward compatibility
-            first_aspect = depression_aspects[0]
-            if 'analysis_config' in first_aspect and 'scale_descriptions' in first_aspect['analysis_config']:
-                scale_descriptions = first_aspect['analysis_config']['scale_descriptions']
+        # Convert analysis_scale to descriptions
+        scale_descriptions = {}
+        for scale_item in analysis_scale:
+            if 'value' in scale_item and 'description' in scale_item:
+                scale_descriptions[str(scale_item['value'])] = scale_item['description']
         
+        if not scale_descriptions:
+            raise ValueError("Invalid analysis_scale format - no valid value/description pairs found")
+        
+        # Build scale lines in order
         scale_lines = []
-        for scale_value in ["0", "1", "2", "3"]:
-            description = scale_descriptions.get(scale_value, f"Scale {scale_value}: No description")
-            scale_lines.append(f"{scale_value}: {description}")
+        for value in sorted(scale_descriptions.keys(), key=int):
+            description = scale_descriptions[value]
+            scale_lines.append(f"{value}: {description}")
         
         return "\n".join(scale_lines)
 
@@ -124,7 +113,7 @@ class LLMAnalysisPromptBuilder:
         cls, 
         conversation_messages: List[Dict[str, str]], 
         depression_aspects: List[Dict[str, Any]],
-        analysis_scale: Optional[List[Dict[str, Any]]] = None
+        analysis_scale: List[Dict[str, Any]]
     ) -> str:
         """
         Build the complete analysis prompt.
@@ -132,7 +121,7 @@ class LLMAnalysisPromptBuilder:
         Args:
             conversation_messages: Chat history messages
             depression_aspects: Depression aspects configuration
-            analysis_scale: Shared analysis scale configuration (optional)
+            analysis_scale: Shared analysis scale configuration (REQUIRED)
             
         Returns:
             Complete analysis prompt string

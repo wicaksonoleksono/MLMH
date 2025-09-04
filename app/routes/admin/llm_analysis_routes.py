@@ -154,12 +154,15 @@ def preview_analysis_prompt():
         else:
             depression_aspects = LLMService.get_enhanced_default_aspects()
         
-        # Get analysis scale if available
+        # Get analysis scale - use default if not configured
         if llm_settings and llm_settings.analysis_scale:
             if isinstance(llm_settings.analysis_scale, dict) and 'scale' in llm_settings.analysis_scale:
                 analysis_scale = llm_settings.analysis_scale['scale']
             elif isinstance(llm_settings.analysis_scale, list):
                 analysis_scale = llm_settings.analysis_scale
+        
+        if not analysis_scale:
+            analysis_scale = LLMService.DEFAULT_ANALYSIS_SCALE
         
         # Allow custom aspects from request
         if 'depression_aspects' in data:

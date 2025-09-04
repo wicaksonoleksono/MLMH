@@ -222,8 +222,6 @@ dengan Anisa{% endblock %} {% block content %}
         console.log("About to initialize chat...");
         await this.initializeChat();
         this.setupAbandonTracking();
-        // Check if this is a legitimate refresh that should trigger reset
-        await this.checkForRefreshReset();
         console.log("Chat interface initialized");
       },
 
@@ -242,45 +240,6 @@ dengan Anisa{% endblock %} {% block content %}
           await this.cameraManager.initialize();
         } catch (error) {
           // Camera initialization failed - continue without camera
-        }
-      },
-
-      async checkForRefreshReset() {
-        // Check if this is a legitimate refresh that should trigger a session reset
-        const isRefreshing = sessionStorage.getItem(
-          "refreshingSession_{{ session.id }}"
-        );
-        if (isRefreshing === "true") {
-          sessionStorage.removeItem("refreshingSession_{{ session.id }}");
-
-          // Only reset if we're not in the middle of a normal navigation flow
-          // Check if we're coming from another assessment page (normal navigation)
-          const referrer = document.referrer;
-          const isFromAssessmentPage =
-            referrer.includes("/assessment/phq") ||
-            referrer.includes("/assessment/llm");
-
-          if (!isFromAssessmentPage) {
-            console.log(
-              "Resetting session {{ session.id }} due to page refresh"
-            );
-            try {
-              await fetch(
-                `/assessment/reset-session-on-refresh/{{ session.id }}`,
-                {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                }
-              );
-            } catch (error) {
-              console.log("Session reset failed:", error);
-            } finally {
-              // Redirect to main menu
-              window.location.href = `/`;
-            }
-          }
         }
       },
 
@@ -340,11 +299,7 @@ dengan Anisa{% endblock %} {% block content %}
           const result = await response.json();
           console.log("Start chat response:", result);
 
-          if (result.status === "success") {
-            // Send special trigger message to get initial greeting
-            console.log("Sending trigger message for initial greeting...");
-            await this.sendTriggerMessage();
-          } else {
+          if (result.status !== "success") {
             console.error("Start chat failed:", result.message);
           }
 
@@ -354,101 +309,6 @@ dengan Anisa{% endblock %} {% block content %}
           console.error("Error initializing chat:", error);
           this.loading = false;
           alert("Error starting conversation. Please refresh the page.");
-        }
-      },
-
-      async sendTriggerMessage() {
-        console.log("Sending trigger message...");
-        try {
-          // Add AI response placeholder
-          const botMessageId = this.messageId++;
-          this.messages.push({
-            id: botMessageId,
-            type: "ai",
-            content: "",
-            streaming: true,
-            timestamp: new Date(),
-          });
-
-          this.isTyping = true;
-          this.scrollToBottom();
-
-          // Use EventSource for the initial greeting with timeout handling
-          const url = `/assessment/llm/initial-greeting/${this.sessionId}`;
-          console.log("Connecting to EventSource with URL:", url);
-          
-          // Create promise that resolves when SSE completes or times out
-          return new Promise((resolve, reject) => {
-            const eventSource = new EventSource(url);
-            
-            // Add timeout handling
-            const timeoutId = setTimeout(() => {
-              console.log("SSE connection timeout");
-              eventSource.close();
-              const botMessage = this.messages[this.messages.length - 1];
-              botMessage.content = "Waktu koneksi habis. Silakan refresh halaman.";
-              botMessage.streaming = false;
-              this.isTyping = false;
-              reject(new Error("SSE connection timeout"));
-            }, 15000); // 15 second timeout
-
-            // Get reference to the bot message we just added
-            const botMessage = this.messages[this.messages.length - 1];
-
-            eventSource.onopen = () => {
-              console.log("EventSource connection opened");
-              clearTimeout(timeoutId); // Clear timeout on successful connection
-            };
-
-            eventSource.onmessage = (event) => {
-              console.log("Received SSE message:", event.data);
-              try {
-                const data = JSON.parse(event.data);
-
-                if (data.type === "chunk") {
-                  // Append content to the message
-                  botMessage.content += data.data;
-                  this.scrollToBottom();
-                } else if (data.type === "complete") {
-                  clearTimeout(timeoutId); // Clear timeout
-                  botMessage.streaming = false;
-                  this.isTyping = false;
-                  console.log("Stream complete");
-                  eventSource.close();
-                  resolve();
-                } else if (data.type === "error") {
-                  clearTimeout(timeoutId); // Clear timeout
-                  botMessage.content = data.message || "Maaf, terjadi kesalahan saat memuat sapaan awal.";
-                  botMessage.streaming = false;
-                  this.isTyping = false;
-                  console.log("Stream error:", data.message);
-                  eventSource.close();
-                  reject(new Error(data.message || "Stream error"));
-                } else if (data.type === "stream_start") {
-                  console.log("Stream started");
-                }
-              } catch (e) {
-                console.error("Error parsing SSE data:", e);
-              }
-            };
-
-            eventSource.onerror = (error) => {
-              clearTimeout(timeoutId); // Clear timeout
-              console.error("SSE Connection Error:", error);
-              botMessage.content = "Koneksi terputus saat memuat sapaan awal.";
-              botMessage.streaming = false;
-              this.isTyping = false;
-              eventSource.close();
-              reject(error);
-            };
-          });
-        } catch (error) {
-          console.error("Error sending trigger message:", error);
-          const botMessage = this.messages[this.messages.length - 1];
-          botMessage.content = "Terjadi kesalahan saat memuat sapaan awal. Silakan refresh halaman.";
-          botMessage.streaming = false;
-          this.isTyping = false;
-          throw error;
         }
       },
 

@@ -23,7 +23,7 @@ class AssessmentSession(BaseModel):
     status: Mapped[str] = mapped_column(String(20), default='CREATED')
 
     # Timestamps
-    start_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    start_time: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow())
     end_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     duration_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     consent_completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
@@ -54,8 +54,8 @@ class AssessmentSession(BaseModel):
 
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow(), onupdate=lambda: datetime.utcnow())
 
     # Relationships
     user = relationship("User")
@@ -357,7 +357,7 @@ class PHQResponse(BaseModel):
     response_time_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     is_valid: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow())
 
     # Relationships
     session = relationship("AssessmentSession", back_populates="phq_responses")
@@ -385,7 +385,7 @@ class LLMConversation(BaseModel):
     # Legacy field (can be removed later if not needed)
     conversation_data: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow())
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     session = relationship("AssessmentSession", back_populates="llm_conversations")
     def __repr__(self):
@@ -401,7 +401,7 @@ class CameraCapture(BaseModel):
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     capture_trigger: Mapped[str] = mapped_column(String(50), nullable=False)  # INTERVAL, BUTTON_CLICK, MESSAGE_SEND, QUESTION_START
-    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow())
     camera_settings_snapshot: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     session = relationship("AssessmentSession", back_populates="camera_captures")
     def __repr__(self):
@@ -424,7 +424,7 @@ class LLMAnalysisResult(BaseModel):
     total_aspects_detected: Mapped[int] = mapped_column(Integer, nullable=False)
     average_severity_score: Mapped[float] = mapped_column(nullable=False)  # 0-3 average
     analysis_confidence: Mapped[Optional[float]] = mapped_column(nullable=True)  # AI confidence in analysis
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow())
     session = relationship("AssessmentSession")
     def __repr__(self):
         return f'<LLMAnalysisResult {self.id}: {self.total_aspects_detected} aspects for session {self.session_id}>'
@@ -440,7 +440,7 @@ class SessionExport(BaseModel):
     requested_by_user: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
     export_status: Mapped[str] = mapped_column(String(20), default='PENDING')
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow())
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     session = relationship("AssessmentSession")
@@ -478,8 +478,8 @@ class EmailNotification(BaseModel):
     # Metadata
     notification_data: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow(), onupdate=lambda: datetime.utcnow())
     
     # Relationships
     session = relationship("AssessmentSession")

@@ -235,19 +235,22 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
             if not session:
                 raise ValueError("Session not found")
 
-            # Update completion timestamp
+            # Store previous completion state
+            phq_was_completed = session.phq_completed_at is not None
+            llm_was_completed = session.llm_completed_at is not None
+
+            # Update completion timestamp using proper completion methods to ensure timing is tracked correctly
             if assessment_type == 'phq':
-                session.phq_completed_at = datetime.utcnow()
+                session.complete_phq()
             elif assessment_type == 'llm':
-                session.llm_completed_at = datetime.utcnow()
+                session.complete_llm()
+
+            # If session was already completed before, ensure duration is properly calculated
+            if (phq_was_completed and llm_was_completed) and session.start_time and not session.duration_seconds:
+                session.complete_session()
 
             # Determine next steps based on completion state
             next_action = AssessmentOrchestrator._determine_next_action(session)
-
-            # Update session status
-            session.status = next_action['status']
-            session.update_completion_percentage()
-            session.updated_at = datetime.utcnow()
 
             db.commit()
 
@@ -433,6 +436,10 @@ Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya
             # Update session status to LLM completed (if not already)
             if session.status != 'COMPLETED':
                 session.complete_llm()
+            else:
+                # If session is already completed, ensure duration is calculated
+                if session.start_time and not session.duration_seconds:
+                    session.complete_session()
             
             # Save final state
             session.session_metadata['chat_history'] = chat_history

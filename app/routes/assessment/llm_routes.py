@@ -10,6 +10,8 @@ import json
 import time
 from datetime import datetime
 import uuid
+import logging
+import traceback
 
 llm_assessment_bp = Blueprint('llm_assessment', __name__, url_prefix='/assessment/llm')
 
@@ -67,22 +69,44 @@ def stream_response(message_id):
         try:
             session_id = message_data['session_id']
             user_message = message_data['user_message']
+            
+            logging.info(f"🚀 Starting LLM stream for session {session_id}, message: {user_message[:50]}...")
+            
             session = SessionService.get_session(session_id)
             if not session or int(session.user_id) != int(current_user.id):
+                error_msg = f"Access denied for session {session_id}, user {current_user.id}"
+                logging.warning(f"🚫 {error_msg}")
                 yield f"data: {json.dumps({'type': 'error', 'message': 'Access denied'}, ensure_ascii=False)}\n\n"
                 return
+                
             chat_service = LLMChatService()
             yield f"data: {json.dumps({'type': 'stream_start'}, ensure_ascii=False)}\n\n"
+            
+            chunk_count = 0
             for chunk in chat_service.stream_ai_response(session_id, user_message):
+                chunk_count += 1
                 yield f"data: {json.dumps({'type': 'chunk', 'data': chunk}, ensure_ascii=False)}\n\n"
+            
+            logging.info(f"✅ Streamed {chunk_count} chunks for session {session_id}")
+            
             if chat_service.is_conversation_complete(session_id):
+                logging.info(f"🏁 Conversation completed for session {session_id}")
                 yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': True}, ensure_ascii=False)}\n\n"
             else:
                 yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': False}, ensure_ascii=False)}\n\n"
+                
             if message_id in pending_messages:
                 del pending_messages[message_id]
+                
         except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
+            # Log full error details
+            error_msg = str(e)
+            full_traceback = traceback.format_exc()
+            logging.error(f"💥 Error for session {session_id}: {error_msg}")
+            logging.error(f"Full traceback: {full_traceback}")
+            
+            # Send raw error to frontend - no masking
+            yield f"data: {json.dumps({'type': 'error', 'message': error_msg}, ensure_ascii=False)}\n\n"
     return Response(
         stream_with_context(generate()),
         mimetype='text/event-stream',
@@ -95,6 +119,33 @@ def stream_response(message_id):
     )
 
 
+
+@llm_assessment_bp.route('/debug/validate-config', methods=['GET'])
+@user_required
+@api_response
+def validate_llm_config():
+    """Validate LLM configuration for debugging"""
+    try:
+        chat_service = LLMChatService()
+        settings = chat_service._load_llm_settings()
+        
+        return {
+            "status": "success", 
+            "message": "LLM configuration is valid",
+            "config": {
+                "has_api_key": bool(settings.get('openai_api_key_unmasked')),
+                "chat_model": settings.get('chat_model'),
+                "analysis_model": settings.get('analysis_model'),
+                "aspects_count": len(settings.get('depression_aspects', [])),
+                "analysis_scale_configured": bool(settings.get('analysis_scale'))
+            }
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e),
+            "error_type": type(e).__name__
+        }
 
 @llm_assessment_bp.route('/conversations/<int:session_id>', methods=['GET'])
 @user_required

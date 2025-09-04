@@ -111,37 +111,49 @@ class LLMChatService:
                 ],
             )
         except Exception as e:
-            raise ValueError(f"Failed to initialize LangChain: {str(e)}")
+            # Don't hide the error - show the raw error message
+            raise e
     
     def stream_ai_response(self, session_id: str, user_message: str) -> Generator[str, None, None]:
         """
         Stream AI response using session's system prompt from database settings
         """
-        settings = self._load_llm_settings()
-        self._init_langchain(settings)
-        session = SessionService.get_session(session_id)
-        if not session:
-            raise ValueError("Session not found")
-        response_content = ""
-        config = {"configurable": {"session_id": session_id}}
-        
-        # Stream directly without timeout/retry interference
-        for chunk in self.chain_with_history.stream(
-            {"input": user_message},
-            config=config
-        ):
-            # Handle None or empty chunks properly
-            if chunk is not None and hasattr(chunk, 'content') and chunk.content:
-                content = chunk.content
-                response_content += content
-                yield content
-            # Also handle the case where chunk might be a string directly
-            elif isinstance(chunk, str) and chunk:
-                response_content += chunk
-                yield chunk
-        
-        # After streaming completes, save turn to database immediately
-        self._save_conversation_turn(session_id, user_message, response_content, settings)
+        try:
+            settings = self._load_llm_settings()
+            self._init_langchain(settings)
+            session = SessionService.get_session(session_id)
+            if not session:
+                raise ValueError(f"Session {session_id} not found")
+            
+            response_content = ""
+            config = {"configurable": {"session_id": session_id}}
+            
+            # Stream directly without timeout/retry interference
+            chunk_count = 0
+            for chunk in self.chain_with_history.stream(
+                {"input": user_message},
+                config=config
+            ):
+                chunk_count += 1
+                # Handle None or empty chunks properly
+                if chunk is not None and hasattr(chunk, 'content') and chunk.content:
+                    content = chunk.content
+                    response_content += content
+                    yield content
+                # Also handle the case where chunk might be a string directly
+                elif isinstance(chunk, str) and chunk:
+                    response_content += chunk
+                    yield chunk
+            
+            if chunk_count == 0:
+                raise ValueError("No response received from OpenAI")
+            
+            # After streaming completes, save turn to database immediately
+            self._save_conversation_turn(session_id, user_message, response_content, settings)
+            
+        except Exception as e:
+            # Show raw error - no hiding
+            raise e
     
     def _save_conversation_turn(self, session_id: str, user_message: str, ai_response: str, settings: Dict[str, Any]) -> None:
         """Save conversation turn immediately using LLMConversationService"""

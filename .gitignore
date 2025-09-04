@@ -233,3 +233,4 @@ venv/
 .jpg
 uploads
 app/static/uploads
+manage.sh

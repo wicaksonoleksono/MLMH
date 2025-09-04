@@ -31,17 +31,11 @@ class LLMAnalysisResultProcessor:
         cleaned_response = re.sub(r'^```json\s*', '', cleaned_response, flags=re.MULTILINE)
         cleaned_response = re.sub(r'^```\s*$', '', cleaned_response, flags=re.MULTILINE)
         cleaned_response = cleaned_response.strip()
-        
-        # Try to find JSON within the text
         json_patterns = [
-            # Full response is JSON
             r'^(\{.*\})$',
-            # JSON wrapped in text
             r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}',
-            # JSON with nested objects
             r'\{(?:[^{}]|(?:\{[^{}]*\}))*\}'
         ]
-        
         for pattern in json_patterns:
             matches = re.findall(pattern, cleaned_response, re.DOTALL)
             for match in matches:
@@ -49,13 +43,10 @@ class LLMAnalysisResultProcessor:
                     return json.loads(match)
                 except json.JSONDecodeError:
                     continue
-        
-        # If no pattern works, try parsing the cleaned response directly
         try:
             return json.loads(cleaned_response)
         except json.JSONDecodeError:
             return None
-
     @staticmethod
     def validate_analysis_result(
         json_result: Dict[str, Any], 
@@ -72,40 +63,30 @@ class LLMAnalysisResultProcessor:
             Tuple of (is_valid, list_of_errors)
         """
         errors = []
-        
         if not isinstance(json_result, dict):
             errors.append("Result is not a dictionary")
             return False, errors
-        
-        # Check if we have results for depression aspects
         expected_keys = [
             aspect.get('name', '').lower().replace(' ', '_') 
             for aspect in expected_aspects
         ]
-        
         for key in expected_keys:
             if key not in json_result:
                 errors.append(f"Missing analysis for aspect: {key}")
                 continue
-                
             aspect_result = json_result[key]
             if not isinstance(aspect_result, dict):
                 errors.append(f"Invalid format for aspect {key}: not a dictionary")
                 continue
-                
-            # Check required fields
             if 'penjelasan' not in aspect_result:
                 errors.append(f"Missing 'penjelasan' for aspect {key}")
             if 'skor' not in aspect_result:
                 errors.append(f"Missing 'skor' for aspect {key}")
             else:
-                # Validate score range
                 score = aspect_result['skor']
                 if not isinstance(score, (int, float)) or not (0 <= score <= 3):
                     errors.append(f"Invalid score for aspect {key}: {score} (must be 0-3)")
-        
         return len(errors) == 0, errors
-
     @staticmethod
     def calculate_analysis_metrics(aspect_scores: Dict[str, Any]) -> Dict[str, float]:
         """
@@ -124,31 +105,21 @@ class LLMAnalysisResultProcessor:
                 score = aspect_data['skor']
                 if isinstance(score, (int, float)) and 0 <= score <= 3:
                     scores.append(float(score))
-        
         if not scores:
             return {
                 'total_aspects_detected': 0,
                 'average_severity_score': 0.0,
                 'analysis_confidence': 0.0
             }
-        
-        # Count aspects with score > 0 (detected symptoms)
         detected_count = sum(1 for score in scores if score > 0)
-        
-        # Calculate average severity
         avg_severity = sum(scores) / len(scores)
-        
-        # Calculate confidence based on consistency of scores
-        # (This is a simple heuristic - could be improved)
         score_variance = sum((s - avg_severity) ** 2 for s in scores) / len(scores)
         confidence = max(0.0, 1.0 - (score_variance / 2.25))  # 2.25 is max possible variance for 0-3 scale
-        
         return {
             'total_aspects_detected': detected_count,
             'average_severity_score': round(avg_severity, 2),
             'analysis_confidence': round(confidence, 2)
         }
-
     @staticmethod
     def store_analysis_result(
         session_id: str,
@@ -198,7 +169,7 @@ class LLMAnalysisResultProcessor:
                 db.add(analysis_result)
                 db.commit()
                 
-                print(f"✅ Stored analysis result for session {session_id}")
+                print(f" Stored analysis result for session {session_id}")
                 print(f"   Detected aspects: {metrics['total_aspects_detected']}")
                 print(f"   Average severity: {metrics['average_severity_score']}")
                 print(f"   Confidence: {metrics['analysis_confidence']}")

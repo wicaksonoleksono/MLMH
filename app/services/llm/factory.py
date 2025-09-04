@@ -10,8 +10,6 @@ from ...model.admin.llm import LLMSettings
 
 class LLMFactory:
     """Factory for creating ChatOpenAI instances with session-specific configurations"""
-    
-    # Default configurations
     DEFAULT_STREAMING_CONFIG = {
         "temperature": 0.1,
         "streaming": True,
@@ -21,11 +19,10 @@ class LLMFactory:
     DEFAULT_ANALYSIS_CONFIG = {
         "temperature": 0,
         "streaming": False,
-        "seed": 42,  # Consistent analysis results
+        "seed": 42,  
         "max_tokens": 2000,
         "timeout": 60
     }
-    
     @staticmethod
     def create_streaming_llm(llm_settings: LLMSettings, **kwargs) -> ChatOpenAI:
         """
@@ -64,10 +61,9 @@ class LLMFactory:
         
         return ChatOpenAI(
             api_key=llm_settings.get_api_key(),
-            model=llm_settings.analysis_model,  # e.g. gpt-4o-mini
+            model=llm_settings.analysis_model,  
             **config
         )
-    
     @staticmethod
     def validate_settings(llm_settings: LLMSettings) -> Dict[str, Any]:
         """
@@ -127,19 +123,15 @@ class LLMFactory:
             else:
                 llm = LLMFactory.create_analysis_agent(llm_settings)
                 model_name = llm_settings.analysis_model
-            
-            # Simple test message
             test_response = llm.invoke([
                 {"role": "user", "content": "Test connection. Respond with 'OK'."}
             ])
-            
             return {
                 "success": True,
                 "model": model_name,
                 "response_length": len(test_response.content),
                 "message": f"Connection successful for {model_name}"
             }
-            
         except Exception as e:
             return {
                 "success": False,
@@ -147,7 +139,6 @@ class LLMFactory:
                 "error": str(e),
                 "message": f"Connection failed: {str(e)}"
             }
-    
     @staticmethod
     def create_custom_llm(
         api_key: str,

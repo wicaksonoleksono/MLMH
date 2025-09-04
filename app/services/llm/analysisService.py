@@ -191,32 +191,23 @@ class LLMAnalysisService:
             print(f" No conversation messages found for session {session_id}")
             return None
         
-        print(f"📝 Found {len(conversation_messages)} conversation messages")
-        
-        # 5. Build analysis prompt
+        print(f" Found {len(conversation_messages)} conversation messages")
         analysis_prompt = LLMAnalysisPromptBuilder.build_full_analysis_prompt(
             conversation_messages=conversation_messages,
             depression_aspects=depression_aspects,
             analysis_scale=analysis_scale
         )
-        
-        print(f"🔧 Built analysis prompt ({len(analysis_prompt)} characters)")
-        
-        # 6. Call OpenAI API
+        print(f" Built analysis prompt ({len(analysis_prompt)} characters)")
         analysis_model = llm_settings.analysis_model or "gpt-4o-mini"
         raw_response = cls.call_openai_analysis(
             analysis_prompt=analysis_prompt,
             api_key=api_key,
             model=analysis_model
         )
-        
         if not raw_response:
             print(" Failed to get response from OpenAI")
             return None
-        
-        print(f"🤖 Got response from OpenAI ({len(raw_response)} characters)")
-        
-        # 7. Process and store results
+        print(f" Got response from OpenAI ({len(raw_response)} characters)")
         result = LLMAnalysisResultProcessor.process_llm_analysis_response(
             session_id=session_id,
             raw_llm_response=raw_response,
@@ -226,23 +217,20 @@ class LLMAnalysisService:
         )
         
         if result:
-            print(f"✅ Analysis completed successfully for session {session_id}")
+            print(f" Analysis completed successfully for session {session_id}")
             print(f"   Analysis ID: {result.id}")
             print(f"   Aspects detected: {result.total_aspects_detected}")
             print(f"   Average severity: {result.average_severity_score}")
         else:
             print(f" Failed to process analysis results for session {session_id}")
-        
         return result
     
     @staticmethod
     def get_analysis_result(session_id: str) -> Optional[LLMAnalysisResult]:
         """
         Get existing analysis result for a session.
-        
         Args:
             session_id: Session ID to get analysis for
-            
         Returns:
             LLMAnalysisResult if exists, None otherwise
         """
@@ -255,24 +243,18 @@ class LLMAnalysisService:
     def test_analysis_with_sample_data(sample_conversation: List[Dict[str, str]]) -> Dict[str, Any]:
         """
         Test analysis functionality with sample conversation data.
-        
         Args:
             sample_conversation: List of sample messages
-            
         Returns:
             Dictionary with test results
         """
         try:
-            # Get LLM settings
             llm_settings = LLMAnalysisService.get_llm_settings()
             if not llm_settings:
                 return {"status": "error", "message": "No active LLM settings found"}
-            
             api_key = llm_settings.get_api_key()
             if not api_key:
                 return {"status": "error", "message": "No valid API key in LLM settings"}
-            
-            # Get depression aspects
             depression_aspects = []
             analysis_scale = None
             if llm_settings.depression_aspects:
@@ -280,36 +262,26 @@ class LLMAnalysisService:
                     depression_aspects = llm_settings.depression_aspects['aspects']
                 elif isinstance(llm_settings.depression_aspects, list):
                     depression_aspects = llm_settings.depression_aspects
-            
-            # Get analysis scale if available
             if llm_settings.analysis_scale:
                 if isinstance(llm_settings.analysis_scale, dict) and 'scale' in llm_settings.analysis_scale:
                     analysis_scale = llm_settings.analysis_scale['scale']
                 elif isinstance(llm_settings.analysis_scale, list):
                     analysis_scale = llm_settings.analysis_scale
-            
             if not depression_aspects:
                 return {"status": "error", "message": "No depression aspects configured"}
-            
-            # Build prompt
             analysis_prompt = LLMAnalysisPromptBuilder.build_full_analysis_prompt(
                 conversation_messages=sample_conversation,
                 depression_aspects=depression_aspects,
                 analysis_scale=analysis_scale
             )
-            
-            # Make API call
             analysis_model = llm_settings.analysis_model or "gpt-4o-mini"
             raw_response = LLMAnalysisService.call_openai_analysis(
                 analysis_prompt=analysis_prompt,
                 api_key=api_key,
                 model=analysis_model
             )
-            
             if not raw_response:
                 return {"status": "error", "message": "Failed to get response from OpenAI"}
-            
-            # Process response (but don't store)
             parsed_result = LLMAnalysisResultProcessor.extract_json_from_response(raw_response)
             is_valid, errors = LLMAnalysisResultProcessor.validate_analysis_result(parsed_result, depression_aspects)
             

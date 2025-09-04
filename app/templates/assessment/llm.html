@@ -186,6 +186,8 @@ dengan Anisa{% endblock %} {% block content %}
             </div>
 
             <!-- Conversation Ended Message -->
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -320,20 +322,21 @@ dengan Anisa{% endblock %} {% block content %}
       },
 
       async initializeChat() {
-        console.log("Initializing chat...");
+        console.log("Initializing chat with session ID:", this.sessionId);
         try {
           // Start chat session
-          const response = await fetch(
-            `{{ url_for("llm_assessment.start_chat", session_id='TOKEN') }}`.replace(
-              "TOKEN",
-              this.sessionId
-            ),
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-            }
+          const url = `{{ url_for("llm_assessment.start_chat", session_id='TOKEN') }}`.replace(
+            "TOKEN",
+            this.sessionId
           );
+          console.log("Calling start chat endpoint:", url);
+          
+          const response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+          });
 
+          console.log("Start chat response status:", response.status);
           const result = await response.json();
           console.log("Start chat response:", result);
 
@@ -341,6 +344,8 @@ dengan Anisa{% endblock %} {% block content %}
             // Send special trigger message to get initial greeting
             console.log("Sending trigger message for initial greeting...");
             await this.sendTriggerMessage();
+          } else {
+            console.error("Start chat failed:", result.message);
           }
 
           this.loading = false;
@@ -352,7 +357,77 @@ dengan Anisa{% endblock %} {% block content %}
         }
       },
 
-      async sendTriggerMessage() {\n        console.log(\"Sending trigger message...\");\n        try {\n          // Add AI response placeholder\n          const botMessageId = this.messageId++;\n          this.messages.push({\n            id: botMessageId,\n            type: \"ai\",\n            content: \"\",\n            streaming: true,\n            timestamp: new Date(),\n          });\n\n          this.isTyping = true;\n          this.scrollToBottom();\n\n          // Create and send the request manually instead of using EventSource\n          // EventSource doesn't support POST, so we'll use fetch with streaming\n          const url = `/assessment/llm/chat-stream-new/${this.sessionId}`;\n          console.log(\"Sending POST request to:\", url);\n          const response = await fetch(url, {\n            method: 'POST',\n            headers: {\n              'Content-Type': 'application/json',\n            },\n            body: JSON.stringify({\n              message: '-',  // Special trigger message\n              exchange_count: this.exchangeCount\n            })\n          });\n\n          if (!response.ok) {\n            throw new Error(`HTTP error! status: ${response.status}`);\n          }\n\n          // Get reference to the bot message we just added\n          const botMessage = this.messages[this.messages.length - 1];\n\n          // Read the streaming response\n          const reader = response.body.getReader();\n          const decoder = new TextDecoder('utf-8');\n          let buffer = '';\n\n          try {\n            while (true) {\n              const { done, value } = await reader.read();\n              if (done) break;\n\n              buffer += decoder.decode(value, { stream: true });\n              \n              // Process complete lines\n              const lines = buffer.split('\\n');\n              buffer = lines.pop(); // Keep incomplete line in buffer\n\n              for (const line of lines) {\n                if (line.startsWith('data: ')) {\n                  try {\n                    const data = JSON.parse(line.slice(6)); // Remove 'data: ' prefix\n                    console.log(\"Received SSE data:\", data);\n\n                    if (data.type === \"chunk\") {\n                      // Use data.content format from existing SSE implementation\n                      botMessage.content += data.content;\n                      this.scrollToBottom();\n                    } else if (data.type === \"complete\") {\n                      botMessage.streaming = false;\n                      this.isTyping = false;\n                      this.exchangeCount = data.exchange_count || this.exchangeCount;\n\n                      if (data.conversation_ended) {\n                        this.handleConversationEnd();\n                      }\n                      break; // Done processing\n                    } else if (data.type === \"error\") {\n                      botMessage.content =\n                        data.message || \"Maaf, terjadi kesalahan. Silakan coba lagi.\";\n                      botMessage.streaming = false;\n                      this.isTyping = false;\n                      break; // Done processing\n                    }\n                  } catch (e) {\n                    console.error(\"Error parsing SSE data:\", e);\n                  }\n                }\n              }\n            }\n          } finally {\n            reader.releaseLock();\n          }\n        } catch (error) {\n          console.error(\"Error sending trigger message:\", error);\n          this.isTyping = false;\n          // Add error message to chat\n          if (this.messages.length > 0) {\n            const botMessage = this.messages[this.messages.length - 1];\n            botMessage.content = \"Maaf, terjadi kesalahan saat memulai percakapan. Silakan coba lagi.\";\n            botMessage.streaming = false;\n          }\n        }\n      },
+      async sendTriggerMessage() {
+        console.log("Sending trigger message...");
+        try {
+          // Add AI response placeholder
+          const botMessageId = this.messageId++;
+          this.messages.push({
+            id: botMessageId,
+            type: "ai",
+            content: "",
+            streaming: true,
+            timestamp: new Date(),
+          });
+
+          this.isTyping = true;
+          this.scrollToBottom();
+
+          // Use EventSource for the initial greeting
+          const url = `/assessment/llm/initial-greeting/${this.sessionId}`;
+          console.log("Connecting to EventSource with URL:", url);
+          const eventSource = new EventSource(url);
+
+          // Get reference to the bot message we just added
+          const botMessage = this.messages[this.messages.length - 1];
+
+          eventSource.onopen = () => {
+            console.log("EventSource connection opened");
+          };
+
+          eventSource.onmessage = (event) => {
+            console.log("Received SSE message:", event.data);
+            try {
+              const data = JSON.parse(event.data);
+
+              if (data.type === "chunk") {
+                // Append content to the message
+                botMessage.content += data.data;
+                this.scrollToBottom();
+              } else if (data.type === "complete") {
+                botMessage.streaming = false;
+                this.isTyping = false;
+                console.log("Stream complete");
+                eventSource.close();
+              } else if (data.type === "error") {
+                botMessage.content = data.message || "Maaf, terjadi kesalahan saat memuat sapaan awal.";
+                botMessage.streaming = false;
+                this.isTyping = false;
+                console.log("Stream error:", data.message);
+                eventSource.close();
+              } else if (data.type === "stream_start") {
+                console.log("Stream started");
+              }
+            } catch (e) {
+              console.error("Error parsing SSE data:", e);
+            }
+          };
+
+          eventSource.onerror = (error) => {
+            console.error("SSE Connection Error:", error);
+            botMessage.content = "Koneksi terputus saat memuat sapaan awal.";
+            botMessage.streaming = false;
+            this.isTyping = false;
+            eventSource.close();
+          };
+        } catch (error) {
+          console.error("Error sending trigger message:", error);
+          const botMessage = this.messages[this.messages.length - 1];
+          botMessage.content = "Terjadi kesalahan saat memuat sapaan awal. Silakan refresh halaman.";
+          botMessage.streaming = false;
+          this.isTyping = false;
+        }
+      },
 
       async sendMessage() {
         if (

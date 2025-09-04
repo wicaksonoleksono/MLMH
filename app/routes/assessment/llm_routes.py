@@ -23,13 +23,9 @@ def start_conversation_route(session_id):
     session = SessionService.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
-
     # Start conversation
     result = LLMChatService.start_conversation(session_id)
     return result
-
-
-
 
 
 @llm_assessment_bp.route('/send-message/<session_id>', methods=['POST'])
@@ -403,91 +399,85 @@ def debug_session_status(session_id):
 @user_required
 def initial_greeting(session_id):
     """SSE endpoint for streaming the initial AI greeting"""
+    print(f"Initial greeting called with session_id: {session_id}")
+    
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or int(session.user_id) != int(current_user.id):
+    if not session:
+        print(f"Session not found for session_id: {session_id}")
+        return Response("data: " + json.dumps({'type': 'error', 'message': 'Session not found'}, ensure_ascii=False) + "\n\n",
+                       mimetype='text/event-stream'), 403
+    
+    print(f"Session user_id: {session.user_id}, Current user id: {current_user.id}")
+    if int(session.user_id) != int(current_user.id):
+        print(f"Session access denied for user {current_user.id} on session {session_id}")
         return Response("data: " + json.dumps({'type': 'error', 'message': 'Session not found or access denied'}, ensure_ascii=False) + "\n\n",
                        mimetype='text/event-stream'), 403
 
     def generate():
         try:
+            print(f"Starting to generate initial greeting for session {session_id}")
             yield f"data: {json.dumps({'type': 'stream_start'}, ensure_ascii=False)}\n\n"
             
-            # Check if this is a special trigger message for initial greeting
-            if user_message == '-':
-                # Get the system prompt to extract the greeting
-                chat_history = session.session_metadata.get('chat_history', {}) if session.session_metadata else {}
-                system_prompt = chat_history.get('system_prompt', '') if chat_history else ''
-                
-                # Extract the initial greeting from the system prompt
-                greeting = ""
-                if system_prompt:
-                    try:
-                        # Look for the first complete sentence that introduces Anisa
-                        import re
-                        # Pattern to match the introduction sentence
-                        pattern = r'(Anda adalah Anisa.*?psikologi yang supportive.*?mendengarkan curhatan orang lain)'
-                        match = re.search(pattern, system_prompt)
-                        if match:
-                            greeting = match.group(1)
-                        else:
-                            # Alternative: Get the first few lines that don't contain aspect indicators
-                            lines = system_prompt.split('\n')
-                            greeting_lines = []
-                            for line in lines:
-                                line = line.strip()
-                                if line and not line.startswith('-') and 'indikator-indikators' not in line.lower() and 'berikut adalah' not in line.lower():
-                                    greeting_lines.append(line)
-                                elif 'indikator-indikators' in line.lower() or 'berikut adalah' in line.lower():
-                                    break
-                            
-                            if greeting_lines:
-                                greeting = ' '.join(greeting_lines[:2]).strip()  # Take first 2 lines
+            # Get the system prompt to extract the greeting
+            chat_history = session.session_metadata.get('chat_history', {}) if session.session_metadata else {}
+            system_prompt = chat_history.get('system_prompt', '') if chat_history else ''
+            print(f"System prompt length: {len(system_prompt)}")
+            
+            # Extract the initial greeting from the system prompt
+            greeting = ""
+            if system_prompt:
+                try:
+                    # Look for the first complete sentence that introduces Anisa
+                    import re
+                    # Pattern to match the introduction sentence
+                    pattern = r'(Anda adalah Anisa.*?psikologi yang supportive.*?mendengarkan curhatan orang lain)'
+                    match = re.search(pattern, system_prompt)
+                    if match:
+                        greeting = match.group(1)
+                    else:
+                        # Alternative: Get the first few lines that don't contain aspect indicators
+                        lines = system_prompt.split('\n')
+                        greeting_lines = []
+                        for line in lines:
+                            line = line.strip()
+                            if line and not line.startswith('-') and 'indikator-indikators' not in line.lower() and 'berikut adalah' not in line.lower():
+                                greeting_lines.append(line)
+                            elif 'indikator-indikators' in line.lower() or 'berikut adalah' in line.lower():
+                                break
                         
-                    except Exception as extract_error:
-                        pass  # Silently fail and use fallback
-                
-                # If we still don't have a greeting, use a simple one
-                if not greeting or len(greeting.strip()) < 10:
-                    greeting = "Halo! Saya Anisa, teman kamu untuk ngobrol. Ada yang ingin kamu curahkan hari ini?"
-                
-                # Add the greeting to LangChain history and database
+                        if greeting_lines:
+                            greeting = ' '.join(greeting_lines[:2]).strip()  # Take first 2 lines
+                    
+                except Exception as extract_error:
+                    print(f"Error extracting greeting: {extract_error}")
+                    pass  # Silently fail and use fallback
+            
+            # If we still don't have a greeting, use a simple one
+            if not greeting or len(greeting.strip()) < 10:
+                greeting = "Halo! Saya Anisa, teman kamu untuk ngobrol. Ada yang ingin kamu curahkan hari ini?"
+            
+            print(f"Using greeting: {greeting}")
+            
+            # Stream the greeting character by character for a natural effect
+            for char in greeting:
+                yield f"data: {json.dumps({'type': 'chunk', 'data': char}, ensure_ascii=False)}\n\n"
+                time.sleep(0.02)  # Small delay for natural typing effect
+            
+            # Add a small pause before ending
+            time.sleep(0.5)
+            
+            # Add the greeting to LangChain history and database after streaming
+            try:
                 from langchain_core.messages import AIMessage
                 from ...services.llm.chatService import get_by_session_id
+                from ...services.assessment.llmService import LLMConversationService
+                
+                # Add to LangChain history
                 history = get_by_session_id(str(session_id))
                 history.add_messages([AIMessage(content=greeting)])
                 
                 # Save to database
-                try:
-                    from ...services.assessment.llmService import LLMConversationService
-                    LLMConversationService.create_conversation_turn(
-                        session_id=session_id,
-                        turn_number=1,
-                        ai_message=greeting,
-                        user_message="",  # No user message for initial greeting
-                        ai_model_used="system_greeting"  # Special identifier for initial greeting
-                    )
-                except Exception as db_error:
-                    pass  # Silently fail - logging is handled elsewhere
-                
-                # Stream the greeting character by character
-                for char in greeting:
-                    yield f"data: {json.dumps({'type': 'chunk', 'content': char}, ensure_ascii=False)}\n\n"
-                    time.sleep(0.02)  # Small delay for natural typing effect
-                
-                # Add a small pause before ending
-                time.sleep(0.5)
-                yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': False}, ensure_ascii=False)}\n\n"
-            
-            # Add the initial greeting to the LangChain history
-            from langchain_core.messages import AIMessage
-            from ...services.llm.chatService import get_by_session_id
-            from ...services.assessment.llmService import LLMConversationService
-            history = get_by_session_id(str(session_id))
-            history.add_messages([AIMessage(content=greeting)])
-            
-            # Save the initial greeting to the database
-            try:
                 LLMConversationService.create_conversation_turn(
                     session_id=session_id,
                     turn_number=1,
@@ -499,16 +489,11 @@ def initial_greeting(session_id):
                 # Log the error but don't fail the streaming
                 print(f"Warning: Failed to save initial greeting to database: {db_error}")
             
-            # Stream the greeting character by character for a natural effect
-            for char in greeting:
-                yield f"data: {json.dumps({'type': 'chunk', 'data': char}, ensure_ascii=False)}\n\n"
-                time.sleep(0.02)  # Small delay for natural typing effect
-            
-            # Add a small pause before ending
-            time.sleep(0.5)
             yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': False}, ensure_ascii=False)}\n\n"
+            print(f"Finished generating initial greeting for session {session_id}")
             
         except Exception as e:
+            print(f"Error in initial greeting generation: {e}")
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
 
     response = Response(stream_with_context(generate()), mimetype='text/event-stream')
@@ -555,83 +540,17 @@ def chat_stream_new(session_id):
 
     def generate():
         try:
-            # Check if this is a special trigger message for initial greeting
-            if user_message == '-':
-                # Get the system prompt to extract the greeting
-                chat_history = session.session_metadata.get('chat_history', {}) if session.session_metadata else {}
-                system_prompt = chat_history.get('system_prompt', '') if chat_history else ''
-                
-                # Extract the initial greeting from the system prompt
-                greeting = ""
-                if system_prompt:
-                    try:
-                        # Look for the first complete sentence that introduces Anisa
-                        import re
-                        # Pattern to match the introduction sentence
-                        pattern = r'(Anda adalah Anisa.*?psikologi yang supportive.*?mendengarkan curhatan orang lain)'
-                        match = re.search(pattern, system_prompt)
-                        if match:
-                            greeting = match.group(1)
-                        else:
-                            # Alternative: Get the first few lines that don't contain aspect indicators
-                            lines = system_prompt.split('\n')
-                            greeting_lines = []
-                            for line in lines:
-                                line = line.strip()
-                                if line and not line.startswith('-') and 'indikator-indikator' not in line.lower() and 'berikut adalah' not in line.lower():
-                                    greeting_lines.append(line)
-                                elif 'indikator-indikator' in line.lower() or 'berikut adalah' in line.lower():
-                                    break
-                            
-                            if greeting_lines:
-                                greeting = ' '.join(greeting_lines[:2]).strip()  # Take first 2 lines
-                        
-                    except Exception as extract_error:
-                        pass  # Silently fail and use fallback
-                
-                # If we still don't have a greeting, use a simple one
-                if not greeting or len(greeting.strip()) < 10:
-                    greeting = "Halo! Saya Anisa, teman kamu untuk ngobrol. Ada yang ingin kamu curahkan hari ini?"
-                
-                # Add the greeting to LangChain history and database
-                from langchain_core.messages import AIMessage
-                from ...services.llm.chatService import get_by_session_id
-                history = get_by_session_id(str(session_id))
-                history.add_messages([AIMessage(content=greeting)])
-                
-                # Save to database
-                try:
-                    from ...services.assessment.llmService import LLMConversationService
-                    LLMConversationService.create_conversation_turn(
-                        session_id=session_id,
-                        turn_number=1,
-                        ai_message=greeting,
-                        user_message="",  # No user message for initial greeting
-                        ai_model_used="system_greeting"  # Special identifier for initial greeting
-                    )
-                except Exception as db_error:
-                    pass  # Silently fail - logging is handled elsewhere
-                
-                # Stream the greeting character by character
-                for char in greeting:
-                    yield f"data: {json.dumps({'type': 'chunk', 'content': char}, ensure_ascii=False)}\n\n"
-                    time.sleep(0.02)  # Small delay for natural typing effect
-                
-                # Add a small pause before ending
-                time.sleep(0.5)
-                yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': False}, ensure_ascii=False)}\n\n"
+            # Regular message handling
+            # Stream AI response
+            for chunk in LLMChatService.stream_ai_response(session_id, user_message):
+                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk}, ensure_ascii=False)}\n\n"
+                time.sleep(0.01)  # Small delay to prevent overwhelming
+            
+            # Check if conversation ended
+            if LLMChatService.is_conversation_complete(session_id):
+                yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': True}, ensure_ascii=False)}\n\n"
             else:
-                # Regular message handling
-                # Stream AI response
-                for chunk in LLMChatService.stream_ai_response(session_id, user_message):
-                    yield f"data: {json.dumps({'type': 'chunk', 'content': chunk}, ensure_ascii=False)}\n\n"
-                    time.sleep(0.01)  # Small delay to prevent overwhelming
-                
-                # Check if conversation ended
-                if LLMChatService.is_conversation_complete(session_id):
-                    yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': True}, ensure_ascii=False)}\n\n"
-                else:
-                    yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': False}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': False}, ensure_ascii=False)}\n\n"
                 
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"

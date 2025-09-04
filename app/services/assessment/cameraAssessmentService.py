@@ -8,7 +8,6 @@ from ...model.assessment.sessions import CameraCapture
 
 
 class CameraAssessmentService:
-    """Camera assessment service with clean SOC"""
 
     @staticmethod
     def get_session_settings(session_id: str) -> Dict[str, Any]:

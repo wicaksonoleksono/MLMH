@@ -7,10 +7,8 @@ class LLMAnalysisPromptBuilder:
     Builds analysis prompts for LLM conversation analysis.
     Separates prompt construction logic from analysis execution.
     """
-    
     PSYCHOLOGIST_INTRO = """Anda adalah seorang psikolog. Kemudian terdapat 2 orang yang sedang melakukan percakapan, yaitu Anisa seorang mahasiswa psikologi yang supportive dan senang hati mendengarkan curhatan orang lain, dan temannya, dimana Anisa bertindak sebagai orang yang sedang mendengarkan curhat temannya yang kemungkinan mengalami gejala depresi, atau bisa jadi tidak. 
-
-Berikut adalah hasil percakapan untuk mengeksplorasi bagaimana kondisi psikologis mereka terutama yang berkaitan dengan gejala depresi:"""
+    Berikut adalah hasil percakapan untuk mengeksplorasi bagaimana kondisi psikologis mereka terutama yang berkaitan dengan gejala depresi:"""
 
     @staticmethod
     def format_chat_history(conversation_messages: List[Dict[str, str]]) -> str:
@@ -28,11 +26,8 @@ Berikut adalah hasil percakapan untuk mengeksplorasi bagaimana kondisi psikologi
         for msg in conversation_messages:
             role = msg.get('role', 'user')
             content = msg.get('message', '').strip()
-            
             if not content:
                 continue
-                
-            # Map roles to conversation participants
             speaker = "Anisa" if role == "assistant" else "Teman"
             formatted_lines.append(f"{speaker}: {content}")
         

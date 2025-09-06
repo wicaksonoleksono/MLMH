@@ -427,10 +427,8 @@ dengan Anisa{% endblock %} {% block content %}
 
           eventSource.onerror = (error) => {
             clearTimeout(timeoutId);
-            botMessage.content = `SSE Error - ReadyState: ${eventSource.readyState} | URL: ${eventSource.url} | Type: ${error.type} | TimeStamp: ${error.timeStamp}`;
-            botMessage.streaming = false;
-            this.isTyping = false;
-            eventSource.close();
+            debugger;
+            throw error;
           };
         } catch (error) {
           const botMessage = this.messages[this.messages.length - 1];

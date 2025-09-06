@@ -383,63 +383,59 @@ dengan Anisa{% endblock %} {% block content %}
 
           // Add timeout handling for the response
           const timeoutId = setTimeout(() => {
-            console.error("SSE response timeout");
-            botMessage.content = "Waktu respons habis. Silakan coba kirim pesan lagi.";
+            botMessage.content = `SSE Timeout after 30s`;
             botMessage.streaming = false;
             this.isTyping = false;
             eventSource.close();
           }, 30000); // 30 second timeout for response
 
           eventSource.onmessage = (event) => {
+            // Safe JSON parsing - skip non-JSON messages instead of crashing
+            let data;
             try {
-              console.log("SSE onmessage received:", event.data);
-              const data = JSON.parse(event.data);
-              console.log("SSE parsed data:", data);
+              data = JSON.parse(event.data);
+            } catch (parseError) {
+              console.warn('Non-JSON SSE message, skipping:', event.data);
+              return; // Continue stream, skip this message
+            }
 
-              if (data.type === "chunk") {
-                console.log("Processing chunk:", data.data, "Current content length:", botMessage.content.length);
-                botMessage.content += data.data;
-                this.scrollToBottom();
-                console.log("After chunk, content length:", botMessage.content.length);
-              } else if (data.type === "complete") {
-                console.log("SSE complete received");
-                clearTimeout(timeoutId);
-                botMessage.streaming = false;
-                this.isTyping = false;
-                this.exchangeCount++;
-                eventSource.close();
+            if (data.type === "chunk") {
+              botMessage.content += data.data;
+              this.scrollToBottom();
+            } else if (data.type === "complete") {
+              clearTimeout(timeoutId);
+              botMessage.streaming = false;
+              this.isTyping = false;
+              this.exchangeCount++;
+              eventSource.close();
 
-                if (data.conversation_ended) {
-                  this.handleConversationEnd();
-                }
-              } else if (data.type === "error") {
-                console.error("SSE error type received:", data);
-                clearTimeout(timeoutId);
-                botMessage.content = data.message;
-                botMessage.streaming = false;
-                this.isTyping = false;
-                eventSource.close();
-              } else if (data.type === "stream_start") {
-                console.log("SSE stream_start received");
-              } else {
-                console.warn("Unknown SSE message type:", data.type);
+              if (data.conversation_ended) {
+                this.handleConversationEnd();
               }
-            } catch (e) {
-              botMessage.content = e;
+            } else if (data.type === "error") {
+              clearTimeout(timeoutId);
+              botMessage.content = data.message;
               botMessage.streaming = false;
               this.isTyping = false;
               eventSource.close();
+            } else if (data.type === "stream_start") {
+              // Stream started
+            } else {
+              console.warn("Unknown SSE message type:", data.type);
             }
           };
 
           eventSource.onerror = (error) => {
             clearTimeout(timeoutId);
-            throw error;
+            botMessage.content = `SSE Connection Error: ${error.toString()}`;
+            botMessage.streaming = false;
+            this.isTyping = false;
+            eventSource.close();
           };
         } catch (error) {
           const botMessage = this.messages[this.messages.length - 1];
-          
-          throw error;
+          botMessage.content = `Error: ${error.stack || error.toString()}`;
+          botMessage.streaming = false;
           this.isTyping = false;
         }
       },

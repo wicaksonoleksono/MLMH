@@ -439,18 +439,13 @@ dengan Anisa{% endblock %} {% block content %}
 
           eventSource.onerror = (error) => {
             clearTimeout(timeoutId);
-            console.error("SSE ONERROR TRIGGERED:", error);
-            console.error("SSE ONERROR FULL ERROR OBJECT:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
-            console.error("SSE READYSTATE:", eventSource.readyState);
-            console.error("SSE URL:", eventSource.url);
-            console.error("SSE ERROR STACK:", error.stack);
-            console.error("SSE ERROR MESSAGE:", error.message);
-            console.error("SSE ERROR TYPE:", error.type);
-            
-            botMessage.content = `SSE ONERROR: ${error.toString()} | Type: ${error.type} | Message: ${error.message} | ReadyState: ${eventSource.readyState}`;
-            botMessage.streaming = false;
-            this.isTyping = false;
-            eventSource.close();
+            console.error("RAW ERROR OBJECT:", error);
+            console.error("ERROR CONSTRUCTOR:", error.constructor.name);
+            console.error("ERROR KEYS:", Object.keys(error));
+            console.error("ERROR GETOWNPROPERTYNAMES:", Object.getOwnPropertyNames(error));
+            console.error("ERROR PROTOTYPE:", Object.getPrototypeOf(error));
+            debugger; // Force break in browser debugger
+            throw new Error("SSE onerror triggered - check console and debugger");
           };
         } catch (error) {
           const botMessage = this.messages[this.messages.length - 1];

@@ -1,11 +1,17 @@
 # app/routes/assessment_routes.py
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, Response, stream_with_context
 from flask_login import current_user, login_required
-from ..decorators import raw_response
+from ..decorators import raw_response, api_response, user_required
 from ..services.sessionService import SessionService
 from ..services.session.sessionManager import SessionManager
 from ..services.admin.phqService import PHQService
 from ..services.admin.llmService import LLMService
+from ..services.llm.chatService import LLMChatService
+import json
+import time
+import hashlib
+import hmac
+import logging
 
 assessment_bp = Blueprint('assessment', __name__, url_prefix='/assessment')
 
@@ -841,6 +847,133 @@ def reset_session_on_refresh(session_id):
     except Exception as e:
         flash(f"Gagal mereset session: {str(e)}", "error")
         return redirect(url_for("assessment.assessment_dashboard"))
-        flash(f"Gagal mereset LLM assessment: {str(e)}", "error")
-        return redirect(url_for("assessment.assessment_dashboard"))
+
+
+# Token-based auth functions for SSE
+def generate_stream_token(user_id: int, session_id: str) -> str:
+    """Generate a temporary token for SSE authentication"""
+    secret = "your-secret-key-here"  # TODO: Move to config
+    timestamp = str(int(time.time()))
+    payload = f"{user_id}:{session_id}:{timestamp}"
+    signature = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}:{signature}"
+
+def validate_stream_token(token: str, max_age: int = 300) -> tuple[bool, int, str]:
+    """Validate stream token, returns (valid, user_id, session_id)"""
+    try:
+        secret = "your-secret-key-here"  # TODO: Move to config
+        parts = token.split(':')
+        if len(parts) != 4:
+            return False, 0, ""
+        
+        user_id, session_id, timestamp, signature = parts
+        current_time = int(time.time())
+        token_time = int(timestamp)
+        
+        # Check expiration
+        if current_time - token_time > max_age:
+            return False, 0, ""
+        
+        # Verify signature
+        payload = f"{user_id}:{session_id}:{timestamp}"
+        expected_sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+        
+        if hmac.compare_digest(signature, expected_sig):
+            return True, int(user_id), session_id
+        
+        return False, 0, ""
+    except:
+        return False, 0, ""
+
+
+@assessment_bp.route('/get-stream-token/<session_id>', methods=['GET'])
+@user_required
+@api_response  
+def get_stream_token(session_id):
+    """Generate a temporary token for SSE streaming"""
+    session = SessionService.get_session(session_id)
+    if not session or int(session.user_id) != int(current_user.id):
+        return {"message": "Session not found or access denied"}, 403
+    
+    token = generate_stream_token(current_user.id, session_id)
+    return {
+        'token': token,
+        'expires_in': 300,  # 5 minutes
+        'session_id': session_id
+    }
+
+
+@assessment_bp.route('/stream', methods=['GET'])  # This matches nginx /assessment/stream/
+def stream_sse_optimized():
+    """Direct GET SSE endpoint optimized for nginx - matches /assessment/stream/ route"""
+    session_id = request.args.get('session_id')
+    message = request.args.get('message', '').strip()
+    user_token = request.args.get('user_token', '')
+    
+    def sse(event: dict):
+        return "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
+    
+    def generate():
+        try:
+            # Validation
+            if not session_id or not message:
+                yield sse({'type': 'error', 'message': 'session_id and message are required'})
+                return
+            
+            # Auth: Try token first, then fallback to session
+            auth_valid = False
+            validated_user_id = None
+            
+            if user_token:
+                token_valid, token_user_id, token_session_id = validate_stream_token(user_token)
+                if token_valid and token_session_id == session_id:
+                    auth_valid = True
+                    validated_user_id = token_user_id
+            elif current_user.is_authenticated and (current_user.is_admin() or current_user.is_user()):
+                auth_valid = True
+                validated_user_id = current_user.id
+            
+            if not auth_valid:
+                yield sse({'type': 'error', 'message': 'Authentication required'})
+                return
+            
+            # Validate session ownership  
+            session = SessionService.get_session(session_id)
+            if not session or int(session.user_id) != int(validated_user_id):
+                yield sse({'type': 'error', 'message': 'Session access denied'})
+                return
+            
+            # Stream response
+            chat_service = LLMChatService()
+            yield sse({'type': 'stream_start'})
+            
+            last_beat = time.time()
+            chunk_count = 0
+            
+            for chunk in chat_service.stream_ai_response(session_id, message):
+                chunk_count += 1
+                yield sse({'type': 'chunk', 'data': chunk})
+                
+                if time.time() - last_beat > 20:
+                    yield ": ping\n\n"  
+                    last_beat = time.time()
+            
+            ended = chat_service.is_conversation_complete(session_id)
+            yield sse({'type': 'complete', 'conversation_ended': ended})
+            
+        except Exception as e:
+            logging.exception("SSE stream error")
+            yield sse({'type': 'error', 'message': str(e)})
+    
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache, no-transform',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+            'Access-Control-Allow-Origin': '*',
+        },
+        status=200
+    )
 

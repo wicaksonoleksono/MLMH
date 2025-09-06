@@ -312,6 +312,7 @@ dengan Anisa{% endblock %} {% block content %}
         }
       },
 
+      
       async sendMessage() {
         if (
           !this.currentMessage.trim() ||
@@ -319,15 +320,15 @@ dengan Anisa{% endblock %} {% block content %}
           this.conversationEnded
         )
           return;
-
+        
         // Capture on message send
         if (this.cameraManager) {
           await this.cameraManager.onMessageSend();
         }
-
+        
         const userMessage = this.currentMessage.trim();
         this.currentMessage = "";
-
+        
         // Add user message to UI
         this.messages.push({
           id: this.messageId++,
@@ -335,71 +336,96 @@ dengan Anisa{% endblock %} {% block content %}
           content: userMessage,
           timestamp: new Date(),
         });
-
+        
         // Add AI response placeholder
-        const botMessageId = this.messageId++;
         this.messages.push({
-          id: botMessageId,
+          id: this.messageId++,
           type: "ai",
           content: "",
           streaming: true,
           timestamp: new Date(),
         });
-
+        
         this.isTyping = true;
         this.scrollToBottom();
-
-        // Step 1: POST message with proper headers/auth
+        
+        // Add immediate visual feedback when sending message
+        const botMessage = this.messages[this.messages.length - 1];
+        botMessage.content = "🔄 Mengirim pesan...";
+        this.scrollToBottom();
+        
         try {
-          const postResponse = await fetch(
-            `{{ url_for("llm_assessment.send_message_proper", session_id='TOKEN') }}`.replace(
-              "TOKEN",
-              this.sessionId
-            ),
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({ message: userMessage }),
-            }
+          console.log('🚀 Starting message send process...');
+          console.log('Session ID:', this.sessionId);
+          console.log('Message:', userMessage);
+          
+          // Get stream token for authentication
+          console.log('📞 Fetching token from:', `/assessment/get-stream-token/${this.sessionId}`);
+          const tokenResponse = await fetch(
+            `/assessment/get-stream-token/${this.sessionId}`
           );
-
-          const postResult = await postResponse.json();
-
-          // Check if the API response wrapper has the success data
-          const actualResult =
-            postResult.status === "OLKORECT" ? postResult.data : postResult;
-
-          if (actualResult.status !== "success") {
-            throw new Error(actualResult.message || "Failed to send message");
+          
+          console.log('📞 Token response status:', tokenResponse.status);
+          const tokenResult = await tokenResponse.json();
+          console.log('📞 Token result:', tokenResult);
+          
+          const tokenData = tokenResult.status === "OLKORECT" ? tokenResult.data : tokenResult;
+          
+          if (!tokenData.token) {
+            throw new Error("Failed to get stream token: " + JSON.stringify(tokenData));
           }
-
-          // Step 2: Stream response using EventSource with message_id
-          const eventSource = new EventSource(actualResult.stream_url);
-
+          
+          console.log('🎫 Got token:', tokenData.token.substring(0, 20) + '...');
+          
+          // Build stream URL with parameters (like Optima) - now using nginx optimized route
+          const params = new URLSearchParams({
+            session_id: this.sessionId,
+            message: userMessage,
+            user_token: tokenData.token
+          });
+          
+          const streamUrl = `/assessment/stream?${params}`;
+          console.log('🌊 SSE URL:', streamUrl);
+          
+          const eventSource = new EventSource(streamUrl);
+          console.log('🔗 EventSource created, readyState:', eventSource.readyState);
+          
           // Get reference to the bot message we just added
           const botMessage = this.messages[this.messages.length - 1];
-
-          // Add timeout handling for the response
+          
+          // Add timeout handling
           const timeoutId = setTimeout(() => {
             botMessage.content = `SSE Timeout after 30s`;
             botMessage.streaming = false;
             this.isTyping = false;
             eventSource.close();
-          }, 30000); // 30 second timeout for response
-
+          }, 30000);
+          
           eventSource.onmessage = (event) => {
-            // Safe JSON parsing - skip non-JSON messages instead of crashing
+            console.log('🔍 Raw SSE data received:', event.data);
+            console.log('🔍 SSE event type:', event.type);
+            
             let data;
             try {
               data = JSON.parse(event.data);
+              console.log('✅ Successfully parsed JSON:', data);
             } catch (parseError) {
-              console.warn('Non-JSON SSE message, skipping:', event.data);
-              return; // Continue stream, skip this message
+              console.error('❌ JSON parse failed!');
+              console.error('Raw data:', event.data);
+              console.error('Parse error:', parseError);
+              
+              // Show raw response in bot message for debugging
+              botMessage.content = `[DEBUG] JSON Parse Error: ${event.data}`;
+              botMessage.streaming = false;
+              this.isTyping = false;
+              return;
             }
-
+            
             if (data.type === "chunk") {
+              // Clear typing indicator on first chunk
+              if (botMessage.content.includes("💭 Anisa sedang mengetik...")) {
+                botMessage.content = "";
+              }
               botMessage.content += data.data;
               this.scrollToBottom();
             } else if (data.type === "complete") {
@@ -408,7 +434,6 @@ dengan Anisa{% endblock %} {% block content %}
               this.isTyping = false;
               this.exchangeCount++;
               eventSource.close();
-
               if (data.conversation_ended) {
                 this.handleConversationEnd();
               }
@@ -419,17 +444,36 @@ dengan Anisa{% endblock %} {% block content %}
               this.isTyping = false;
               eventSource.close();
             } else if (data.type === "stream_start") {
-              // Stream started
+              // Stream started - clear loading message and show AI is typing
+              console.log("Stream started");
+              botMessage.content = "💭 Anisa sedang mengetik...";
+              this.scrollToBottom();
             } else {
               console.warn("Unknown SSE message type:", data.type);
             }
           };
-
+          
           eventSource.onerror = (error) => {
+            console.error('🚨 EventSource error occurred!');
+            console.error('Error object:', error);
+            console.error('EventSource readyState:', eventSource.readyState);
+            console.error('EventSource URL:', eventSource.url);
+            
             clearTimeout(timeoutId);
-            debugger;
-            throw error;
+            const botMessage = this.messages[this.messages.length - 1];
+            
+            // Show detailed error info for debugging
+            botMessage.content = `[DEBUG] SSE Connection Error:
+- ReadyState: ${eventSource.readyState}
+- URL: ${eventSource.url}
+- Type: ${error.type}
+- TimeStamp: ${error.timeStamp}`;
+            
+            botMessage.streaming = false;
+            this.isTyping = false;
+            eventSource.close();
           };
+          
         } catch (error) {
           const botMessage = this.messages[this.messages.length - 1];
           botMessage.content = `Error: ${error.stack || error.toString()}`;

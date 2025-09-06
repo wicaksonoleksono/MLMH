@@ -1,20 +1,18 @@
 # app/routes/assessment/llm_routes.py
-from flask import Blueprint, request, jsonify, Response, stream_with_context, render_template, redirect, url_for, flash
+from flask import Blueprint, request, jsonify, render_template, redirect, url_for, flash
 from flask_login import current_user, login_required
-from ...decorators import api_response, user_required, sse_user_required
+from ...decorators import api_response, user_required
 # Removed deprecated service imports - using LLMChatService directly
 from ...services.llm.chatService import LLMChatService
 from ...services.assessment.llmService import LLMConversationService
 from ...services.sessionService import SessionService
 from ...services.admin.llmService import LLMService
-import json
-import time
 from datetime import datetime
-import uuid
-import logging
-import traceback
 
 llm_assessment_bp = Blueprint('llm_assessment', __name__, url_prefix='/assessment/llm')
+
+
+
 
 
 @llm_assessment_bp.route('/start/<int:session_id>', methods=['POST'])
@@ -29,90 +27,9 @@ def start_conversation_route(session_id):
     return result
 
 
-@llm_assessment_bp.route('/send-message/<session_id>', methods=['POST'])
-@user_required
-@api_response
-def send_message_proper(session_id):
-    """POST endpoint for sending message with proper headers/auth"""
-    session = SessionService.get_session(session_id)
-    if not session or str(session.user_id) != str(current_user.id):
-        return {"message": "Session not found or access denied"}, 403
-    data = request.get_json()
-    user_message = data.get('message', '').strip()
-    if not user_message:
-        return {"message": "Message is required"}, 400
-    message_id = str(uuid.uuid4())
-    # Store message temporarily for streaming (in-memory store)
-    if not hasattr(send_message_proper, 'pending_messages'):
-        send_message_proper.pending_messages = {}
-    send_message_proper.pending_messages[message_id] = {
-        'session_id': session.id,
-        'user_message': user_message,
-        'created_at': datetime.utcnow()
-    }
-    
-    return {
-        'status': 'success',
-        'message_id': message_id,
-        'stream_url': f'/assessment/llm/stream-response/{message_id}'
-    }
 
-@llm_assessment_bp.route('/stream-response/<message_id>')
-@sse_user_required
-def stream_response(message_id):
-    pending_messages = getattr(send_message_proper, 'pending_messages', {})
-    message_data = pending_messages.get(message_id)
 
-    def sse(event: dict):
-        return "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
 
-    def generate():
-        try:
-            if not message_data:
-                yield sse({'type': 'error',
-                           'message': 'Message not found (worker restart or mismatch). Refresh and try again.'})
-                return
-            session_id = message_data['session_id']
-            user_message = message_data['user_message']
-            session = SessionService.get_session(session_id)
-            if not session or int(session.user_id) != int(current_user.id):
-                yield sse({'type': 'error', 'message': 'Access denied'})
-                return
-            chat_service = LLMChatService()
-            yield sse({'type': 'stream_start'})
-            last_beat = time.time()
-            chunk_count = 0
-            for chunk in chat_service.stream_ai_response(session_id, user_message):
-                chunk_count += 1
-                yield sse({'type': 'chunk', 'data': chunk})
-
-                if time.time() - last_beat > 20:
-                    yield ": ping\n\n"  # SSE comment heartbeat
-                    last_beat = time.time()
-
-            ended = chat_service.is_conversation_complete(session_id)
-            yield sse({'type': 'complete', 'conversation_ended': ended})
-
-        except Exception as e:
-            logging.exception("SSE stream error")
-            yield sse({'type': 'error', 'message': str(e)})
-
-        finally:
-            # cleanup only if it existed
-            if message_data and message_id in pending_messages:
-                pending_messages.pop(message_id, None)
-
-    return Response(
-        stream_with_context(generate()),
-        mimetype='text/event-stream',
-        headers={
-            'Cache-Control': 'no-cache, no-transform',
-            'Connection': 'keep-alive',
-            'X-Accel-Buffering': 'no',          # 🔧 stops nginx buffering
-            'Access-Control-Allow-Origin': '*', # fine if same-origin; if using cookies, set specific origin + credentials
-        },
-        status=200
-    )
 
 
 

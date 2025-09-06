@@ -425,12 +425,7 @@ dengan Anisa{% endblock %} {% block content %}
                 console.warn("Unknown SSE message type:", data.type);
               }
             } catch (e) {
-              console.error("ONMESSAGE PARSE ERROR:", e);
-              console.error("FULL STACK TRACE:", e.stack);
-              console.error("RAW EVENT DATA:", event.data);
-              console.error("EVENT OBJECT:", event);
-              
-              botMessage.content = `PARSE ERROR: ${e.toString()} | Stack: ${e.stack} | Raw: ${event.data}`;
+              botMessage.content = e;
               botMessage.streaming = false;
               this.isTyping = false;
               eventSource.close();

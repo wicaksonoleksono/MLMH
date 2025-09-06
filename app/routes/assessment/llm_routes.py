@@ -60,64 +60,58 @@ def send_message_proper(session_id):
 @llm_assessment_bp.route('/stream-response/<message_id>')
 @sse_user_required
 def stream_response(message_id):
-    """EventSource endpoint for streaming AI response to a specific message"""
     pending_messages = getattr(send_message_proper, 'pending_messages', {})
     message_data = pending_messages.get(message_id)
-    if not message_data:
-        error_msg = f'Message {message_id} not found. App may have restarted. Please refresh and try again.'
-        return Response("data: " + json.dumps({'type': 'error', 'message': error_msg}, ensure_ascii=False) + "\n\n", 
-                       mimetype='text/event-stream'), 404
+
+    def sse(event: dict):
+        return "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
+
     def generate():
         try:
+            if not message_data:
+                yield sse({'type': 'error',
+                           'message': 'Message not found (worker restart or mismatch). Refresh and try again.'})
+                return
             session_id = message_data['session_id']
             user_message = message_data['user_message']
-            
-            logging.info(f"🚀 Starting LLM stream for session {session_id}, message: {user_message[:50]}...")
-            
             session = SessionService.get_session(session_id)
             if not session or int(session.user_id) != int(current_user.id):
-                error_msg = f"Access denied for session {session_id}, user {current_user.id}"
-                logging.warning(f"🚫 {error_msg}")
-                yield f"data: {json.dumps({'type': 'error', 'message': 'Access denied'}, ensure_ascii=False)}\n\n"
+                yield sse({'type': 'error', 'message': 'Access denied'})
                 return
-                
             chat_service = LLMChatService()
-            yield f"data: {json.dumps({'type': 'stream_start'}, ensure_ascii=False)}\n\n"
-            
+            yield sse({'type': 'stream_start'})
+            last_beat = time.time()
             chunk_count = 0
             for chunk in chat_service.stream_ai_response(session_id, user_message):
                 chunk_count += 1
-                yield f"data: {json.dumps({'type': 'chunk', 'data': chunk}, ensure_ascii=False)}\n\n"
-            
-            logging.info(f"✅ Streamed {chunk_count} chunks for session {session_id}")
-            
-            if chat_service.is_conversation_complete(session_id):
-                logging.info(f"🏁 Conversation completed for session {session_id}")
-                yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': True}, ensure_ascii=False)}\n\n"
-            else:
-                yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': False}, ensure_ascii=False)}\n\n"
-                
-            if message_id in pending_messages:
-                del pending_messages[message_id]
-                
+                yield sse({'type': 'chunk', 'data': chunk})
+
+                if time.time() - last_beat > 20:
+                    yield ": ping\n\n"  # SSE comment heartbeat
+                    last_beat = time.time()
+
+            ended = chat_service.is_conversation_complete(session_id)
+            yield sse({'type': 'complete', 'conversation_ended': ended})
+
         except Exception as e:
-            # Log full error details
-            error_msg = str(e)
-            full_traceback = traceback.format_exc()
-            logging.error(f"💥 Error for session {session_id}: {error_msg}")
-            logging.error(f"Full traceback: {full_traceback}")
-            
-            # Send raw error to frontend - no masking
-            yield f"data: {json.dumps({'type': 'error', 'message': error_msg}, ensure_ascii=False)}\n\n"
+            logging.exception("SSE stream error")
+            yield sse({'type': 'error', 'message': str(e)})
+
+        finally:
+            # cleanup only if it existed
+            if message_data and message_id in pending_messages:
+                pending_messages.pop(message_id, None)
+
     return Response(
         stream_with_context(generate()),
         mimetype='text/event-stream',
         headers={
-            'Cache-Control': 'no-cache',
+            'Cache-Control': 'no-cache, no-transform',
             'Connection': 'keep-alive',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Headers': 'Cache-Control'
-        }
+            'X-Accel-Buffering': 'no',          # 🔧 stops nginx buffering
+            'Access-Control-Allow-Origin': '*', # fine if same-origin; if using cookies, set specific origin + credentials
+        },
+        status=200
     )
 
 

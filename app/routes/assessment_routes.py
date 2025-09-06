@@ -903,7 +903,7 @@ def get_stream_token(session_id):
     }
 
 
-@assessment_bp.route('/stream', methods=['GET'])  # This matches nginx /assessment/stream/
+@assessment_bp.route('/stream/', methods=['GET'])  # This matches nginx /assessment/stream/
 def stream_sse_optimized():
     """Direct GET SSE endpoint optimized for nginx - matches /assessment/stream/ route"""
     session_id = request.args.get('session_id')

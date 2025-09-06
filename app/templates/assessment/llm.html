@@ -373,7 +373,7 @@ dengan Anisa{% endblock %} {% block content %}
             user_token: tokenData.token
           });
           
-          const streamUrl = `/assessment/stream?${params}`;
+          const streamUrl = `/assessment/stream/?${params}`;
           const eventSource = new EventSource(streamUrl);
           
           // Get reference to the bot message we just added

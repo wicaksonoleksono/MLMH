@@ -1,7 +1,7 @@
 # app/routes/assessment/llm_routes.py
 from flask import Blueprint, request, jsonify, Response, stream_with_context, render_template, redirect, url_for, flash
 from flask_login import current_user, login_required
-from ...decorators import api_response, user_required
+from ...decorators import api_response, user_required, sse_user_required
 # Removed deprecated service imports - using LLMChatService directly
 from ...services.llm.chatService import LLMChatService
 from ...services.assessment.llmService import LLMConversationService
@@ -58,7 +58,7 @@ def send_message_proper(session_id):
     }
 
 @llm_assessment_bp.route('/stream-response/<message_id>')
-@user_required  
+@sse_user_required
 def stream_response(message_id):
     """EventSource endpoint for streaming AI response to a specific message"""
     pending_messages = getattr(send_message_proper, 'pending_messages', {})

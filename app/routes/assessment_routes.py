@@ -590,7 +590,6 @@ def check_recoverable_session():
 
 @assessment_bp.route('/abandon/<session_id>', methods=['POST'])
 @login_required
-@raw_response
 def abandon_session(session_id):
     """Mark session as abandoned (user quit)"""
     try:

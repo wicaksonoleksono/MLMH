@@ -107,3 +107,22 @@ def raw_response(f):
             error_msg = f"[SNAFU]: {str(e)}\n{traceback.format_exc()}"
             return error_msg, 500
     return decorated_function
+
+
+def sse_user_required(f):
+    """SSE-compatible user authentication that returns SSE error instead of abort"""
+    from flask import Response
+    import json
+    
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated:
+            error_response = f"data: {json.dumps({'type': 'error', 'message': 'Authentication required'}, ensure_ascii=False)}\n\n"
+            return Response(error_response, mimetype='text/event-stream'), 401
+            
+        if not (current_user.is_admin() or current_user.is_user()):
+            error_response = f"data: {json.dumps({'type': 'error', 'message': 'Access denied'}, ensure_ascii=False)}\n\n"
+            return Response(error_response, mimetype='text/event-stream'), 403
+            
+        return f(*args, **kwargs)
+    return decorated_function

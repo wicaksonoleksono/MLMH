@@ -439,13 +439,10 @@ dengan Anisa{% endblock %} {% block content %}
 
           eventSource.onerror = (error) => {
             clearTimeout(timeoutId);
-            console.error("RAW ERROR OBJECT:", error);
-            console.error("ERROR CONSTRUCTOR:", error.constructor.name);
-            console.error("ERROR KEYS:", Object.keys(error));
-            console.error("ERROR GETOWNPROPERTYNAMES:", Object.getOwnPropertyNames(error));
-            console.error("ERROR PROTOTYPE:", Object.getPrototypeOf(error));
-            debugger; // Force break in browser debugger
-            throw new Error("SSE onerror triggered - check console and debugger");
+            botMessage.content = error;
+            botMessage.streaming = false;
+            this.isTyping = false;
+            eventSource.close();
           };
         } catch (error) {
           const botMessage = this.messages[this.messages.length - 1];

@@ -440,47 +440,15 @@ dengan Anisa{% endblock %} {% block content %}
               error: error
             });
             
-            // Show more detailed error message
-            let errorMessage = "Koneksi SSE bermasalah.";
-            if (eventSource.readyState === EventSource.CONNECTING) {
-              errorMessage = "Gagal terhubung ke server. Periksa koneksi internet atau konfigurasi LLM.";
-            } else if (eventSource.readyState === EventSource.CLOSED) {
-              errorMessage = "Koneksi ditutup oleh server. Kemungkinan ada error konfigurasi atau server issue.";
-            }
-            
-            botMessage.content = errorMessage + " (Periksa console browser untuk detail)";
+            botMessage.content = `SSE Error: ${JSON.stringify(error)} | ReadyState: ${eventSource.readyState} | URL: ${eventSource.url}`;
             botMessage.streaming = false;
             this.isTyping = false;
             eventSource.close();
           };
         } catch (error) {
           const botMessage = this.messages[this.messages.length - 1];
-          let errorMessage = "Terjadi kesalahan saat mengirim pesan. ";
-
-          // Provide more specific error information
-          if (error.message) {
-            if (
-              error.message.includes("timeout") ||
-              error.message.includes("timed out")
-            ) {
-              errorMessage += "Waktu koneksi habis. Silakan coba lagi.";
-            } else if (
-              error.message.includes("network") ||
-              error.message.includes("Network")
-            ) {
-              errorMessage +=
-                "Masalah koneksi jaringan. Periksa koneksi internet Anda.";
-            } else if (error.message.includes("429")) {
-              errorMessage +=
-                "Terlalu banyak permintaan. Silakan tunggu sebentar dan coba lagi.";
-            } else {
-              errorMessage += error.message;
-            }
-          } else {
-            errorMessage += "Silakan coba lagi.";
-          }
-
-          botMessage.content = errorMessage;
+          
+          botMessage.content = `Error: ${error.message || error.toString()} | Stack: ${error.stack || 'No stack trace'}`;
           botMessage.streaming = false;
           this.isTyping = false;
         }

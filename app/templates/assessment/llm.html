@@ -427,7 +427,7 @@ dengan Anisa{% endblock %} {% block content %}
 
           eventSource.onerror = (error) => {
             clearTimeout(timeoutId);
-            botMessage.content = `SSE Connection Error: ${error.toString()}`;
+            botMessage.content = `SSE Error - ReadyState: ${eventSource.readyState} | URL: ${eventSource.url} | Type: ${error.type} | TimeStamp: ${error.timeStamp}`;
             botMessage.streaming = false;
             this.isTyping = false;
             eventSource.close();

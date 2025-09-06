@@ -355,29 +355,18 @@ dengan Anisa{% endblock %} {% block content %}
         this.scrollToBottom();
         
         try {
-          console.log('🚀 Starting message send process...');
-          console.log('Session ID:', this.sessionId);
-          console.log('Message:', userMessage);
-          
           // Get stream token for authentication
-          console.log('📞 Fetching token from:', `/assessment/get-stream-token/${this.sessionId}`);
           const tokenResponse = await fetch(
             `/assessment/get-stream-token/${this.sessionId}`
           );
-          
-          console.log('📞 Token response status:', tokenResponse.status);
           const tokenResult = await tokenResponse.json();
-          console.log('📞 Token result:', tokenResult);
-          
           const tokenData = tokenResult.status === "OLKORECT" ? tokenResult.data : tokenResult;
           
           if (!tokenData.token) {
-            throw new Error("Failed to get stream token: " + JSON.stringify(tokenData));
+            throw new Error("Failed to get stream token");
           }
           
-          console.log('🎫 Got token:', tokenData.token.substring(0, 20) + '...');
-          
-          // Build stream URL with parameters (like Optima) - now using nginx optimized route
+          // Build stream URL with parameters
           const params = new URLSearchParams({
             session_id: this.sessionId,
             message: userMessage,
@@ -385,10 +374,7 @@ dengan Anisa{% endblock %} {% block content %}
           });
           
           const streamUrl = `/assessment/stream?${params}`;
-          console.log('🌊 SSE URL:', streamUrl);
-          
           const eventSource = new EventSource(streamUrl);
-          console.log('🔗 EventSource created, readyState:', eventSource.readyState);
           
           // Get reference to the bot message we just added
           const botMessage = this.messages[this.messages.length - 1];
@@ -402,20 +388,11 @@ dengan Anisa{% endblock %} {% block content %}
           }, 30000);
           
           eventSource.onmessage = (event) => {
-            console.log('🔍 Raw SSE data received:', event.data);
-            console.log('🔍 SSE event type:', event.type);
-            
             let data;
             try {
               data = JSON.parse(event.data);
-              console.log('✅ Successfully parsed JSON:', data);
             } catch (parseError) {
-              console.error('❌ JSON parse failed!');
-              console.error('Raw data:', event.data);
-              console.error('Parse error:', parseError);
-              
-              // Show raw response in bot message for debugging
-              botMessage.content = `[DEBUG] JSON Parse Error: ${event.data}`;
+              botMessage.content = `Error: Invalid server response`;
               botMessage.streaming = false;
               this.isTyping = false;
               return;
@@ -445,30 +422,15 @@ dengan Anisa{% endblock %} {% block content %}
               eventSource.close();
             } else if (data.type === "stream_start") {
               // Stream started - clear loading message and show AI is typing
-              console.log("Stream started");
               botMessage.content = "💭 Anisa sedang mengetik...";
               this.scrollToBottom();
-            } else {
-              console.warn("Unknown SSE message type:", data.type);
             }
           };
           
           eventSource.onerror = (error) => {
-            console.error('🚨 EventSource error occurred!');
-            console.error('Error object:', error);
-            console.error('EventSource readyState:', eventSource.readyState);
-            console.error('EventSource URL:', eventSource.url);
-            
             clearTimeout(timeoutId);
             const botMessage = this.messages[this.messages.length - 1];
-            
-            // Show detailed error info for debugging
-            botMessage.content = `[DEBUG] SSE Connection Error:
-- ReadyState: ${eventSource.readyState}
-- URL: ${eventSource.url}
-- Type: ${error.type}
-- TimeStamp: ${error.timeStamp}`;
-            
+            botMessage.content = `<span style="color: red;">Connection error. Please try again.</span>`;
             botMessage.streaming = false;
             this.isTyping = false;
             eventSource.close();

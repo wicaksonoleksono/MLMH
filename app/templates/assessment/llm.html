@@ -440,19 +440,17 @@ dengan Anisa{% endblock %} {% block content %}
               error: error
             });
             
-            // Get the actual HTTP response by making a fetch request
+            // Get the actual HTTP response 
             fetch(eventSource.url)
               .then(response => {
-                if (!response.ok) {
-                  return response.text().then(text => {
-                    botMessage.content = `SSE Error ${response.status}: ${text}`;
-                  });
-                } else {
-                  botMessage.content = `SSE Error: Connection closed unexpectedly. ReadyState: ${eventSource.readyState}`;
-                }
+                return response.text().then(text => {
+                  console.error("Actual server response:", response.status, response.statusText, text);
+                  botMessage.content = `Server Response ${response.status}: ${text} | Headers: ${JSON.stringify([...response.headers.entries()])}`;
+                });
               })
               .catch(fetchError => {
-                botMessage.content = `SSE Error: ${fetchError.message} | ReadyState: ${eventSource.readyState} | URL: ${eventSource.url}`;
+                console.error("Fetch failed:", fetchError);
+                botMessage.content = `Fetch failed: ${fetchError.toString()} | Original error: ${JSON.stringify(error)} | ReadyState: ${eventSource.readyState}`;
               });
             
             botMessage.streaming = false;

@@ -392,14 +392,18 @@ dengan Anisa{% endblock %} {% block content %}
 
           eventSource.onmessage = (event) => {
             try {
+              console.log("SSE onmessage received:", event.data);
               const data = JSON.parse(event.data);
+              console.log("SSE parsed data:", data);
 
               if (data.type === "chunk") {
-                // Use data.data format from new SSE implementation
+                console.log("Processing chunk:", data.data, "Current content length:", botMessage.content.length);
                 botMessage.content += data.data;
                 this.scrollToBottom();
+                console.log("After chunk, content length:", botMessage.content.length);
               } else if (data.type === "complete") {
-                clearTimeout(timeoutId); // Clear timeout on completion
+                console.log("SSE complete received");
+                clearTimeout(timeoutId);
                 botMessage.streaming = false;
                 this.isTyping = false;
                 this.exchangeCount++;
@@ -409,22 +413,24 @@ dengan Anisa{% endblock %} {% block content %}
                   this.handleConversationEnd();
                 }
               } else if (data.type === "error") {
-                clearTimeout(timeoutId); // Clear timeout on error
-                botMessage.content =
-                  data.message || "Maaf, terjadi kesalahan. Silakan coba lagi.";
+                console.error("SSE error type received:", data);
+                clearTimeout(timeoutId);
+                botMessage.content = data.message;
                 botMessage.streaming = false;
                 this.isTyping = false;
                 eventSource.close();
               } else if (data.type === "stream_start") {
-                // Handle stream start signal
+                console.log("SSE stream_start received");
+              } else {
+                console.warn("Unknown SSE message type:", data.type);
               }
             } catch (e) {
-              // Error parsing SSE data
-              console.error("Error parsing SSE data:", e);
-              console.error("Raw event data:", event.data);
+              console.error("ONMESSAGE PARSE ERROR:", e);
+              console.error("FULL STACK TRACE:", e.stack);
+              console.error("RAW EVENT DATA:", event.data);
+              console.error("EVENT OBJECT:", event);
               
-              // Show parsing error to user
-              botMessage.content = `Error parsing server response: ${e.message}. Raw data: ${event.data.substring(0, 200)}...`;
+              botMessage.content = `PARSE ERROR: ${e.toString()} | Stack: ${e.stack} | Raw: ${event.data}`;
               botMessage.streaming = false;
               this.isTyping = false;
               eventSource.close();
@@ -432,27 +438,16 @@ dengan Anisa{% endblock %} {% block content %}
           };
 
           eventSource.onerror = (error) => {
-            clearTimeout(timeoutId); // Clear timeout on error
-            console.error("SSE Connection Error:", error);
-            console.error("Error details:", {
-              readyState: eventSource.readyState,
-              url: eventSource.url,
-              error: error
-            });
+            clearTimeout(timeoutId);
+            console.error("SSE ONERROR TRIGGERED:", error);
+            console.error("SSE ONERROR FULL ERROR OBJECT:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
+            console.error("SSE READYSTATE:", eventSource.readyState);
+            console.error("SSE URL:", eventSource.url);
+            console.error("SSE ERROR STACK:", error.stack);
+            console.error("SSE ERROR MESSAGE:", error.message);
+            console.error("SSE ERROR TYPE:", error.type);
             
-            // Get the actual HTTP response 
-            fetch(eventSource.url)
-              .then(response => {
-                return response.text().then(text => {
-                  console.error("Actual server response:", response.status, response.statusText, text);
-                  botMessage.content = `Server Response ${response.status}: ${text} | Headers: ${JSON.stringify([...response.headers.entries()])}`;
-                });
-              })
-              .catch(fetchError => {
-                console.error("Fetch failed:", fetchError);
-                botMessage.content = `Fetch failed: ${fetchError.toString()} | Original error: ${JSON.stringify(error)} | ReadyState: ${eventSource.readyState}`;
-              });
-            
+            botMessage.content = `SSE ONERROR: ${error.toString()} | Type: ${error.type} | Message: ${error.message} | ReadyState: ${eventSource.readyState}`;
             botMessage.streaming = false;
             this.isTyping = false;
             eventSource.close();

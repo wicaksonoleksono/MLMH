@@ -64,7 +64,8 @@ def stream_response(message_id):
     pending_messages = getattr(send_message_proper, 'pending_messages', {})
     message_data = pending_messages.get(message_id)
     if not message_data:
-        return Response("data: " + json.dumps({'type': 'error', 'message': 'Message not found'}, ensure_ascii=False) + "\n\n", 
+        error_msg = f'Message {message_id} not found. App may have restarted. Please refresh and try again.'
+        return Response("data: " + json.dumps({'type': 'error', 'message': error_msg}, ensure_ascii=False) + "\n\n", 
                        mimetype='text/event-stream'), 404
     def generate():
         try:

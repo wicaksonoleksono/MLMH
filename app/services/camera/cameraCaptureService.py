@@ -38,11 +38,18 @@ class CameraCaptureService:
             return False
 
     @staticmethod
-    def generate_filename(timestamp: datetime, assessment_type: str, target_id: str) -> str:
-        """Generate filename: {timestamp}_{type}_{target_id_short}.jpg"""
+    def generate_filename(timestamp: datetime, assessment_type: str, target_id: str, username: str = None, session_number: int = None) -> str:
+        """Generate filename: {username}_s{session_number}_{timestamp}_{type}_{target_id_short}.jpg"""
         timestamp_str = timestamp.strftime('%Y%m%d_%H%M%S')
         short_id = target_id[:8]
-        return f"{timestamp_str}_{assessment_type}_{short_id}.jpg"
+        
+        if username and session_number:
+            # Clean username (remove spaces, special chars)
+            clean_username = "".join(c for c in username if c.isalnum() or c in ('_', '-')).lower()
+            return f"{clean_username}_s{session_number}_{timestamp_str}_{assessment_type}_{short_id}.jpg"
+        else:
+            # Fallback to old format
+            return f"{timestamp_str}_{assessment_type}_{short_id}.jpg"
 
     @staticmethod
     def save_capture(
@@ -58,12 +65,22 @@ class CameraCaptureService:
         # Ensure upload directory exists
         upload_path = CameraCaptureService.ensure_upload_directory()
         
+        # Get session info for filename
+        username = None
+        session_number = None
+        with get_session() as db:
+            from ...model.assessment.sessions import AssessmentSession
+            session = db.query(AssessmentSession).filter_by(id=assessment_session_id).first()
+            if session and session.user:
+                username = session.user.uname
+                session_number = session.session_number
+        
         # Generate filename based on context
         timestamp = datetime.utcnow()
         assessment_type = 'phq' if phq_response_id else 'llm' if llm_conversation_id else 'general'
         target_id = phq_response_id or llm_conversation_id or assessment_session_id
         
-        filename = CameraCaptureService.generate_filename(timestamp, assessment_type, target_id)
+        filename = CameraCaptureService.generate_filename(timestamp, assessment_type, target_id, username, session_number)
         full_path = os.path.join(upload_path, filename)
         
         # Save file to disk
@@ -229,6 +246,7 @@ class CameraCaptureService:
     def cleanup_session_captures(assessment_session_id: str):
         """Clean up all captures for a specific session (files + DB records)"""
         upload_path = CameraCaptureService.get_upload_path()
+        deleted_count = 0
         
         with get_session() as db:
             session_captures = db.query(CameraCapture).filter_by(
@@ -236,14 +254,18 @@ class CameraCaptureService:
             ).all()
             
             for capture in session_captures:
-                # Delete physical file
+                # Delete physical file with error handling
                 file_path = os.path.join(upload_path, capture.filename)
-                if os.path.exists(file_path):
-                    os.remove(file_path)
+                try:
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                        deleted_count += 1
+                except Exception as e:
+                    print(f"Failed to delete camera capture file {capture.filename}: {e}")
                 
                 # DB record will be auto-deleted by CASCADE foreign key
             
-            return len(session_captures)
+            return deleted_count
 
     @staticmethod
     def cleanup_phq_captures(phq_response_id: str):
@@ -280,3 +302,41 @@ class CameraCaptureService:
                     os.remove(file_path)
             
             return len(llm_captures)
+
+    @staticmethod
+    def bulk_link_captures_to_phq(session_id: str, phq_response_id: str) -> int:
+        """Bulk link unlinked session captures to PHQ assessment"""
+        with get_session() as db:
+            # Find captures that are only linked to session (no specific assessment)
+            unlinked_captures = db.query(CameraCapture).filter_by(
+                assessment_session_id=session_id,
+                phq_response_id=None,
+                llm_conversation_id=None
+            ).all()
+            
+            linked_count = 0
+            for capture in unlinked_captures:
+                capture.phq_response_id = phq_response_id
+                linked_count += 1
+            
+            db.commit()
+            return linked_count
+
+    @staticmethod
+    def bulk_link_captures_to_llm(session_id: str, llm_conversation_id: str) -> int:
+        """Bulk link unlinked session captures to LLM assessment"""
+        with get_session() as db:
+            # Find captures that are only linked to session (no specific assessment)
+            unlinked_captures = db.query(CameraCapture).filter_by(
+                assessment_session_id=session_id,
+                phq_response_id=None,
+                llm_conversation_id=None
+            ).all()
+            
+            linked_count = 0
+            for capture in unlinked_captures:
+                capture.llm_conversation_id = llm_conversation_id
+                linked_count += 1
+            
+            db.commit()
+            return linked_count

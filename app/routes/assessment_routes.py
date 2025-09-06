@@ -4,6 +4,8 @@ from flask_login import current_user, login_required
 from ..decorators import raw_response
 from ..services.sessionService import SessionService
 from ..services.session.sessionManager import SessionManager
+from ..services.admin.phqService import PHQService
+from ..services.admin.llmService import LLMService
 
 assessment_bp = Blueprint('assessment', __name__, url_prefix='/assessment')
 
@@ -16,7 +18,6 @@ def start_assessment():
         # Clear any existing refresh flags for this user
         # This prevents old session flags from interfering with new sessions
         # We'll handle this in the template with JavaScript
-        
         # Check for recoverable sessions first
         recoverable_session = SessionManager.get_user_recoverable_session(current_user.id)
         
@@ -270,6 +271,61 @@ def phq_assessment():
             return redirect(url_for('assessment.assessment_dashboard'))
         else:
             return redirect(url_for('assessment.assessment_dashboard'))
+    
+    # AUTO-REDIRECT: If this is a fresh PHQ start, show instructions first
+    return redirect(url_for('phq_assessment.phq_instructions'))
+
+
+@assessment_bp.route('/phq/start')
+@login_required  
+@raw_response
+def phq_assessment_start():
+    """Actual PHQ Assessment Page - comes AFTER instructions"""
+    settings_check = SessionService.check_assessment_settings_configured()
+    if not settings_check['all_configured']:
+        return redirect(url_for('main.settings_not_configured'))
+    active_session = SessionService.get_active_session(current_user.id)
+
+    if not active_session:
+        return redirect(url_for('main.serve_index'))
+
+    session = active_session
+
+    # Load camera settings for frontend
+    from ..services.camera.cameraCaptureService import CameraCaptureService
+    camera_settings = CameraCaptureService.get_camera_settings_for_session(session.id)
+    camera_settings_dict = CameraCaptureService.create_settings_snapshot(camera_settings) if camera_settings else {}
+
+    # Check prerequisites for assessment
+    if not session.consent_completed_at:
+        return redirect(url_for('assessment.consent_page'))
+
+    # If session is already in PHQ_IN_PROGRESS or LLM_IN_PROGRESS, camera check is implied to be done
+    if session.status in ['CREATED', 'CONSENT', 'CAMERA_CHECK'] and not session.camera_completed:
+        return redirect(url_for('assessment.camera_check'))
+
+    # If camera check just completed, transition session status to proper assessment status
+    if session.status == 'CAMERA_CHECK' and session.camera_completed:
+        if session.is_first == 'phq':
+            SessionService.complete_camera_check(session.id)
+            session = SessionService.get_session(session.id)
+        else:
+            # PHQ is not first, redirect to LLM
+            return redirect(url_for('assessment.llm_assessment'))
+    
+    # Check if PHQ assessment is already completed
+    if session.phq_completed_at:
+        flash('PHQ assessment sudah selesai. Tidak bisa mengulang.', 'info')
+        return redirect(url_for('assessment.assessment_dashboard'))
+    
+    next_assessment = session.next_assessment_type
+    if next_assessment != 'phq':
+        if next_assessment == 'llm':
+            return redirect(url_for('assessment.llm_assessment'))
+        elif session.status == 'COMPLETED':
+            return redirect(url_for('assessment.assessment_dashboard'))
+        else:
+            return redirect(url_for('assessment.assessment_dashboard'))
     return render_template('assessment/phq.html',
                            user=current_user,
                            session=session,
@@ -281,6 +337,61 @@ def phq_assessment():
 @raw_response
 def llm_assessment():
     """LLM Chat Assessment Page"""
+
+    # Check if settings are configured
+    settings_check = SessionService.check_assessment_settings_configured()
+    if not settings_check['all_configured']:
+        return redirect(url_for('main.settings_not_configured'))
+
+    active_session = SessionService.get_active_session(current_user.id)
+
+    if not active_session:
+        return redirect(url_for('main.serve_index'))
+
+    session = active_session
+
+    # Check prerequisites for assessment
+    if not session.consent_completed_at:
+        return redirect(url_for('assessment.consent_page'))
+
+    # If session is already in PHQ_IN_PROGRESS or LLM_IN_PROGRESS, camera check is implied to be done
+    if session.status in ['CREATED', 'CONSENT', 'CAMERA_CHECK'] and not session.camera_completed:
+        return redirect(url_for('assessment.camera_check'))
+
+    # If camera check just completed, transition session status to proper assessment status
+    if session.status == 'CAMERA_CHECK' and session.camera_completed:
+        if session.is_first == 'llm':
+            SessionService.complete_camera_check(session.id)
+            # Refresh session after status change
+            session = SessionService.get_session(session.id)
+        else:
+            # LLM is not first, redirect to PHQ
+            return redirect(url_for('assessment.phq_assessment'))
+
+    # Check if LLM assessment is already completed
+    if session.llm_completed_at:
+        flash('LLM assessment sudah selesai. Tidak bisa mengulang.', 'info')
+        return redirect(url_for('assessment.assessment_dashboard'))
+
+    # Check session should do LLM now based on status and completion
+    next_assessment = session.next_assessment_type
+    if next_assessment != 'llm':
+        if next_assessment == 'phq':
+            return redirect(url_for('assessment.phq_assessment'))
+        elif session.status == 'COMPLETED':
+            return redirect(url_for('assessment.assessment_dashboard'))
+        else:
+            return redirect(url_for('assessment.assessment_dashboard'))
+    
+    # AUTO-REDIRECT: If this is a fresh LLM start, show instructions first
+    return redirect(url_for('llm_assessment.llm_instructions'))
+
+
+@assessment_bp.route('/llm/start')
+@login_required
+@raw_response  
+def llm_assessment_start():
+    """Actual LLM Chat Assessment Page - comes AFTER instructions"""
 
     # Check if settings are configured
     settings_check = SessionService.check_assessment_settings_configured()
@@ -551,6 +662,9 @@ def upload_camera_captures():
                     trigger = metadata.get('trigger', 'MANUAL')
                     phq_response_id = metadata.get('phq_response_id')
                     llm_conversation_id = metadata.get('llm_conversation_id')
+                    
+                    # Interval captures are stored with session_id only
+                    # They will be bulk-linked when assessments complete
                     
                     # Check if we should capture based on settings
                     if camera_settings and not CameraCaptureService.should_capture_on_trigger(camera_settings, trigger):

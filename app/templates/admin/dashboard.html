@@ -150,19 +150,28 @@
                                     {% endif %}
                                 </td>
                                 <td class="py-3 px-4">
-                                    {% if user_session.session1 == 'COMPLETED' and user_session.session1_id %}
-                                        <a href="{{ url_for('export.export_session', session_id=user_session.session1_id) }}" 
-                                           class="inline-flex items-center px-3 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white text-xs font-medium rounded-lg hover:from-green-700 hover:to-green-800 transition-all shadow-sm">
-                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                                            </svg>
-                                            Download
-                                        </a>
-                                    {% else %}
-                                        <span class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                                            ⏸️ Disabled
-                                        </span>
-                                    {% endif %}
+                                    <div class="flex items-center space-x-2">
+                                        {% if user_session.session1 == 'COMPLETED' and user_session.session1_id %}
+                                            <a href="{{ url_for('export.export_session', session_id=user_session.session1_id) }}" 
+                                               class="inline-flex items-center px-3 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white text-xs font-medium rounded-lg hover:from-green-700 hover:to-green-800 transition-all shadow-sm">
+                                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                                </svg>
+                                                Download
+                                            </a>
+                                            <button onclick="confirmDelete('{{ user_session.session1_id }}', '{{ user_session.username }}', 1)" 
+                                                    class="inline-flex items-center px-3 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white text-xs font-medium rounded-lg hover:from-red-700 hover:to-red-800 transition-all shadow-sm">
+                                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                </svg>
+                                                Delete
+                                            </button>
+                                        {% else %}
+                                            <span class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                                ⏸️ Disabled
+                                            </span>
+                                        {% endif %}
+                                    </div>
                                 </td>
                             </tr>
                             
@@ -203,19 +212,28 @@
                                     {% endif %}
                                 </td>
                                 <td class="py-3 px-4">
-                                    {% if user_session.session2 == 'COMPLETED' and user_session.session2_id %}
-                                        <a href="{{ url_for('export.export_session', session_id=user_session.session2_id) }}" 
-                                           class="inline-flex items-center px-3 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white text-xs font-medium rounded-lg hover:from-green-700 hover:to-green-800 transition-all shadow-sm">
-                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                                            </svg>
-                                            Download
-                                        </a>
-                                    {% else %}
-                                        <span class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                                            ⏸️ Disabled
-                                        </span>
-                                    {% endif %}
+                                    <div class="flex items-center space-x-2">
+                                        {% if user_session.session2 == 'COMPLETED' and user_session.session2_id %}
+                                            <a href="{{ url_for('export.export_session', session_id=user_session.session2_id) }}" 
+                                               class="inline-flex items-center px-3 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white text-xs font-medium rounded-lg hover:from-green-700 hover:to-green-800 transition-all shadow-sm">
+                                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                                                </svg>
+                                                Download
+                                            </a>
+                                            <button onclick="confirmDelete('{{ user_session.session2_id }}', '{{ user_session.username }}', 2)" 
+                                                    class="inline-flex items-center px-3 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white text-xs font-medium rounded-lg hover:from-red-700 hover:to-red-800 transition-all shadow-sm">
+                                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                </svg>
+                                                Delete
+                                            </button>
+                                        {% else %}
+                                            <span class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                                ⏸️ Disabled
+                                            </span>
+                                        {% endif %}
+                                    </div>
                                 </td>
                             </tr>
                             
@@ -455,6 +473,35 @@
             });
         }
     });
+
+    // Delete session confirmation and execution
+    function confirmDelete(sessionId, username, sessionNumber) {
+        if (confirm(`Are you sure you want to delete Session ${sessionNumber} for ${username}?\n\nThis will permanently delete:\n- All PHQ responses\n- All LLM conversations\n- All camera captures\n- All related data\n\nThis action cannot be undone.`)) {
+            deleteSession(sessionId, username, sessionNumber);
+        }
+    }
+
+    function deleteSession(sessionId, username, sessionNumber) {
+        fetch(`/admin/export/session/${sessionId}/delete`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`Session ${sessionNumber} for ${username} deleted successfully.`);
+                location.reload(); // Refresh the page to update the table
+            } else {
+                alert(`Failed to delete session: ${data.message}`);
+            }
+        })
+        .catch(error => {
+            console.error('Delete error:', error);
+            alert('Failed to delete session. Please try again.');
+        });
+    }
     </script>
 </div>
 {% endblock %}

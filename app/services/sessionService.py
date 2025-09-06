@@ -294,6 +294,15 @@ class SessionService:
             session.complete_phq()
             db.commit()
             
+            # Bulk link unlinked camera captures to latest PHQ response
+            from .camera.cameraCaptureService import CameraCaptureService
+            from .assessment.phqService import PHQResponseService
+            latest_responses = PHQResponseService.get_session_responses(session_id)
+            if latest_responses:
+                latest_phq_id = latest_responses[-1].id
+                linked_count = CameraCaptureService.bulk_link_captures_to_phq(session_id, latest_phq_id)
+                print(f"📷 Bulk linked {linked_count} camera captures to PHQ response {latest_phq_id}")
+            
             # Get updated session to check status
             updated_session = db.query(AssessmentSession).filter_by(id=session_id).first()
             print(f" PHQ Completion - After: session_id={session_id}, status={updated_session.status}, phq_completed={updated_session.phq_completed_at}, llm_completed={updated_session.llm_completed_at}")
@@ -334,6 +343,15 @@ class SessionService:
             # Complete LLM assessment
             session.complete_llm()
             db.commit()
+            
+            # Bulk link unlinked camera captures to latest LLM conversation
+            from .camera.cameraCaptureService import CameraCaptureService
+            from .assessment.llmService import LLMConversationService
+            latest_conversations = LLMConversationService.get_session_conversations(session_id)
+            if latest_conversations:
+                latest_llm_id = latest_conversations[-1].id
+                linked_count = CameraCaptureService.bulk_link_captures_to_llm(session_id, latest_llm_id)
+                print(f"📷 Bulk linked {linked_count} camera captures to LLM conversation {latest_llm_id}")
             
             # Get updated session to check status
             updated_session = db.query(AssessmentSession).filter_by(id=session_id).first()
@@ -421,16 +439,38 @@ class SessionService:
             }
 
     @staticmethod
-    def delete_session(session_id: str) -> bool:
-        """Delete session"""
+    def delete_session(session_id: str) -> Dict[str, Any]:
+        """Delete session with cascading cleanup of all related data"""
         with get_session() as db:
             session = db.query(AssessmentSession).filter_by(id=session_id).first()
             if not session:
                 raise ValueError("Session not found")
             
+            # Get counts for reporting
+            phq_count = len(session.phq_responses)
+            llm_count = len(session.llm_conversations)
+            camera_count = len(session.camera_captures)
+            
+            # Clean up camera capture files first
+            from .camera.cameraCaptureService import CameraCaptureService
+            CameraCaptureService.cleanup_session_captures(session_id)
+            
+            # Database cascading delete will handle all related records
             db.delete(session)
             db.commit()
-            return True
+            
+            return {
+                "success": True,
+                "session_id": session_id,
+                "user_id": session.user_id,
+                "session_number": session.session_number,
+                "deleted_counts": {
+                    "phq_responses": phq_count,
+                    "llm_conversations": llm_count,
+                    "camera_captures": camera_count
+                },
+                "message": f"Session {session.session_number} for user {session.user_id} deleted successfully"
+            }
     
     @staticmethod
     def get_all_sessions(page: int = 1, per_page: int = 20) -> Dict[str, Any]:

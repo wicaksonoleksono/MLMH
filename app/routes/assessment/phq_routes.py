@@ -1,9 +1,10 @@
 # app/routes/assessment/phq_routes.py
-from flask import Blueprint, request, jsonify
-from flask_login import current_user
+from flask import Blueprint, request, jsonify, render_template, redirect, url_for, flash
+from flask_login import current_user, login_required
 from ...decorators import api_response, user_required
 from ...services.assessment.phqService import PHQResponseService
 from ...services.sessionService import SessionService
+from ...services.admin.phqService import PHQService
 import random
 
 phq_assessment_bp = Blueprint('phq_assessment', __name__, url_prefix='/assessment/phq')
@@ -216,5 +217,37 @@ def check_phq_completion(session_id):
         "responses_expected": expected_count,
         "completion_percentage": (response_count / expected_count * 100) if expected_count > 0 else 0
     }
+
+
+@phq_assessment_bp.route('/instructions')
+@login_required
+def phq_instructions():
+    """Show PHQ assessment instructions page (standalone, no session required)"""
+    try:
+        # Get PHQ settings for instructions
+        phq_settings = PHQService.get_settings()
+        
+        if phq_settings and len(phq_settings) > 0:
+            # Get first active setting
+            settings = phq_settings[0]
+            instructions = settings.get('instructions', '')
+            
+            # Get scale information for display
+            scale_info = settings.get('scale', {})
+        else:
+            # Fallback if no settings configured
+            instructions = "Instruksi PHQ belum dikonfigurasi. Silakan hubungi administrator."
+            scale_info = {}
+        
+        return render_template('assessment/phq_instructions.html', 
+                             instructions=instructions,
+                             scale_info=scale_info,
+                             user=current_user)
+    
+    except Exception as e:
+        flash(f'Error loading PHQ instructions: {str(e)}', 'error')
+        return redirect(url_for('main.serve_index'))
+
+
 
 

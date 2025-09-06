@@ -1,8 +1,9 @@
 # app/routes/admin/export_routes.py
 from flask import Blueprint, request, jsonify, send_file
 from flask_login import login_required, current_user
-from ...decorators import admin_required, raw_response
+from ...decorators import admin_required, raw_response, api_response
 from ...services.admin.exportService import ExportService
+from ...services.sessionService import SessionService
 
 export_bp = Blueprint('export', __name__, url_prefix='/admin/export')
 
@@ -76,3 +77,17 @@ def export_all_sessions():
         
     except Exception as e:
         return jsonify({"error": f"All sessions export failed: {str(e)}"}), 500
+
+
+@export_bp.route('/session/<session_id>/delete', methods=['DELETE'])
+@admin_required
+@api_response
+def delete_session(session_id):
+    """Delete a session with all related data"""
+    try:
+        result = SessionService.delete_session(session_id)
+        return result, 200
+    except ValueError as e:
+        return {"success": False, "message": str(e)}, 404
+    except Exception as e:
+        return {"success": False, "message": f"Failed to delete session: {str(e)}"}, 500

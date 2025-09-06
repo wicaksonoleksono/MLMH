@@ -1,11 +1,12 @@
 # app/routes/assessment/llm_routes.py
-from flask import Blueprint, request, jsonify, Response, stream_with_context
-from flask_login import current_user
+from flask import Blueprint, request, jsonify, Response, stream_with_context, render_template, redirect, url_for, flash
+from flask_login import current_user, login_required
 from ...decorators import api_response, user_required
 # Removed deprecated service imports - using LLMChatService directly
 from ...services.llm.chatService import LLMChatService
 from ...services.assessment.llmService import LLMConversationService
 from ...services.sessionService import SessionService
+from ...services.admin.llmService import LLMService
 import json
 import time
 from datetime import datetime
@@ -510,6 +511,38 @@ def finish_chat(session_id):
         return result
     except Exception as e:
         return {"status": "error", "message": str(e)}, 500
+
+
+@llm_assessment_bp.route('/instructions')
+@login_required  
+def llm_instructions():
+    """Show LLM chat assessment instructions page (standalone, no session required)"""
+    try:
+        # Get LLM settings for instructions
+        llm_settings = LLMService.get_settings()
+        
+        if llm_settings and len(llm_settings) > 0:
+            # Get first active setting
+            settings = llm_settings[0]
+            instructions = settings.get('instructions', '')
+            
+            # Get aspects information for display
+            aspects = settings.get('depression_aspects', [])
+        else:
+            # Fallback if no settings configured
+            instructions = "Instruksi LLM Chat belum dikonfigurasi. Silakan hubungi administrator."
+            aspects = []
+        
+        return render_template('assessment/llm_instructions.html',
+                             instructions=instructions, 
+                             aspects=aspects,
+                             user=current_user)
+    
+    except Exception as e:
+        flash(f'Error loading LLM instructions: {str(e)}', 'error')
+        return redirect(url_for('main.serve_index'))
+
+
 
 
 

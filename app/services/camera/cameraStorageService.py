@@ -33,9 +33,27 @@ class CameraStorageService:
         
         static_path = CameraStorageService.ensure_uploads_directory()
         
-        # Generate simple filename
+        # Get session info for filename
+        username = None
+        session_number = None
+        with get_session() as db:
+            from ...model.assessment.sessions import AssessmentSession
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if session and session.user:
+                username = session.user.uname
+                session_number = session.session_number
+        
+        # Generate filename with username and session info
         timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')[:-3]
-        filename = f"{uuid.uuid4().hex}_{timestamp}.jpg"
+        short_uuid = uuid.uuid4().hex[:8]
+        
+        if username and session_number:
+            # Clean username (remove spaces, special chars)
+            clean_username = "".join(c for c in username if c.isalnum() or c in ('_', '-')).lower()
+            filename = f"{clean_username}_s{session_number}_{timestamp}_{short_uuid}.jpg"
+        else:
+            # Fallback to old format
+            filename = f"{uuid.uuid4().hex}_{timestamp}.jpg"
         file_path = os.path.join(static_path, filename)
         
         # Save file

@@ -437,11 +437,14 @@ dengan Anisa{% endblock %} {% block content %}
             }
           };
 
+          eventSource.onerror = (error) => {
+            clearTimeout(timeoutId);
+            throw error;
+          };
         } catch (error) {
           const botMessage = this.messages[this.messages.length - 1];
           
-          botMessage.content = `Error: ${error.message || error.toString()} | Stack: ${error.stack || 'No stack trace'}`;
-          botMessage.streaming = false;
+          throw error;
           this.isTyping = false;
         }
       },

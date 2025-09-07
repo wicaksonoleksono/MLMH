@@ -140,74 +140,10 @@
     </div>
 
     <!-- API Helper -->
-    <script>
-      function setAuthToken(token) {
-        localStorage.setItem("jwt_token", token);
-      }
-
-      function getAuthToken() {
-        return localStorage.getItem("jwt_token");
-      }
-
-      function clearAuthToken() {
-        localStorage.removeItem("jwt_token");
-      }
-
-      async function apiCall(url, method = "GET", data = null) {
-        const options = {
-          method,
-          headers: { "Content-Type": "application/json" },
-        };
-
-        const token = getAuthToken();
-        if (token) {
-          options.headers["Authorization"] = `Bearer ${token}`;
-        }
-
-        if (data) {
-          options.body = JSON.stringify(data);
-        }
-
-        try {
-          const response = await fetch(url, options);
-          const responseText = await response.text();
-
-          if (response.status === 401) {
-            clearAuthToken();
-          }
-
-          // Try to parse as JSON
-          try {
-            return JSON.parse(responseText);
-          } catch (parseError) {
-            return {
-              status: "SNAFU",
-              error: "Invalid JSON response: " + responseText,
-            };
-          }
-        } catch (error) {
-          return { status: "SNAFU", error: error.message };
-        }
-      }
-
-      function navbar() {
-        return {
-          mobileOpen: false,
-          navItems: [
-            { name: "Dasbor", href: "/" },
-            { name: "Manajemen Sesi", href: "/admin/session2/eligible-users" },
-            { name: "Informed Consent", href: "/admin/consent" },
-            { name: "Pengaturan PHQ", href: "/admin/phq" },
-            { name: "Pengaturan LLM", href: "/admin/llm" },
-            { name: "Pengaturan Kamera", href: "/admin/camera" },
-          ],
-
-          isActive(href) {
-            return window.location.pathname === href;
-          },
-        };
-      }
-    </script>
+    <!-- Core JavaScript files -->
+    <script src="{{ url_for('static', filename='js/core/api.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/core/utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/admin/navbar.js') }}"></script>
     {% block scripts %}{% endblock %}
   </body>
 </html>

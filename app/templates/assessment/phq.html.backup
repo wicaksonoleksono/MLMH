@@ -1,0 +1,413 @@
+{% extends "base.html" %} {% block title %}PHQ Assessment{% endblock %} {% block
+content %}
+<div class="min-h-screen bg-gray-50" x-data="phqAssessment('{{ session.id }}')"
+  <!-- Navigation -->
+  <nav class="bg-white shadow-sm border-b border-gray-200">
+    <div class="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-4">
+        <h1 class="text-xl font-semibold text-gray-900">PHQ Assessment</h1>
+        <div
+          class="bg-purple-600 rounded-lg px-3 py-1"
+          x-show="!loading && questions.length > 0"
+        >
+          <span
+            class="text-white font-medium text-sm"
+            x-text="`Pertanyaan ${currentQuestionIndex + 1} dari ${questions.length}`"
+          ></span>
+        </div>
+      </div>
+      <a
+        href="{{ url_for('auth.logout') }}"
+        class="text-gray-500 hover:text-red-600 font-medium transition-colors"
+      >
+        Keluar
+      </a>
+    </div>
+  </nav>
+
+  <div class="max-w-4xl mx-auto px-4 py-8">
+    <!-- Loading State -->
+    <div
+      x-show="loading"
+      class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8"
+    >
+      <div class="text-center">
+        <div
+          class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"
+        ></div>
+        <p class="text-gray-600 mt-4">Memuat pertanyaan...</p>
+      </div>
+    </div>
+
+    <!-- Single Question Display -->
+    <div
+      x-show="!loading && !submitted && questions.length > 0"
+      class="bg-white rounded-lg shadow-lg overflow-hidden"
+    >
+      <!-- Progress Header -->
+      <div class="bg-gradient-to-r from-purple-600 to-indigo-600 px-8 py-8">
+        <div class="flex items-center justify-between mb-6">
+          <div class="flex items-center">
+            <div
+              class="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center mr-6"
+            >
+              <span
+                class="text-white font-bold text-xl"
+                x-text="currentQuestionIndex + 1"
+              ></span>
+            </div>
+            <div>
+              <h2 class="text-3xl font-bold text-white mb-2">Pertanyaan</h2>
+              <p
+                class="text-purple-100"
+                x-text="`dari ${questions.length} pertanyaan`"
+              ></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="w-full bg-white bg-opacity-20 rounded-full h-3">
+          <div
+            class="bg-gradient-to-r from-green-400 to-blue-400 h-3 rounded-full transition-all duration-500"
+            :style="`width: ${((currentQuestionIndex + 1) / questions.length * 100)}%`"
+          ></div>
+        </div>
+      </div>
+
+      <!-- Question Form -->
+      <div class="p-8" x-show="currentQuestion">
+        <!-- Question Text -->
+        <div class="mb-8">
+          <div class="bg-gray-50 rounded-lg p-6 border border-gray-200">
+            <p
+              class="text-xl text-gray-900 leading-relaxed"
+              x-text="currentQuestion?.question_text"
+            ></p>
+          </div>
+        </div>
+
+        <!-- Response Options -->
+        <div class="mb-8">
+          <fieldset>
+            <legend class="text-lg font-medium text-gray-900 mb-6">
+              Silakan pilih jawaban Anda:
+            </legend>
+            <div class="space-y-3">
+              <template
+                x-for="(label, value) in currentQuestion?.scale_labels || {}"
+                :key="value"
+              >
+                <label
+                  class="flex items-center p-4 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 cursor-pointer transition-all duration-200"
+                >
+                  <input
+                    type="radio"
+                    name="current_response"
+                    :value="parseInt(value)"
+                    @change="updateCurrentResponse(parseInt(value), label)"
+                    :checked="currentResponse?.response_value == parseInt(value)"
+                    class="h-5 w-5 text-purple-600 border-gray-300 focus:ring-purple-500"
+                  />
+                  <div class="ml-4 flex-1">
+                    <div class="flex items-center justify-between">
+                      <span
+                        class="text-base font-medium text-gray-900"
+                        x-text="label"
+                      ></span>
+                      <span
+                        class="text-xl font-bold text-purple-600"
+                        x-text="value"
+                      ></span>
+                    </div>
+                  </div>
+                </label>
+              </template>
+            </div>
+          </fieldset>
+        </div>
+
+        <!-- Navigation -->
+        <div
+          class="flex justify-between items-center pt-6 border-t border-gray-200"
+        >
+          <button
+            @click="previousQuestion()"
+            x-show="currentQuestionIndex > 0"
+            class="px-6 py-3 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors"
+          >
+            ← Sebelumnya
+          </button>
+
+          <div
+            class="text-gray-600"
+            x-text="`Pertanyaan ${currentQuestionIndex + 1} dari ${questions.length}`"
+          ></div>
+
+          <button
+            @click="nextQuestion()"
+            :disabled="!currentResponse"
+            :class="currentResponse ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700' : 'bg-gray-300 cursor-not-allowed'"
+            class="px-8 py-3 text-white rounded-lg font-medium transition-all duration-200 shadow-lg"
+          >
+            <span x-show="currentQuestionIndex < questions.length - 1"
+              >Berikutnya →</span
+            >
+            <span x-show="currentQuestionIndex === questions.length - 1"
+              >Selesai ✓</span
+            >
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Processing State (No Results Display) -->
+    <div
+      x-show="submitted"
+      class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center"
+      style="display: none;"
+    >
+      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+    </div>
+  </div>
+</div>
+{% endblock %} 
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/core/api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/shared/refreshDetection.js') }}"></script>
+<script src="{{ url_for('static', filename='js/shared/cameraManager.js') }}"></script>
+<script src="{{ url_for('static', filename='js/assessment/phq-form.js') }}"></script>
+<script>
+  function phqAssessment() {
+      return {
+          sessionId: "{{ session.id }}",
+          loading: true,
+          submitting: false,
+          submitted: false,
+          questions: [],
+          responses: {},
+          currentQuestionIndex: 0,
+          currentResponse: null,
+          totalScore: 0,
+          scoreAnalysis: '',
+          cameraManager: null,
+
+          get currentQuestion() {
+              return this.questions[this.currentQuestionIndex] || null;
+          },
+
+          async init() {
+              this.questionStartTime = Date.now();
+              await this.loadQuestions();
+              await this.initCamera();
+              this.setupAbandonTracking();
+              // Check if this is a legitimate refresh that should trigger reset
+              await this.checkForRefreshReset();
+          },
+
+          async initCamera() {
+              try {
+                  const cameraResult = await apiCall(`/assessment/camera/settings/${this.sessionId}`);
+                  const cameraSettings = cameraResult?.data?.data?.settings || {};
+                  
+                  this.cameraManager = new CameraManager(this.sessionId, 'phq', cameraSettings);
+                  await this.cameraManager.initialize();
+              } catch (error) {
+                  // Camera initialization failed - continue without camera
+              }
+          },
+
+          async checkForRefreshReset() {
+              // Check if this is a legitimate refresh that should trigger a session reset
+              const isRefreshing = sessionStorage.getItem('refreshingSession_{{ session.id }}');
+              if (isRefreshing === 'true') {
+                  sessionStorage.removeItem('refreshingSession_{{ session.id }}');
+                  
+                  // Only reset if we're not in the middle of a normal navigation flow
+                  // Check if we're coming from another assessment page (normal navigation)
+                  const referrer = document.referrer;
+                  const isFromAssessmentPage = referrer.includes('/assessment/phq') || referrer.includes('/assessment/llm');
+                  
+                  if (!isFromAssessmentPage) {
+                      console.log('Resetting session {{ session.id }} due to page refresh');
+                      try {
+                          await fetch(`/assessment/reset-session-on-refresh/{{ session.id }}`, {
+                              method: 'POST',
+                              headers: {
+                                  'Content-Type': 'application/json'
+                              }
+                          });
+                      } catch (error) {
+                          console.log('Session reset failed:', error);
+                      } finally {
+                          // Redirect to main menu
+                          window.location.href = `/`;
+                      }
+                  }
+              }
+          },
+
+          setupAbandonTracking() {
+              // Track when user leaves the page
+              let assessmentCompleted = false;
+              window.addEventListener('beforeunload', () => {
+                  if (!assessmentCompleted && !this.submitted) {
+                      // Use sendBeacon for reliable tracking when page unloads
+                      navigator.sendBeacon(`/assessment/abandon/${this.sessionId}`,
+                        JSON.stringify({ reason: 'User left PHQ assessment page' }));
+                  }
+              });
+
+              // Track when user navigates away
+              window.addEventListener('pagehide', () => {
+                  if (!assessmentCompleted && !this.submitted) {
+                      fetch(`/assessment/abandon/${this.sessionId}`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ reason: 'User navigated away from PHQ assessment' }),
+                          keepalive: true
+                      }).catch(() => {}); // Ignore errors
+                  }
+              });
+              
+              // Set completion flag to prevent abandon calls on successful redirect
+              this.markAsCompleted = () => {
+                  assessmentCompleted = true;
+                  // Clean up camera when assessment completes
+                  if (this.cameraManager) {
+                      this.cameraManager.cleanup();
+                  }
+              };
+          },
+
+          async loadQuestions() {
+              try {
+                  const result = await apiCall(`{{ url_for("phq_assessment.get_phq_questions", session_id='PLACEHOLDER') }}`.replace('PLACEHOLDER', this.sessionId));
+                  if (result && result.status === 'OLKORECT') {
+                      this.questions = result.data.questions;
+                      await this.loadCurrentResponse();
+                      // Trigger camera capture when first question loads
+                      if (this.cameraManager) {
+                          await this.cameraManager.onQuestionStart();
+                      }
+                  } else {
+                      alert('Error loading questions: ' + (result?.error || 'Unknown error'));
+                  }
+              } catch (error) {
+                  alert('Error: ' + error.message);
+              } finally {
+                  this.loading = false;
+              }
+          },
+
+          async loadCurrentResponse() {
+              if (this.currentQuestion) {
+                  this.currentResponse = this.responses[this.currentQuestion.question_id] || null;
+                  // Trigger camera capture when new question loads
+                  if (this.cameraManager) {
+                      await this.cameraManager.onQuestionStart();
+                  }
+              }
+          },
+
+          async updateCurrentResponse(value, text) {
+              if (!this.currentQuestion) return;
+
+              // Capture on button click (answer selection) 
+              if (this.cameraManager) {
+                  try {
+                      await this.cameraManager.onButtonClick();
+                  } catch (error) {
+                      console.error('Error capturing image on button click:', error);
+                      // Continue with response update even if capture fails
+                  }
+              }
+
+              const responseValue = parseInt(value);
+              if (isNaN(responseValue)) return;
+
+              this.currentResponse = {
+                  question_id: this.currentQuestion.question_id,
+                  response_value: responseValue,
+                  response_text: text,
+                  response_time_ms: Date.now() - this.questionStartTime
+              };
+
+              this.responses[this.currentQuestion.question_id] = this.currentResponse;
+          },
+
+          async nextQuestion() {
+              if (!this.currentResponse) return;
+
+              if (this.currentQuestionIndex < this.questions.length - 1) {
+                  this.currentQuestionIndex++;
+                  this.questionStartTime = Date.now();
+                  await this.loadCurrentResponse();
+              } else {
+                  await this.submitAllResponses();
+              }
+          },
+
+          async previousQuestion() {
+              if (this.currentQuestionIndex > 0) {
+                  this.currentQuestionIndex--;
+                  this.questionStartTime = Date.now();
+                  await this.loadCurrentResponse();
+              }
+          },
+
+          async submitAllResponses() {
+              if (this.submitting) return;
+              
+              this.submitting = true;
+              
+              try {
+                  const responsesArray = Object.values(this.responses);
+                  
+                  const result = await apiCall(`{{ url_for("phq_assessment.submit_phq_responses", session_id='PLACEHOLDER') }}`.replace('PLACEHOLDER', this.sessionId), 'POST', { responses: responsesArray });
+                  
+                  if (result && result.status === 'OLKORECT') {
+                      this.submitted = true;
+                      this.markAsCompleted();
+                      
+                      // Link camera captures to response IDs AFTER successful submission
+                      if (this.cameraManager) {
+                          await this.cameraManager.uploadBatch(result.data.response_ids);
+                      }
+                      
+                      setTimeout(() => {
+                          window.location.href = result.data.next_redirect;
+                      }, 2000);
+                  } else {
+                      alert('Error submitting responses: ' + (result?.error || 'Unknown error'));
+                  }
+              } catch (error) {
+                  alert('Error: ' + error.message);
+              } finally {
+                  this.submitting = false;
+              }
+          },
+
+          async resetAssessment() {
+              if (confirm('Apakah Anda yakin ingin mereset assessment ini dan memulai dari awal? Semua jawaban yang belum disimpan akan hilang.')) {
+                  try {
+                      const response = await fetch(`/assessment/reset-session-on-refresh/${this.sessionId}`, {
+                          method: 'POST',
+                          headers: {
+                              'Content-Type': 'application/json'
+                          }
+                      });
+                      
+                      // Redirect to main menu
+                      window.location.href = '/';
+                  } catch (error) {
+                      alert('Gagal mereset assessment: ' + error.message);
+                  }
+              }
+          }
+      };
+  // Initialize refresh detection for this session
+  setupRefreshDetection("{{ session.id }}");
+</script>
+{% endblock %}

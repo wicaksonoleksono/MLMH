@@ -294,14 +294,10 @@ class SessionService:
             session.complete_phq()
             db.commit()
             
-            # Bulk link unlinked camera captures to latest PHQ response
-            from .camera.cameraCaptureService import CameraCaptureService
-            from .assessment.phqService import PHQResponseService
-            latest_responses = PHQResponseService.get_session_responses(session_id)
-            if latest_responses:
-                latest_phq_id = latest_responses[-1].id
-                linked_count = CameraCaptureService.bulk_link_captures_to_phq(session_id, latest_phq_id)
-                print(f"📷 Bulk linked {linked_count} camera captures to PHQ response {latest_phq_id}")
+            # Camera linking now handled by frontend CameraManager via /link-responses/ endpoint
+            # Clean up any unlinked captures to prevent contamination in next assessment phase
+            from .assessment.cameraAssessmentService import CameraAssessmentService
+            CameraAssessmentService.cleanup_unlinked_captures(session_id)
             
             # Get updated session to check status
             updated_session = db.query(AssessmentSession).filter_by(id=session_id).first()
@@ -344,14 +340,7 @@ class SessionService:
             session.complete_llm()
             db.commit()
             
-            # Bulk link unlinked camera captures to latest LLM conversation
-            from .camera.cameraCaptureService import CameraCaptureService
-            from .assessment.llmService import LLMConversationService
-            latest_conversations = LLMConversationService.get_session_conversations(session_id)
-            if latest_conversations:
-                latest_llm_id = latest_conversations[-1].id
-                linked_count = CameraCaptureService.bulk_link_captures_to_llm(session_id, latest_llm_id)
-                print(f"📷 Bulk linked {linked_count} camera captures to LLM conversation {latest_llm_id}")
+            # Camera linking now handled by frontend CameraManager via /link-responses/ endpoint
             
             # Get updated session to check status
             updated_session = db.query(AssessmentSession).filter_by(id=session_id).first()

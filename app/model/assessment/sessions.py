@@ -98,7 +98,7 @@ class AssessmentSession(BaseModel):
 
         self.updated_at = datetime.utcnow()
         
-        # Trigger post-completion tasks (email notifications, etc.)
+    # Trigger post-completion tasks (email notifications, etc.)
     #     self._trigger_completion_tasks()
     
     # def _trigger_completion_tasks(self) -> None:
@@ -356,6 +356,10 @@ class PHQResponse(BaseModel):
     response_text: Mapped[str] = mapped_column(String(255), nullable=False)  # Human-readable answer
     response_time_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
+    # JSON storage for richer data
+    response_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)  # Additional response data
+    camera_capture_ids: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)  # Associated camera capture IDs
+    
     is_valid: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow())
 
@@ -382,6 +386,10 @@ class LLMConversation(BaseModel):
     response_audio_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     transcription: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     
+    # JSON storage for richer conversation data
+    conversation_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)  # Additional conversation data
+    camera_capture_ids: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)  # Associated camera capture IDs
+    
     # Legacy field (can be removed later if not needed)
     conversation_data: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -398,6 +406,12 @@ class CameraCapture(BaseModel):
     assessment_session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id', ondelete='CASCADE'), nullable=False)
     phq_response_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey('phq_responses.id', ondelete='CASCADE'), nullable=True)
     llm_conversation_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey('llm_conversations.id', ondelete='CASCADE'), nullable=True)
+    
+    # Batch linking fields
+    batch_linked: Mapped[bool] = mapped_column(Boolean, default=False)  # Whether this capture has been batch linked
+    linked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # When batch linking occurred
+    capture_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)  # Additional capture info
+    
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     capture_trigger: Mapped[str] = mapped_column(String(50), nullable=False)  # INTERVAL, BUTTON_CLICK, MESSAGE_SEND, QUESTION_START

@@ -67,7 +67,7 @@ def create_app():
     from app.routes.admin.llm_routes import llm_bp
     from app.routes.admin.llm_analysis_routes import llm_analysis_bp
     from app.routes.admin.consent_routes import consent_bp as admin_consent_bp
-    from app.routes.admin.session2_routes import session2_bp
+    from app.routes.admin.session_management_routes import session_management_bp
     from app.routes.admin.profile import bp as admin_profile_bp
     from app.routes.consent_routes import consent_bp as user_consent_bp
     from app.routes.assessment_routes import assessment_bp
@@ -81,7 +81,7 @@ def create_app():
     app.register_blueprint(llm_bp)
     app.register_blueprint(llm_analysis_bp)
     app.register_blueprint(admin_consent_bp)
-    app.register_blueprint(session2_bp)
+    app.register_blueprint(session_management_bp)
     app.register_blueprint(admin_profile_bp)
     app.register_blueprint(user_consent_bp)
     app.register_blueprint(assessment_bp)

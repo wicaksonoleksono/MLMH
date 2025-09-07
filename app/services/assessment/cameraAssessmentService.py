@@ -104,35 +104,38 @@ class CameraAssessmentService:
         if not data:
             return {"status": "SNAFU", "error": "No JSON data provided"}
         
-        capture_ids = data.get('capture_ids', [])
-        phq_response_ids = data.get('phq_response_ids', [])
-        llm_conversation_ids = data.get('llm_conversation_ids', [])
+        # Get the new capture-to-response mapping
+        capture_response_map = data.get('capture_response_map', {})
+        assessment_type = data.get('assessment_type', 'phq')
         
-        if not capture_ids:
-            return {"status": "SNAFU", "error": "No capture_ids provided"}
+        if not capture_response_map:
+            return {"status": "SNAFU", "error": "No capture_response_map provided"}
         
         try:
             with get_session() as db:
                 updated_count = 0
+                already_linked_count = 0
                 
-                for capture_id in capture_ids:
+                # Process each capture with its mapped response
+                for capture_id, response_id in capture_response_map.items():
                     capture = db.query(CameraCapture).filter_by(
                         id=capture_id,
                         assessment_session_id=session_id
                     ).first()
                     
                     if capture:
-                        # Link to PHQ responses if provided
-                        if phq_response_ids:
-                            # Link to first available PHQ response
-                            if len(phq_response_ids) > 0:
-                                capture.phq_response_id = phq_response_ids[0]
+                        if capture.phq_response_id is not None or capture.llm_conversation_id is not None:
+                            already_linked_count += 1
+                            print(f" Capture {capture_id} already linked (PHQ: {capture.phq_response_id}, LLM: {capture.llm_conversation_id})")
+                            continue
                         
-                        # Link to LLM conversations if provided
-                        if llm_conversation_ids:
-                            # Link to first available LLM conversation
-                            if len(llm_conversation_ids) > 0:
-                                capture.llm_conversation_id = llm_conversation_ids[0]
+                        # Link to appropriate response type based on assessment type
+                        if assessment_type == 'phq':
+                            capture.phq_response_id = response_id
+                            print(f"! Linked capture {capture_id} to PHQ response {response_id}")
+                        elif assessment_type == 'llm':
+                            capture.llm_conversation_id = response_id
+                            print(f"! Linked capture {capture_id} to LLM conversation {response_id}")
                         
                         updated_count += 1
                 
@@ -143,9 +146,44 @@ class CameraAssessmentService:
                     "data": {
                         "session_id": session_id,
                         "captures_updated": updated_count,
-                        "capture_ids_processed": capture_ids
+                        "captures_already_linked": already_linked_count,
+                        "capture_response_map_processed": capture_response_map,
+                        "contamination_prevented": already_linked_count > 0
                     }
                 }
                 
         except Exception as e:
             return {"status": "SNAFU", "error": f"Failed to link captures: {str(e)}"}
+
+    @staticmethod
+    def cleanup_unlinked_captures(session_id: str) -> Dict[str, Any]:
+        """Clean up unlinked captures from session to prevent cross-assessment contamination"""
+        try:
+            with get_session() as db:
+                # Find captures that are unlinked (no PHQ or LLM association)
+                unlinked_captures = db.query(CameraCapture).filter_by(
+                    assessment_session_id=session_id,
+                    phq_response_id=None,
+                    llm_conversation_id=None
+                ).all()
+                
+                cleaned_count = len(unlinked_captures)
+                
+                if cleaned_count > 0:
+                    # Delete the capture records (files remain on disk for debugging)
+                    for capture in unlinked_captures:
+                        db.delete(capture)
+                    
+                    db.commit()
+                    print(f"🧹 Cleaned up {cleaned_count} unlinked camera captures from session {session_id}")
+                
+                return {
+                    "status": "OLKORECT",
+                    "data": {
+                        "session_id": session_id,
+                        "captures_cleaned": cleaned_count
+                    }
+                }
+                
+        except Exception as e:
+            return {"status": "SNAFU", "error": f"Failed to cleanup captures: {str(e)}"}

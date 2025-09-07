@@ -12,6 +12,8 @@ class CameraManager {
         this.intervalTimer = null;
         this.currentResponseId = null;
         
+        console.log(`📸 CameraManager initialized: session=${sessionId}, type=${assessmentType}`);
+        
         // Bind methods to preserve context
         this.captureImage = this.captureImage.bind(this);
         this.uploadBatch = this.uploadBatch.bind(this);
@@ -202,28 +204,39 @@ class CameraManager {
         }
 
         try {
-            // Files are already uploaded - just link metadata to response IDs
-            const captureIds = this.captures.map(capture => capture.capture_id);
-
-            if (responseIds && responseIds.length > 0) {
-                // Build proper linking data structure
-                const linkData = {
-                    capture_ids: captureIds,
-                    phq_response_ids: this.assessmentType === 'phq' ? responseIds : [],
-                    llm_conversation_ids: this.assessmentType === 'llm' ? responseIds : []
-                };
-
-                const linkResponse = await fetch(`/assessment/camera/link-responses/${this.sessionId}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(linkData)
-                });
-
-                const linkResult = await linkResponse.json();
-                if (linkResult.status !== 'OLKORECT') {
-                    throw new Error(linkResult.error || 'Failed to link captures');
+            // Build capture-to-response mapping
+            const captureResponseMap = {};
+            
+            // Map each capture to its associated response ID (if any)
+            this.captures.forEach(capture => {
+                if (capture.response_id) {
+                    captureResponseMap[capture.capture_id] = capture.response_id;
                 }
+            });
+
+            // Send mapping to backend
+            const linkData = {
+                capture_response_map: captureResponseMap,
+                assessment_type: this.assessmentType
+            };
+
+            console.log(`🔗 CameraManager uploadBatch: ${this.assessmentType} linking captures with response mapping`, linkData);
+
+            const linkResponse = await fetch(`/assessment/camera/link-responses/${this.sessionId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(linkData)
+            });
+
+            const linkResult = await linkResponse.json();
+            console.log('🔗 Link result:', linkResult);
+            
+            if (linkResult.status !== 'OLKORECT') {
+                throw new Error(linkResult.error || 'Failed to link captures');
             }
+            
+            // Small delay to ensure database transaction commits before redirect
+            await new Promise(resolve => setTimeout(resolve, 100));
 
             const processedCount = this.captures.length;
             this.captures = [];

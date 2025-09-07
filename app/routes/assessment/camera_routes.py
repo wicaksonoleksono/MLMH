@@ -19,8 +19,6 @@ def get_camera_settings(session_id):
     return CameraAssessmentService.get_session_settings(session_id)
 
 
-
-
 @camera_assessment_bp.route('/upload-single/<session_id>', methods=['POST'])
 @user_required
 @api_response
@@ -39,6 +37,8 @@ def link_capture_responses(session_id):
     """Link capture IDs to PHQ/LLM response IDs - hybrid approach"""
     if not SessionService.validate_user_session(session_id, current_user.id):
         return {"message": "Session not found or access denied"}, 403
+    data = request.get_json()
+    print(f"CAMERA LINK REQUEST: session={session_id}, data={data}")
     
     return CameraAssessmentService.link_captures_to_responses(session_id, request)
 

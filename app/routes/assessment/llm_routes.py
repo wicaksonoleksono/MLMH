@@ -420,8 +420,10 @@ def finish_chat(session_id):
     
     try:
         result = LLMChatService.finish_conversation(session.id)
+        print(f"🎬 LLM FINISH RESULT: session={session_id}, result={result}")
         return result
     except Exception as e:
+        print(f"❌ LLM FINISH ERROR: session={session_id}, error={str(e)}")
         return {"status": "error", "message": str(e)}, 500
 
 

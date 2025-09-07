@@ -1,0 +1,237 @@
+// app/static/js/assessment/phq-form.js
+// Exact copy of PHQ assessment JavaScript from template
+
+function phqAssessment(sessionId) {
+    return {
+        sessionId: sessionId,
+        loading: true,
+        submitting: false,
+        submitted: false,
+        questions: [],
+        responses: {},
+        currentQuestionIndex: 0,
+        currentResponse: null,
+        totalScore: 0,
+        scoreAnalysis: '',
+        cameraManager: null,
+
+        get currentQuestion() {
+            return this.questions[this.currentQuestionIndex] || null;
+        },
+
+        async init() {
+            this.questionStartTime = Date.now();
+            await this.loadQuestions();
+            await this.initCamera();
+            this.setupAbandonTracking();
+            // Check if this is a legitimate refresh that should trigger reset
+            await this.checkForRefreshReset();
+        },
+
+        async initCamera() {
+            try {
+                const cameraResult = await apiCall(`/assessment/camera/settings/${this.sessionId}`);
+                const cameraSettings = cameraResult?.data?.data?.settings || {};
+                
+                this.cameraManager = new CameraManager(this.sessionId, 'phq', cameraSettings);
+                await this.cameraManager.initialize();
+            } catch (error) {
+                // Camera initialization failed - continue without camera
+            }
+        },
+
+        async checkForRefreshReset() {
+            // Check if this is a legitimate refresh that should trigger a session reset
+            const isRefreshing = sessionStorage.getItem(`refreshingSession_${this.sessionId}`);
+            if (isRefreshing === 'true') {
+                sessionStorage.removeItem(`refreshingSession_${this.sessionId}`);
+                
+                // Only reset if we're not in the middle of a normal navigation flow
+                // Check if we're coming from another assessment page (normal navigation)
+                const referrer = document.referrer;
+                const isFromAssessmentPage = referrer.includes('/assessment/phq') || referrer.includes('/assessment/llm');
+                
+                if (!isFromAssessmentPage) {
+                    console.log(`Resetting session ${this.sessionId} due to page refresh`);
+                    try {
+                        await fetch(`/assessment/reset-session-on-refresh/${this.sessionId}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                    } catch (error) {
+                        console.log('Session reset failed:', error);
+                    } finally {
+                        // Redirect to main menu
+                        window.location.href = `/`;
+                    }
+                }
+            }
+        },
+
+        setupAbandonTracking() {
+            // Track when user leaves the page
+            let assessmentCompleted = false;
+            window.addEventListener('beforeunload', () => {
+                if (!assessmentCompleted && !this.submitted) {
+                    // Use sendBeacon for reliable tracking when page unloads
+                    navigator.sendBeacon(`/assessment/abandon/${this.sessionId}`,
+                      JSON.stringify({ reason: 'User left PHQ assessment page' }));
+                }
+            });
+
+            // Track when user navigates away
+            window.addEventListener('pagehide', () => {
+                if (!assessmentCompleted && !this.submitted) {
+                    fetch(`/assessment/abandon/${this.sessionId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ reason: 'User navigated away from PHQ assessment' }),
+                        keepalive: true
+                    }).catch(() => {}); // Ignore errors
+                }
+            });
+            
+            // Set completion flag to prevent abandon calls on successful redirect
+            this.markAsCompleted = () => {
+                assessmentCompleted = true;
+                // Clean up camera when assessment completes
+                if (this.cameraManager) {
+                    this.cameraManager.cleanup();
+                }
+            };
+        },
+
+        async loadQuestions() {
+            try {
+                const result = await apiCall(`/assessment/phq/start/${this.sessionId}`);
+                if (result && result.status === 'OLKORECT') {
+                    this.questions = result.data.questions;
+                    await this.loadCurrentResponse();
+                    // Trigger camera capture when first question loads
+                    if (this.cameraManager) {
+                        await this.cameraManager.onQuestionStart();
+                    }
+                } else {
+                    alert('Error loading questions: ' + (result?.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async loadCurrentResponse() {
+            if (this.currentQuestion) {
+                this.currentResponse = this.responses[this.currentQuestion.question_id] || null;
+                // Set current response ID and trigger camera capture when new question loads
+                if (this.cameraManager) {
+                    this.cameraManager.setCurrentResponseId(this.currentQuestion.question_id);
+                    await this.cameraManager.onQuestionStart();
+                }
+            }
+        },
+
+        async updateCurrentResponse(value, text) {
+            if (!this.currentQuestion) return;
+
+            // Set current response ID before capturing image
+            if (this.cameraManager) {
+                // Set the current response ID for association with captures
+                this.cameraManager.setCurrentResponseId(this.currentQuestion.question_id);
+                await this.cameraManager.onButtonClick();
+            }
+
+            const responseValue = parseInt(value);
+            if (isNaN(responseValue)) return;
+
+            this.currentResponse = {
+                question_id: this.currentQuestion.question_id,
+                response_value: responseValue,
+                response_text: text,
+                response_time_ms: Date.now() - this.questionStartTime
+            };
+
+            this.responses[this.currentQuestion.question_id] = this.currentResponse;
+        },
+
+        async nextQuestion() {
+            if (!this.currentResponse) return;
+
+            if (this.currentQuestionIndex < this.questions.length - 1) {
+                this.currentQuestionIndex++;
+                this.questionStartTime = Date.now();
+                await this.loadCurrentResponse();
+            } else {
+                await this.submitAllResponses();
+            }
+        },
+
+        async previousQuestion() {
+            if (this.currentQuestionIndex > 0) {
+                this.currentQuestionIndex--;
+                this.questionStartTime = Date.now();
+                await this.loadCurrentResponse();
+            }
+        },
+
+        async submitAllResponses() {
+            if (this.submitting) return;
+            
+            this.submitting = true;
+            
+            try {
+                const responsesArray = Object.values(this.responses);
+                
+                const result = await apiCall(`/assessment/phq/submit/${this.sessionId}`, 'POST', { responses: responsesArray });
+                
+                if (result && result.status === 'OLKORECT') {
+                    this.submitted = true;
+                    this.markAsCompleted();
+                    
+                    console.log('📋 PHQ submit result:', result);
+                    console.log('📋 Response IDs for camera linking:', result.data.response_ids);
+                    
+                    if (this.cameraManager) {
+                        await this.cameraManager.uploadBatch(result.data.response_ids);
+                    }
+                    
+                    setTimeout(() => {
+                        window.location.href = result.data.next_redirect;
+                    }, 2000);
+                } else {
+                    alert('Error submitting responses: ' + (result?.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                this.submitting = false;
+            }
+        },
+
+        async resetAssessment() {
+            if (confirm('Apakah Anda yakin ingin mereset assessment ini dan memulai dari awal? Semua jawaban yang belum disimpan akan hilang.')) {
+                try {
+                    const response = await fetch(`/assessment/reset-session-on-refresh/${this.sessionId}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    // Redirect to main menu
+                    window.location.href = '/';
+                } catch (error) {
+                    alert('Gagal mereset assessment: ' + error.message);
+                }
+            }
+        }
+    };
+}
+
+// Initialize refresh detection for this session
+function initializePHQRefreshDetection(sessionId) {
+    setupRefreshDetection(sessionId);
+}

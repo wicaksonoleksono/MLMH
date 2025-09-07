@@ -1,21 +1,21 @@
-# app/routes/admin/session2_routes.py
+# app/routes/admin/session_management_routes.py
 from flask import Blueprint, render_template, request, jsonify, current_app, redirect, url_for
 from flask_login import current_user, login_required
 from ...decorators import raw_response, admin_required
 from ...services.SMTP.session2NotificationService import Session2NotificationService
 
-session2_bp = Blueprint('session2', __name__, url_prefix='/admin/session2')
+session_management_bp = Blueprint('session_management', __name__, url_prefix='/admin/session-management')
 
 
-@session2_bp.route('/')
+@session_management_bp.route('/')
 @login_required
 @admin_required
 def index():
     """Redirect to eligible users page"""
-    return redirect(url_for('session2.get_eligible_users'))
+    return redirect(url_for('session_management.get_eligible_users'))
 
 
-@session2_bp.route('/eligible-users')
+@session_management_bp.route('/eligible-users')
 @login_required
 @admin_required
 @raw_response
@@ -28,20 +28,20 @@ def get_eligible_users():
         # Get pending notifications count
         pending_count = Session2NotificationService.get_pending_notifications_count()
         
-        return render_template('admin/session2/eligible_users.html',
+        return render_template('admin/session_management/eligible_users.html',
                              user=current_user,
                              all_users=all_users,
                              pending_count=pending_count)
     except Exception as e:
         current_app.logger.error(f"Error fetching eligible users: {str(e)}")
-        return render_template('admin/session2/eligible_users.html',
+        return render_template('admin/session_management/eligible_users.html',
                              user=current_user,
                              all_users=[],
                              pending_count=0,
                              error="Failed to fetch eligible users")
 
 
-@session2_bp.route('/api/eligible-users')
+@session_management_bp.route('/api/eligible-users')
 @login_required
 @admin_required
 def api_get_eligible_users():
@@ -60,7 +60,7 @@ def api_get_eligible_users():
         }), 500
 
 
-@session2_bp.route('/send-notification', methods=['POST'])
+@session_management_bp.route('/send-notification', methods=['POST'])
 @login_required
 @admin_required
 def send_session2_notification():
@@ -96,7 +96,7 @@ def send_session2_notification():
         }), 500
 
 
-@session2_bp.route('/pending-notifications')
+@session_management_bp.route('/pending-notifications')
 @login_required
 @admin_required
 @raw_response
@@ -104,32 +104,29 @@ def get_pending_notifications():
     """Get all pending Session 2 notifications"""
     try:
         pending_notifications = Session2NotificationService.get_pending_notifications()
-        return render_template('admin/session2/pending_notifications.html',
+        return render_template('admin/session_management/pending_notifications.html',
                              user=current_user,
                              pending_notifications=pending_notifications)
     except Exception as e:
         current_app.logger.error(f"Error fetching pending notifications: {str(e)}")
-        return render_template('admin/session2/pending_notifications.html',
+        return render_template('admin/session_management/pending_notifications.html',
                              user=current_user,
                              pending_notifications=[],
                              error="Failed to fetch pending notifications")
 
 
-@session2_bp.route('/trigger-automatic', methods=['POST'])
+@session_management_bp.route('/send-all-pending', methods=['POST'])
 @login_required
 @admin_required
-def trigger_automatic_notifications():
-    """Manually trigger automatic date-based Session 2 notifications"""
+def send_all_pending_notifications():
+    """Send all pending Session 2 notifications"""
     try:
-        # Create notifications for eligible users
-        created_count = Session2NotificationService.create_automatic_notifications()
-        
         # Send pending notifications
         sent_count = Session2NotificationService.send_pending_notifications()
         
         return jsonify({
             'status': 'success',
-            'message': f'Created {created_count} notifications and sent {sent_count} emails'
+            'message': f'Berhasil mengirim {sent_count} notifikasi tertunda'
         })
     except Exception as e:
         return jsonify({

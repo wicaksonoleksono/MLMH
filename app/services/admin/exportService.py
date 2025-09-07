@@ -142,37 +142,45 @@ class ExportService:
             upload_path = current_app.media_save
             
             for capture in captures:
-                # Determine assessment type
+                # Determine assessment type - SKIP unknown captures
                 if capture.phq_response_id:
                     assessment_type = "PHQ"
                     folder_path = "images/phq/"
                     phq_captures.append(capture)
+                    
+                    # Add image file to PHQ folder
+                    image_path = os.path.join(upload_path, capture.filename)
+                    if os.path.exists(image_path):
+                        with open(image_path, 'rb') as img_file:
+                            zip_file.writestr(f'{folder_path}{capture.filename}', img_file.read())
+                            
                 elif capture.llm_conversation_id:
                     assessment_type = "LLM"
                     folder_path = "images/llm/"
                     llm_captures.append(capture)
+                    
+                    # Add image file to LLM folder
+                    image_path = os.path.join(upload_path, capture.filename)
+                    if os.path.exists(image_path):
+                        with open(image_path, 'rb') as img_file:
+                            zip_file.writestr(f'{folder_path}{capture.filename}', img_file.read())
                 else:
-                    assessment_type = "UNKNOWN"
-                    folder_path = "images/unknown/"
+                    # Skip unknown captures - don't add to ZIP
                     unknown_captures.append(capture)
-                
-                # Add image file to appropriate folder
-                image_path = os.path.join(upload_path, capture.filename)
-                if os.path.exists(image_path):
-                    with open(image_path, 'rb') as img_file:
-                        zip_file.writestr(f'{folder_path}{capture.filename}', img_file.read())
+                    print(f"⚠️ Skipping unknown capture {capture.filename} from export")
             
-            # Create comprehensive metadata
+            # Create comprehensive metadata (only for linked captures)
+            linked_captures = phq_captures + llm_captures
             metadata = {
-                'total_captures': len(captures),
+                'total_captures': len(linked_captures),
                 'phq_captures': len(phq_captures),
                 'llm_captures': len(llm_captures),
-                'unknown_captures': len(unknown_captures),
+                'unknown_captures_skipped': len(unknown_captures),
                 'captures': []
             }
             
-            # Add all captures to metadata with assessment type identification
-            for capture in captures:
+            # Add only linked captures to metadata
+            for capture in linked_captures:
                 # Determine assessment type and folder
                 if capture.phq_response_id:
                     assessment_type = "PHQ"
@@ -279,8 +287,8 @@ Export Details:
 - Images Organization:
   * PHQ Assessment Images: {phq_images} files in images/phq/
   * LLM Assessment Images: {llm_images} files in images/llm/
-  * Unknown Images: {unknown_images} files in images/unknown/
-  * Total Images: {len(captures)} files
+  * Unknown Images Skipped: {unknown_images} (unlinked captures excluded from export)
+  * Total Images Exported: {phq_images + llm_images} files
   * Metadata: images/metadata.json (main), images/phq/metadata.json, images/llm/metadata.json
 - Format: ZIP archive with organized JSON data and assessment-specific image folders
 

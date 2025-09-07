@@ -15,7 +15,8 @@ from langchain_core.runnables import ConfigurableFieldSpec
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI
 from langchain_openai.chat_models.base import ChatOpenAI
-from pydantic.v1 import BaseModel, Field
+from pydantic import BaseModel, Field
+from typing import List
 
 
 class InMemoryHistory(BaseChatMessageHistory, BaseModel):

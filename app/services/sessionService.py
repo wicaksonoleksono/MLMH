@@ -263,20 +263,7 @@ class SessionService:
             session.complete_llm()
             db.commit()
             
-            # Trigger LLM conversation analysis asynchronously
-            try:
-                from ..services.llm.analysisService import LLMAnalysisService
-                print(f"🚀 Triggering analysis for completed LLM session {session_id}")
-                
-                # Run analysis in background (could be made async in production)
-                analysis_result = LLMAnalysisService.run_conversation_analysis(session_id)
-                if analysis_result:
-                    print(f" Analysis completed for session {session_id}: {analysis_result.id}")
-                else:
-                    print(f"  Analysis failed for session {session_id}")
-            except Exception as e:
-                # Don't fail the completion if analysis fails
-                print(f" Analysis error for session {session_id}: {str(e)}")
+            # Analysis is done manually by admins - no automatic analysis
             
             return session
     
@@ -392,7 +379,7 @@ class SessionService:
             from ..model.assessment.sessions import PHQResponse, LLMConversation, LLMAnalysisResult, CameraCapture
             
             # Get camera capture filenames BEFORE reset (tied to session_id)
-            camera_filenames = [capture.filename for capture in db.query(CameraCapture).filter_by(assessment_session_id=session_id).all()]
+            camera_filenames = [filename for capture in db.query(CameraCapture).filter_by(session_id=session_id).all() for filename in capture.filenames]
             
             # Delete physical camera files
             if camera_filenames:

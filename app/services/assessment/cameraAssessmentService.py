@@ -37,12 +37,11 @@ class CameraAssessmentService:
         for capture in captures:
             captures_data.append({
                 "id": capture.id,
-                "filename": capture.filename,
-                "file_size_bytes": capture.file_size_bytes,
-                "capture_trigger": capture.capture_trigger,
-                "timestamp": capture.timestamp.isoformat(),
-                "phq_response_id": capture.phq_response_id,
-                "llm_conversation_id": capture.llm_conversation_id
+                "session_id": capture.session_id,
+                "assessment_id": capture.assessment_id,
+                "filenames": capture.filenames,
+                "capture_type": capture.capture_type,
+                "created_at": capture.created_at.isoformat() if capture.created_at else None
             })
         
         return {
@@ -99,43 +98,41 @@ class CameraAssessmentService:
 
     @staticmethod
     def link_captures_to_responses(session_id: str, request) -> Dict[str, Any]:
-        """Link capture IDs to PHQ/LLM response IDs - hybrid approach"""
+        """Link all session captures to single assessment record ID - JSON structure approach"""
         data = request.get_json()
         if not data:
             return {"status": "SNAFU", "error": "No JSON data provided"}
         
-        # Get the new capture-to-response mapping
-        capture_response_map = data.get('capture_response_map', {})
+        # Get the new linking data
+        capture_ids = data.get('capture_ids', [])
+        assessment_record_id = data.get('assessment_record_id')
         assessment_type = data.get('assessment_type', 'phq')
         
-        if not capture_response_map:
-            return {"status": "SNAFU", "error": "No capture_response_map provided"}
+        if not capture_ids or not assessment_record_id:
+            return {"status": "SNAFU", "error": "capture_ids and assessment_record_id are required"}
         
         try:
             with get_session() as db:
                 updated_count = 0
                 already_linked_count = 0
                 
-                # Process each capture with its mapped response
-                for capture_id, response_id in capture_response_map.items():
+                # Process each capture and link to assessment record
+                for capture_id in capture_ids:
                     capture = db.query(CameraCapture).filter_by(
                         id=capture_id,
-                        assessment_session_id=session_id
+                        session_id=session_id
                     ).first()
                     
                     if capture:
-                        if capture.phq_response_id is not None or capture.llm_conversation_id is not None:
+                        if capture.assessment_id:
                             already_linked_count += 1
-                            print(f" Capture {capture_id} already linked (PHQ: {capture.phq_response_id}, LLM: {capture.llm_conversation_id})")
+                            print(f" Capture {capture_id} already linked to assessment {capture.assessment_id}")
                             continue
                         
-                        # Link to appropriate response type based on assessment type
-                        if assessment_type == 'phq':
-                            capture.phq_response_id = response_id
-                            print(f"! Linked capture {capture_id} to PHQ response {response_id}")
-                        elif assessment_type == 'llm':
-                            capture.llm_conversation_id = response_id
-                            print(f"! Linked capture {capture_id} to LLM conversation {response_id}")
+                        # Link to assessment record using new model structure
+                        capture.assessment_id = assessment_record_id
+                        capture.capture_type = assessment_type.upper()
+                        print(f"! Linked capture {capture_id} to {assessment_type.upper()} record {assessment_record_id}")
                         
                         updated_count += 1
                 
@@ -147,7 +144,8 @@ class CameraAssessmentService:
                         "session_id": session_id,
                         "captures_updated": updated_count,
                         "captures_already_linked": already_linked_count,
-                        "capture_response_map_processed": capture_response_map,
+                        "assessment_record_id": assessment_record_id,
+                        "assessment_type": assessment_type,
                         "contamination_prevented": already_linked_count > 0
                     }
                 }
@@ -160,11 +158,10 @@ class CameraAssessmentService:
         """Clean up unlinked captures from session to prevent cross-assessment contamination"""
         try:
             with get_session() as db:
-                # Find captures that are unlinked (no PHQ or LLM association)
-                unlinked_captures = db.query(CameraCapture).filter_by(
-                    assessment_session_id=session_id,
-                    phq_response_id=None,
-                    llm_conversation_id=None
+                # Find captures that are unlinked (no assessment association)
+                unlinked_captures = db.query(CameraCapture).filter(
+                    CameraCapture.session_id == session_id,
+                    CameraCapture.assessment_id.is_(None)
                 ).all()
                 
                 cleaned_count = len(unlinked_captures)

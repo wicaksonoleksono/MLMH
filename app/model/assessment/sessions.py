@@ -97,18 +97,6 @@ class AssessmentSession(BaseModel):
             self.duration_seconds = int((self.end_time - self.start_time).total_seconds())
 
         self.updated_at = datetime.utcnow()
-        
-    # Trigger post-completion tasks (email notifications, etc.)
-    #     self._trigger_completion_tasks()
-    
-    # def _trigger_completion_tasks(self) -> None:
-    #     """Trigger post-completion tasks like email notifications"""
-    #     try:
-    #         # Import here to avoid circular imports
-    #         from app.services.assessment.sessionCompletionService import SessionCompletionService
-    #         SessionCompletionService.handle_session_completion(self.id)
-    #     except Exception as e:
-    #         print(f"Error triggering completion tasks for session {self.id}: {str(e)}")
 
     def calculate_completion_percentage(self) -> int:
         """Calculate completion percentage based on completed steps"""
@@ -343,83 +331,59 @@ class PHQResponse(BaseModel):
     __tablename__ = 'phq_responses'
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
-    question_id: Mapped[int] = mapped_column(Integer, ForeignKey('phq_questions.id'), nullable=False)
-
-    # Question metadata (snapshot at response time)
-    question_number: Mapped[int] = mapped_column(Integer, nullable=False)
-    question_text: Mapped[str] = mapped_column(Text, nullable=False)
-    category_name: Mapped[str] = mapped_column(String(50), nullable=False)  # ANHEDONIA, DEPRESSED_MOOD, etc.
-
-    # Response data
-    response_value: Mapped[int] = mapped_column(Integer, nullable=False) 
-    response_text: Mapped[str] = mapped_column(String(255), nullable=False)  # Human-readable answer
-    response_time_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-
-    # JSON storage for richer data
-    response_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)  # Additional response data
-    camera_capture_ids: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)  # Associated camera capture IDs
+    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False, unique=True)
     
-    is_valid: Mapped[bool] = mapped_column(Boolean, default=True)
+    # All responses in a single JSON structure, keyed by question_id
+    # Structure: {"question_id": {"question_number": 1, "question_text": "...", "response_value": 3, "response_text": "...", "category_name": "..."}, ...}
+    responses: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    
+    is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow())
-
-    # Relationships
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow(), onupdate=lambda: datetime.utcnow())
+    
     session = relationship("AssessmentSession", back_populates="phq_responses")
-    question = relationship("PHQQuestion")
 
     def __repr__(self):
-        return f'<PHQResponse {self.id}: Q{self.question_number} = {self.response_value}>'
+        return f'<PHQResponse {self.id}: {len(self.responses)} responses for session {self.session_id}>'
 
 
 class LLMConversation(BaseModel):
     __tablename__ = 'llm_conversations'
+    
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
     
-    # Individual turn fields (for service compatibility)
-    turn_number: Mapped[int] = mapped_column(Integer, nullable=False)
-    ai_message: Mapped[str] = mapped_column(Text, nullable=False)
-    user_message: Mapped[str] = mapped_column(Text, nullable=False)
-    has_end_conversation: Mapped[bool] = mapped_column(Boolean, default=False)
-    user_message_length: Mapped[int] = mapped_column(Integer, default=0)
-    ai_model_used: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    response_audio_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    transcription: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Entire conversation as JSON
+    conversation_history: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
     
-    # JSON storage for richer conversation data
-    conversation_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)  # Additional conversation data
-    camera_capture_ids: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)  # Associated camera capture IDs
-    
-    # Legacy field (can be removed later if not needed)
-    conversation_data: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow(), onupdate=lambda: datetime.utcnow())
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    
     session = relationship("AssessmentSession", back_populates="llm_conversations")
+    
     def __repr__(self):
         return f'<LLMConversation {self.id}: Session {self.session_id}>'
 
 
 class CameraCapture(BaseModel):
     __tablename__ = 'camera_captures'
+    
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    assessment_session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id', ondelete='CASCADE'), nullable=False)
-    phq_response_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey('phq_responses.id', ondelete='CASCADE'), nullable=True)
-    llm_conversation_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey('llm_conversations.id', ondelete='CASCADE'), nullable=True)
+    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
+    assessment_id: Mapped[str] = mapped_column(String(36), nullable=False)  # Can reference either LLM or PHQ record
     
-    # Batch linking fields
-    batch_linked: Mapped[bool] = mapped_column(Boolean, default=False)  # Whether this capture has been batch linked
-    linked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # When batch linking occurred
-    capture_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)  # Additional capture info
+    # List of filenames instead of separate rows
+    filenames: Mapped[List[str]] = mapped_column(JSON, nullable=False)
     
-    filename: Mapped[str] = mapped_column(String(255), nullable=False)
-    file_size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    capture_trigger: Mapped[str] = mapped_column(String(50), nullable=False)  # INTERVAL, BUTTON_CLICK, MESSAGE_SEND, QUESTION_START
-    timestamp: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow())
-    camera_settings_snapshot: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    capture_type: Mapped[str] = mapped_column(String(50), nullable=False)  # LLM or PHQ
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow())
+    
     session = relationship("AssessmentSession", back_populates="camera_captures")
+    
     def __repr__(self):
-        return f'<CameraCapture {self.id}: {self.filename} ({self.capture_trigger})>'
+        return f'<CameraCapture {self.id}: {len(self.filenames)} files for session {self.session_id}>'
 
 
 # LATER ON.. 

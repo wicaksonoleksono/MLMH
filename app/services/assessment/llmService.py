@@ -22,7 +22,7 @@ class LLMConversationService:
     
     @staticmethod
     def create_conversation_turn(
-        session_id: int,
+        session_id: str,
         turn_number: int,
         ai_message: str,
         user_message: str,
@@ -30,75 +30,149 @@ class LLMConversationService:
         response_audio_path: Optional[str] = None,
         transcription: Optional[str] = None
     ) -> LLMConversation:
-        """Create a new conversation turn"""
+        """Create or update conversation turn in single JSON record"""
         with get_session() as db:
-            # this is the shit  btw 
-            has_end_conversation = "</end_conversation>" in ai_message.lower()
-            turn = LLMConversation(
-                session_id=session_id,
-                turn_number=turn_number,
-                ai_message=ai_message,
-                user_message=user_message,
-                has_end_conversation=has_end_conversation,
-                user_message_length=len(user_message),
-                ai_model_used=ai_model_used,
-                response_audio_path=response_audio_path,
-                transcription=transcription
+            # Get existing LLM conversation record for this session or create new one
+            conversation_record = db.query(LLMConversation).filter_by(session_id=session_id).first()
+            if not conversation_record:
+                conversation_record = LLMConversation(
+                    session_id=session_id,
+                    conversation_history={"turns": []}
+                )
+                db.add(conversation_record)
+
+            # Create turn data with more robust end conversation detection
+            normalized_ai_message = ai_message.lower().strip()
+            has_end_conversation = (
+                "</end_conversation>" in normalized_ai_message or 
+                "\u003c/end_conversation\u003e" in normalized_ai_message
             )
             
-            db.add(turn)
+            turn_data = {
+                "turn_number": turn_number,
+                "ai_message": ai_message,
+                "user_message": user_message,
+                "has_end_conversation": has_end_conversation,
+                "user_message_length": len(user_message),
+                "ai_model_used": ai_model_used,
+                "response_audio_path": response_audio_path,
+                "transcription": transcription,
+                "created_at": datetime.utcnow().isoformat()
+            }
+
+            # Add or update turn in conversation history
+            turns = conversation_record.conversation_history.get("turns", [])
+            
+            # Check if turn already exists and update it, otherwise add new turn
+            turn_exists = False
+            for i, existing_turn in enumerate(turns):
+                if existing_turn.get("turn_number") == turn_number:
+                    turns[i] = turn_data
+                    turn_exists = True
+                    break
+            
+            if not turn_exists:
+                turns.append(turn_data)
+            
+            # Sort turns by turn number
+            turns.sort(key=lambda x: x.get("turn_number", 0))
+            
+            # Create completely new JSON object to force SQLAlchemy to detect change
+            conversation_record.conversation_history = {
+                "turns": turns,
+                "total_turns": len(turns),
+                "last_updated": datetime.utcnow().isoformat()
+            }
+
+            print(f"💾 Saving turn {turn_number} for session {session_id}, total turns: {len(turns)}")
+            print(f"💾 Turn data: has_end_conversation={has_end_conversation}, ai_message_preview='{ai_message[:50]}...'")
+
             db.commit()
-            return turn
+            return conversation_record
     
     @staticmethod
-    def get_session_conversations(session_id: int) -> List[LLMConversation]:
-        """Get all conversation turns for a session"""
+    def get_session_conversations(session_id: str) -> List[Dict[str, Any]]:
+        """Get all conversation turns for a session from single JSON record"""
         with get_session() as db:
-            return db.query(LLMConversation).filter_by(session_id=session_id).order_by(LLMConversation.turn_number).all()
+            conversation_record = db.query(LLMConversation).filter_by(session_id=session_id).first()
+            if not conversation_record:
+                return []
+            
+            return conversation_record.conversation_history.get("turns", [])
     
     @staticmethod
-    def get_conversation_by_id(turn_id: int) -> Optional[LLMConversation]:
-        """Get a specific conversation turn by ID"""
+    def get_conversation_by_id(session_id: str) -> Optional[LLMConversation]:
+        """Get the conversation record by session ID"""
         with get_session() as db:
-            return db.query(LLMConversation).filter_by(id=turn_id).first()
+            return db.query(LLMConversation).filter_by(session_id=session_id).first()
     
     @staticmethod
-    def update_conversation_turn(turn_id: int, updates: Dict[str, Any]) -> LLMConversation:
-        """Update a conversation turn"""
+    def update_conversation_turn(session_id: str, turn_number: int, updates: Dict[str, Any]) -> LLMConversation:
+        """Update a conversation turn in the single JSON record"""
         with get_session() as db:
-            turn = db.query(LLMConversation).filter_by(id=turn_id).first()
-            if not turn:
-                raise ValueError(f"Conversation turn with ID {turn_id} not found")
+            conversation_record = db.query(LLMConversation).filter_by(session_id=session_id).first()
+            if not conversation_record:
+                raise ValueError(f"Conversation record for session {session_id} not found")
             
-            for key, value in updates.items():
-                if hasattr(turn, key):
-                    setattr(turn, key, value)
+            turns = conversation_record.conversation_history.get("turns", [])
             
-            # Update user_message_length if user_message changed
-            if 'user_message' in updates:
-                turn.user_message_length = len(updates['user_message'])
+            # Find the turn to update
+            turn_found = False
+            for i, turn in enumerate(turns):
+                if turn.get("turn_number") == turn_number:
+                    # Update the turn data
+                    turns[i].update(updates)
+                    
+                    # Update computed fields if relevant fields changed
+                    if 'user_message' in updates:
+                        turns[i]["user_message_length"] = len(updates['user_message'])
+                    
+                    if 'ai_message' in updates:
+                        turns[i]["has_end_conversation"] = "</end_conversation>" in updates['ai_message'].lower()
+                    
+                    turn_found = True
+                    break
             
-            # Check for end conversation if ai_message changed
-            if 'ai_message' in updates:
-                turn.has_end_conversation = "</end_conversation>" in updates['ai_message'].lower()
+            if not turn_found:
+                raise ValueError(f"Conversation turn {turn_number} not found for session {session_id}")
+            
+            # Update conversation history
+            conversation_record.conversation_history["turns"] = turns
+            # Note: Model doesn't have updated_at field
             
             db.commit()
-            return turn
+            return conversation_record
     
     @staticmethod
-    def delete_conversation_turn(turn_id: int) -> bool:
-        """Delete a conversation turn"""
+    def delete_conversation_turn(session_id: str, turn_number: int) -> bool:
+        """Delete a conversation turn from the single JSON record"""
         with get_session() as db:
-            turn = db.query(LLMConversation).filter_by(id=turn_id).first()
-            if not turn:
-                raise ValueError(f"Conversation turn with ID {turn_id} not found")
+            conversation_record = db.query(LLMConversation).filter_by(session_id=session_id).first()
+            if not conversation_record:
+                raise ValueError(f"Conversation record for session {session_id} not found")
             
-            db.delete(turn)
+            turns = conversation_record.conversation_history.get("turns", [])
+            
+            # Find and remove the turn
+            turn_found = False
+            for i, turn in enumerate(turns):
+                if turn.get("turn_number") == turn_number:
+                    turns.pop(i)
+                    turn_found = True
+                    break
+            
+            if not turn_found:
+                raise ValueError(f"Conversation turn {turn_number} not found for session {session_id}")
+            
+            # Update conversation history
+            conversation_record.conversation_history["turns"] = turns
+            # Note: Model doesn't have updated_at field
+            
             db.commit()
             return True
     
     @staticmethod
-    def trigger_analysis(session_id: int) -> LLMAnalysisResult:
+    def trigger_analysis(session_id: str) -> LLMAnalysisResult:
         """Trigger LLM analysis when conversation ends"""
         with get_session() as db:
             # Get session and its LLM settings
@@ -106,8 +180,13 @@ class LLMConversationService:
             if not session:
                 raise ValueError(f"Session {session_id} not found")
             
+            # Get conversation record
+            conversation_record = db.query(LLMConversation).filter_by(session_id=session_id).first()
+            if not conversation_record:
+                raise ValueError("No conversation record found for analysis")
+            
             # Get all conversation turns
-            conversations = db.query(LLMConversation).filter_by(session_id=session_id).order_by(LLMConversation.turn_number).all()
+            conversations = conversation_record.conversation_history.get("turns", [])
             if not conversations:
                 raise ValueError("No conversation turns found for analysis")
             
@@ -131,15 +210,15 @@ class LLMConversationService:
             # Convert conversations to message format for modern prompt builder
             conversation_messages = []
             for turn in conversations:
-                if turn.ai_message:
+                if turn.get('ai_message'):
                     conversation_messages.append({
                         "role": "assistant",
-                        "message": turn.ai_message
+                        "message": turn.get('ai_message')
                     })
-                if turn.user_message:
+                if turn.get('user_message'):
                     conversation_messages.append({
                         "role": "user",
-                        "message": turn.user_message
+                        "message": turn.get('user_message')
                     })
             
             # Build analysis prompt using modern prompt builder with configurable scale
@@ -273,38 +352,52 @@ class LLMConversationService:
         return processed_scores
     
     @staticmethod
-    def get_session_analysis(session_id: int) -> Optional[LLMAnalysisResult]:
+    def get_session_analysis(session_id: str) -> Optional[LLMAnalysisResult]:
         """Get analysis result for a session"""
         with get_session() as db:
             return db.query(LLMAnalysisResult).filter_by(session_id=session_id).first()
     
     @staticmethod
-    def check_conversation_complete(session_id: int) -> bool:
+    def check_conversation_complete(session_id: str) -> bool:
         """Check if conversation has ended (contains </end_conversation>)"""
         with get_session() as db:
-            end_turn = db.query(LLMConversation).filter_by(
-                session_id=session_id,
-                has_end_conversation=True
-            ).first()
+            conversation_record = db.query(LLMConversation).filter_by(session_id=session_id).first()
+            if not conversation_record:
+                print(f"🔍 No conversation record found for session {session_id}")
+                return False
             
-            return end_turn is not None
+            turns = conversation_record.conversation_history.get("turns", [])
+            print(f"🔍 Checking {len(turns)} turns for session {session_id}")
+            
+            # Check for end conversation flag in any turn
+            for i, turn in enumerate(turns):
+                has_end = turn.get("has_end_conversation", False)
+                ai_msg = turn.get("ai_message", "")
+                print(f"🔍  Turn {i}: has_end_conversation={has_end}, ai_message contains </end_conversation>: {'</end_conversation>' in ai_msg.lower()}")
+                if has_end:
+                    print(f"🔍 ✅ CONVERSATION ENDED DETECTED in turn {i}")
+                    return True
+            
+            print(f"🔍 ❌ No end conversation detected in {len(turns)} turns")
+            return False
     
     @staticmethod
-    def get_conversation_summary(session_id: int) -> Dict[str, Any]:
+    def get_conversation_summary(session_id: str) -> Dict[str, Any]:
         """Get summary of conversation for a session"""
         with get_session() as db:
-            conversations = db.query(LLMConversation).filter_by(session_id=session_id).all()
+            conversation_record = db.query(LLMConversation).filter_by(session_id=session_id).first()
+            conversations = conversation_record.conversation_history.get("turns", []) if conversation_record else []
             analysis = db.query(LLMAnalysisResult).filter_by(session_id=session_id).first()
             
             total_turns = len(conversations)
-            total_user_words = sum(len(turn.user_message.split()) for turn in conversations)
-            avg_response_length = sum(turn.user_message_length for turn in conversations) / total_turns if total_turns > 0 else 0
+            total_user_words = sum(len(turn.get("user_message", "").split()) for turn in conversations)
+            avg_response_length = sum(turn.get("user_message_length", 0) for turn in conversations) / total_turns if total_turns > 0 else 0
             
             return {
                 "total_conversation_turns": total_turns,
                 "total_user_words": total_user_words,
                 "average_response_length": avg_response_length,
-                "conversation_completed": any(turn.has_end_conversation for turn in conversations),
+                "conversation_completed": any(turn.get("has_end_conversation", False) for turn in conversations),
                 "analysis_completed": analysis is not None,
                 "analysis_summary": {
                     "total_aspects_detected": analysis.total_aspects_detected if analysis else 0,
@@ -314,17 +407,18 @@ class LLMConversationService:
             }
 
     @staticmethod
-    def clear_session_conversations(session_id: int) -> int:
+    def clear_session_conversations(session_id: str) -> int:
         """Clear all LLM conversations and analysis for a session - used for restart functionality"""
         with get_session() as db:
-            conversations = db.query(LLMConversation).filter_by(session_id=session_id).all()
+            conversation_record = db.query(LLMConversation).filter_by(session_id=session_id).first()
             analysis_records = db.query(LLMAnalysisResult).filter_by(session_id=session_id).all()
             
-            total_count = len(conversations) + len(analysis_records)
-            
-            for conversation in conversations:
-                db.delete(conversation)
+            total_count = 0
+            if conversation_record:
+                total_count += 1
+                db.delete(conversation_record)
                 
+            total_count += len(analysis_records)
             for analysis in analysis_records:
                 db.delete(analysis)
             

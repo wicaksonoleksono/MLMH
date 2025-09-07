@@ -171,12 +171,22 @@ class LLMChatService:
             ai_model_used=settings['chat_model']
         )
         
-        # If conversation ended, clear LangChain memory
-        if "</end_conversation>" in ai_response.lower():
+        # If conversation ended, clear LangChain memory AND complete the session
+        # More robust end conversation detection
+        normalized_response = ai_response.lower().strip()
+        if "</end_conversation>" in normalized_response or "\\u003c/end_conversation\\u003e" in normalized_response:
             history = get_by_session_id(str(session_id))
             history.clear()
             if session_id in store:
                 del store[str(session_id)]
+            
+            # Automatically complete the LLM assessment when conversation ends
+            try:
+                from ...services.sessionService import SessionService
+                SessionService.complete_llm_assessment(session_id)
+            except Exception as e:
+                # Log the error but don't fail the conversation save
+                print(f"Warning: Failed to auto-complete LLM assessment for session {session_id}: {e}")
     
     @staticmethod
     def get_session_chat_history(session_id: str) -> Dict[str, Any]:
@@ -239,9 +249,9 @@ class LLMChatService:
         Finish conversation and prepare for completion handler
         """
         if LLMChatService.is_conversation_complete(session_id):
-            # Get conversation IDs before completing
-            conversations = LLMConversationService.get_session_conversations(session_id)
-            conversation_ids = [conv.id for conv in conversations] if conversations else []
+            # Get the LLM conversation record ID for camera linking
+            conversation_record = LLMConversationService.get_conversation_by_id(session_id)
+            conversation_ids = [conversation_record.id] if conversation_record else []
             
             completion_result = SessionService.complete_llm_and_get_next_step(session_id)
             return {

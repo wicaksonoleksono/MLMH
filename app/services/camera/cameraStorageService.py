@@ -26,8 +26,8 @@ class CameraStorageService:
         session_id: str, 
         file_data: bytes, 
         trigger: str,
-        phq_response_id: Optional[str] = None,
-        llm_conversation_id: Optional[str] = None
+        assessment_id: Optional[str] = None,
+        capture_type: str = 'GENERAL'
     ) -> CameraCapture:
         """Save image directly to uploads/ with minimal DB record"""
         
@@ -60,20 +60,19 @@ class CameraStorageService:
         with open(file_path, 'wb') as f:
             f.write(file_data)
         
-        # Create simple DB record
+        # Create DB record using new model structure
         with get_session() as db:
             capture = CameraCapture(
-                assessment_session_id=session_id,
-                phq_response_id=phq_response_id,
-                llm_conversation_id=llm_conversation_id,
-                filename=filename,
-                file_size_bytes=len(file_data),
-                capture_trigger=trigger,
-                timestamp=datetime.utcnow()
+                session_id=session_id,
+                assessment_id=assessment_id,
+                filenames=[filename],  # New model uses JSON array
+                capture_type=capture_type,
+                created_at=datetime.utcnow()
             )
             
             db.add(capture)
             db.commit()
+            db.refresh(capture)  # Ensure we get the auto-generated ID
             return capture
 
     @staticmethod
@@ -81,24 +80,26 @@ class CameraStorageService:
         """Get all captures for session"""
         with get_session() as db:
             return db.query(CameraCapture).filter_by(
-                assessment_session_id=session_id
-            ).order_by(CameraCapture.timestamp).all()
+                session_id=session_id
+            ).order_by(CameraCapture.created_at).all()
 
     @staticmethod
-    def get_phq_captures(phq_response_id: str) -> List[CameraCapture]:
-        """Get captures linked to PHQ response (cascading FK)"""
+    def get_phq_captures(assessment_id: str) -> List[CameraCapture]:
+        """Get captures linked to PHQ assessment"""
         with get_session() as db:
-            return db.query(CameraCapture).filter_by(
-                phq_response_id=phq_response_id
-            ).order_by(CameraCapture.timestamp).all()
+            return db.query(CameraCapture).filter(
+                CameraCapture.assessment_id == assessment_id,
+                CameraCapture.capture_type == 'PHQ'
+            ).order_by(CameraCapture.created_at).all()
 
     @staticmethod
-    def get_llm_captures(llm_conversation_id: str) -> List[CameraCapture]:
-        """Get captures linked to LLM conversation (cascading FK)"""
+    def get_llm_captures(assessment_id: str) -> List[CameraCapture]:
+        """Get captures linked to LLM assessment"""
         with get_session() as db:
-            return db.query(CameraCapture).filter_by(
-                llm_conversation_id=llm_conversation_id
-            ).order_by(CameraCapture.timestamp).all()
+            return db.query(CameraCapture).filter(
+                CameraCapture.assessment_id == assessment_id,
+                CameraCapture.capture_type == 'LLM'
+            ).order_by(CameraCapture.created_at).all()
 
     @staticmethod
     def get_capture_file_path(filename: str) -> str:
@@ -114,15 +115,16 @@ class CameraStorageService:
         
         with get_session() as db:
             captures = db.query(CameraCapture).filter_by(
-                assessment_session_id=session_id
+                session_id=session_id
             ).all()
             
             for capture in captures:
-                # Delete physical file
-                file_path = os.path.join(static_path, capture.filename)
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                    deleted_count += 1
+                # Delete physical files (new model has multiple filenames)
+                for filename in capture.filenames:
+                    file_path = os.path.join(static_path, filename)
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                        deleted_count += 1
                 
                 # DB record will cascade delete
             

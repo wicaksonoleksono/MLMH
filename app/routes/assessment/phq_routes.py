@@ -56,27 +56,27 @@ def submit_phq_responses(session_id):
     if not responses:
         return {"message": "No responses provided"}, 400
     
-    # Process responses
-    results = []
-    response_ids = []
-    for response_data in responses:
-        try:
-            response = PHQResponseService.create_response(
-                session_id=session_id,
-                question_id=response_data['question_id'],
-                response_value=response_data['response_value'],
-                response_text=response_data.get('response_text', ''),
-                response_time_ms=response_data.get('response_time_ms')
-            )
-            results.append({
-                "response_id": response.id,
-                "question_id": response.question_id,
-                "category": response.category_name,
-                "score": response.response_value
-            })
-            response_ids.append(response.id)
-        except Exception as e:
-            return {"message": f"Error processing response: {str(e)}"}, 400
+    try:
+        # Save all responses at once in a single JSON structure
+        phq_response_record = PHQResponseService.save_session_responses(
+            session_id=session_id,
+            responses_data=responses
+        )
+        
+        # Prepare results for return
+        results = []
+        for response_data in responses:
+            question_id = str(response_data['question_id'])
+            if question_id in phq_response_record.responses:
+                response_info = phq_response_record.responses[question_id]
+                results.append({
+                    "question_id": response_data['question_id'],
+                    "category": response_info.get("category_name", "UNKNOWN"),
+                    "score": response_info.get("response_value", 0)
+                })
+        
+    except Exception as e:
+        return {"message": f"Error processing responses: {str(e)}"}, 400
     
     # Calculate total score
     total_score = PHQResponseService.calculate_session_score(session_id)
@@ -88,7 +88,7 @@ def submit_phq_responses(session_id):
         "session_id": session_id,
         "responses_saved": len(results),
         "total_score": total_score,
-        "response_ids": response_ids,
+        "response_record_id": phq_response_record.id,
         "assessment_completed": True,
         "next_redirect": completion_result["next_redirect"],
         "session_status": completion_result["session_status"],
@@ -106,40 +106,39 @@ def get_session_responses(session_id):
     if not session or str(session.user_id) != str(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
-    responses = PHQResponseService.get_session_responses(session_id)
+    # Get the single PHQ response record for this session
+    phq_response_record = PHQResponseService.get_session_responses(session_id)
+    
+    # Extract individual responses from the JSON structure
+    responses_list = []
+    if phq_response_record:
+        for question_id, response_data in phq_response_record.responses.items():
+            responses_list.append({
+                "question_id": int(question_id),
+                "question_number": response_data.get("question_number", 0),
+                "question_text": response_data.get("question_text", ""),
+                "category_name": response_data.get("category_name", ""),
+                "response_value": response_data.get("response_value", 0),
+                "response_text": response_data.get("response_text", ""),
+                "response_time_ms": response_data.get("response_time_ms"),
+                "is_completed": phq_response_record.is_completed
+            })
     
     return {
         "session_id": session_id,
-        "responses": [
-            {
-                "id": resp.id,
-                "question_id": resp.question_id,
-                "question_number": resp.question_number,
-                "question_text": resp.question_text,
-                "category_name": resp.category_name,
-                "response_value": resp.response_value,
-                "response_text": resp.response_text,
-                "response_time_ms": resp.response_time_ms,
-                "created_at": resp.created_at.isoformat()
-            }
-            for resp in responses
-        ],
-        "total_responses": len(responses),
+        "responses": responses_list,
+        "total_responses": len(responses_list),
         "total_score": PHQResponseService.calculate_session_score(session_id)
     }
 
 
-@phq_assessment_bp.route('/response/<int:response_id>', methods=['PUT'])
+@phq_assessment_bp.route('/response/<session_id>/<int:question_id>', methods=['PUT'])
 @user_required
 @api_response
-def update_phq_response(response_id):
-    """Update a PHQ response"""
-    response = PHQResponseService.get_response_by_id(response_id)
-    if not response:
-        return {"message": "Response not found"}, 404
-    
+def update_phq_response(session_id, question_id):
+    """Update a PHQ response for a specific question in a session"""
     # Validate session belongs to current user
-    session = SessionService.get_session(response.session_id)
+    session = SessionService.get_session(session_id)
     if not session or str(session.user_id) != str(current_user.id):
         return {"message": "Access denied"}, 403
     
@@ -158,16 +157,23 @@ def update_phq_response(response_id):
         return {"message": "No valid fields to update"}, 400
     
     try:
-        updated_response = PHQResponseService.update_response(response_id, updates)
-        return {
-            "id": updated_response.id,
-            "question_id": updated_response.question_id,
-            "category_name": updated_response.category_name,
-            "response_value": updated_response.response_value,
-            "response_text": updated_response.response_text,
-            "response_time_ms": updated_response.response_time_ms,
-            "updated_at": updated_response.updated_at.isoformat() if hasattr(updated_response, 'updated_at') else None
-        }
+        updated_response_record = PHQResponseService.update_response(session_id, question_id, updates)
+        
+        # Get the specific response data from the JSON structure
+        question_key = str(question_id)
+        if question_key in updated_response_record.responses:
+            response_data = updated_response_record.responses[question_key]
+            return {
+                "session_id": session_id,
+                "question_id": question_id,
+                "category_name": response_data.get("category_name", ""),
+                "response_value": response_data.get("response_value", 0),
+                "response_text": response_data.get("response_text", ""),
+                "response_time_ms": response_data.get("response_time_ms"),
+                "updated_at": updated_response_record.updated_at.isoformat() if hasattr(updated_response_record, 'updated_at') else None
+            }
+        
+        return {"message": "Question response not found"}, 404
     except ValueError as e:
         return {"message": str(e)}, 404
 
@@ -184,15 +190,13 @@ def get_phq_score(session_id):
     
     total_score = PHQResponseService.calculate_session_score(session_id)
     category_scores = PHQResponseService.get_category_scores(session_id)
-    analysis = PHQResponseService.get_score_analysis(total_score)
+    max_possible_score = PHQResponseService.get_max_possible_score(session_id)
     
     return {
         "session_id": session_id,
         "total_score": total_score,
-        "max_possible_score": PHQResponseService.get_max_possible_score(session_id),
-        "category_scores": category_scores,
-        "analysis": analysis,
-        "severity_level": PHQResponseService.get_severity_level(total_score)
+        "max_possible_score": max_possible_score,
+        "category_scores": category_scores
     }
 
 

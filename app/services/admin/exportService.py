@@ -72,53 +72,53 @@ class ExportService:
 
     @staticmethod
     def _get_phq_data(session_id: str) -> Dict[str, Any]:
-        """Get PHQ responses in readable format"""
-        responses = PHQResponseService.get_session_responses(session_id)
+        """Get PHQ responses in readable format using new JSON structure"""
+        response_record = PHQResponseService.get_session_responses(session_id)
         total_score = PHQResponseService.calculate_session_score(session_id)
         
-        # Group by category
+        # Group by category using new JSON structure
         phq_data = {
             'total_score': total_score,
             'max_possible_score': PHQResponseService.get_max_possible_score(session_id),
-            'severity_level': PHQResponseService.get_severity_level(total_score),
             'responses': {}
         }
         
-        for resp in responses:
-            category = resp.category_name
-            if category not in phq_data['responses']:
-                phq_data['responses'][category] = {}
-            
-            phq_data['responses'][category][resp.question_text] = {
-                'response_text': resp.response_text,
-                'response_value': resp.response_value,
-                'response_time_ms': resp.response_time_ms
-            }
+        if response_record and response_record.responses:
+            for question_id, response_data in response_record.responses.items():
+                category = response_data.get('category_name', 'UNKNOWN')
+                if category not in phq_data['responses']:
+                    phq_data['responses'][category] = {}
+                
+                question_text = response_data.get('question_text', f'Question {question_id}')
+                phq_data['responses'][category][question_text] = {
+                    'response_text': response_data.get('response_text', ''),
+                    'response_value': response_data.get('response_value', 0),
+                    'response_time_ms': response_data.get('response_time_ms', None)
+                }
         
         return phq_data
 
     @staticmethod
     def _get_llm_data(session_id: str) -> Dict[str, Any]:
-        """Get LLM conversation in readable format"""
-        conversations = LLMConversationService.get_session_conversations(session_id)
+        """Get LLM conversation in readable format using new JSON structure"""
+        conversation_turns = LLMConversationService.get_session_conversations(session_id)
         
         llm_data = {
-            'total_conversations': len(conversations),
+            'total_conversations': len(conversation_turns),
             'conversations': []
         }
         
-        for conv in conversations:
+        for turn_data in conversation_turns:
             conv_data = {
-                'conversation_id': conv.id,
-                'turn_number': conv.turn_number,
-                'created_at': conv.created_at.isoformat(),
-                'ai_message': conv.ai_message,
-                'user_message': conv.user_message,
-                'user_message_length': conv.user_message_length,
-                'has_end_conversation': conv.has_end_conversation,
-                'ai_model_used': conv.ai_model_used,
-                'response_audio_path': conv.response_audio_path,
-                'transcription': conv.transcription
+                'turn_number': turn_data.get('turn_number'),
+                'created_at': turn_data.get('created_at'),
+                'ai_message': turn_data.get('ai_message'),
+                'user_message': turn_data.get('user_message'),
+                'user_message_length': turn_data.get('user_message_length'),
+                'has_end_conversation': turn_data.get('has_end_conversation'),
+                'ai_model_used': turn_data.get('ai_model_used'),
+                'response_audio_path': turn_data.get('response_audio_path'),
+                'transcription': turn_data.get('transcription')
             }
             
             llm_data['conversations'].append(conv_data)
@@ -129,9 +129,10 @@ class ExportService:
     def _add_camera_captures(zip_file: zipfile.ZipFile, session_id: str):
         """Add camera captures to ZIP with PHQ/LLM organization"""
         with get_session() as db:
-            captures = db.query(CameraCapture).filter_by(assessment_session_id=session_id).all()
+            captures = db.query(CameraCapture).filter_by(session_id=session_id).all()
             
             if not captures:
+                print(f"📷 No camera captures found for session {session_id}")
                 return
             
             # Organize captures by assessment type
@@ -141,33 +142,43 @@ class ExportService:
             
             upload_path = current_app.media_save
             
+            print(f"📷 Found {len(captures)} camera captures for session {session_id}")
+            
             for capture in captures:
-                # Determine assessment type - SKIP unknown captures
-                if capture.phq_response_id:
+                print(f"📷 Processing capture: type={capture.capture_type}, assessment_id={capture.assessment_id}, filenames={capture.filenames}")
+                
+                # Determine assessment type using new model structure
+                if capture.capture_type == 'PHQ':
                     assessment_type = "PHQ"
                     folder_path = "images/phq/"
                     phq_captures.append(capture)
                     
-                    # Add image file to PHQ folder
-                    image_path = os.path.join(upload_path, capture.filename)
-                    if os.path.exists(image_path):
-                        with open(image_path, 'rb') as img_file:
-                            zip_file.writestr(f'{folder_path}{capture.filename}', img_file.read())
-                            
-                elif capture.llm_conversation_id:
+                    # Add all image files to PHQ folder (new model uses JSON array)
+                    for filename in capture.filenames:
+                        image_path = os.path.join(upload_path, filename)
+                        print(f"📷 PHQ image path: {image_path}, exists: {os.path.exists(image_path)}")
+                        if os.path.exists(image_path):
+                            with open(image_path, 'rb') as img_file:
+                                zip_file.writestr(f'{folder_path}{filename}', img_file.read())
+                                print(f"📷 Added PHQ image: {filename}")
+                                
+                elif capture.capture_type == 'LLM':
                     assessment_type = "LLM"
                     folder_path = "images/llm/"
                     llm_captures.append(capture)
                     
-                    # Add image file to LLM folder
-                    image_path = os.path.join(upload_path, capture.filename)
-                    if os.path.exists(image_path):
-                        with open(image_path, 'rb') as img_file:
-                            zip_file.writestr(f'{folder_path}{capture.filename}', img_file.read())
+                    # Add all image files to LLM folder (new model uses JSON array)
+                    for filename in capture.filenames:
+                        image_path = os.path.join(upload_path, filename)
+                        print(f"📷 LLM image path: {image_path}, exists: {os.path.exists(image_path)}")
+                        if os.path.exists(image_path):
+                            with open(image_path, 'rb') as img_file:
+                                zip_file.writestr(f'{folder_path}{filename}', img_file.read())
+                                print(f"📷 Added LLM image: {filename}")
                 else:
-                    # Skip unknown captures - don't add to ZIP
+                    # Skip general/unknown captures - don't add to ZIP
                     unknown_captures.append(capture)
-                    print(f"⚠️ Skipping unknown capture {capture.filename} from export")
+                    print(f"⚠️ Skipping {capture.capture_type} capture {capture.filenames} from export")
             
             # Create comprehensive metadata (only for linked captures)
             linked_captures = phq_captures + llm_captures
@@ -181,29 +192,22 @@ class ExportService:
             
             # Add only linked captures to metadata
             for capture in linked_captures:
-                # Determine assessment type and folder
-                if capture.phq_response_id:
-                    assessment_type = "PHQ"
-                    folder_path = "phq/"
-                elif capture.llm_conversation_id:
-                    assessment_type = "LLM"
-                    folder_path = "llm/"
-                else:
-                    assessment_type = "UNKNOWN"
-                    folder_path = "unknown/"
+                # Determine assessment type and folder using new structure
+                assessment_type = capture.capture_type
+                folder_path = f"{assessment_type.lower()}/"
                 
-                metadata['captures'].append({
-                    'filename': capture.filename,
-                    'assessment_type': assessment_type,
-                    'folder_path': folder_path,
-                    'full_path': os.path.join(current_app.media_save, capture.filename),
-                    'zip_path': f'images/{folder_path}{capture.filename}',
-                    'timestamp': capture.timestamp.isoformat(),
-                    'trigger': capture.capture_trigger,
-                    'file_size_bytes': capture.file_size_bytes,
-                    'phq_response_id': capture.phq_response_id,
-                    'llm_conversation_id': capture.llm_conversation_id
-                })
+                # Add metadata for each filename in the JSON array
+                for filename in capture.filenames:
+                    metadata['captures'].append({
+                        'filename': filename,
+                        'assessment_type': assessment_type,
+                        'folder_path': folder_path,
+                        'full_path': os.path.join(current_app.media_save, filename),
+                        'zip_path': f'images/{folder_path}{filename}',
+                        'timestamp': capture.created_at.isoformat(),
+                        'capture_type': capture.capture_type,
+                        'assessment_id': capture.assessment_id
+                    })
             
             # Add main metadata file
             zip_file.writestr('images/metadata.json', json.dumps(metadata, indent=2))
@@ -213,34 +217,32 @@ class ExportService:
                 phq_metadata = {
                     'assessment_type': 'PHQ',
                     'total_captures': len(phq_captures),
-                    'captures': [
-                        {
-                            'filename': capture.filename,
-                            'timestamp': capture.timestamp.isoformat(),
-                            'trigger': capture.capture_trigger,
-                            'file_size_bytes': capture.file_size_bytes,
-                            'phq_response_id': capture.phq_response_id
-                        }
-                        for capture in phq_captures
-                    ]
+                    'captures': []
                 }
+                for capture in phq_captures:
+                    for filename in capture.filenames:
+                        phq_metadata['captures'].append({
+                            'filename': filename,
+                            'timestamp': capture.created_at.isoformat(),
+                            'capture_type': capture.capture_type,
+                            'assessment_id': capture.assessment_id
+                        })
                 zip_file.writestr('images/phq/metadata.json', json.dumps(phq_metadata, indent=2))
             
             if llm_captures:
                 llm_metadata = {
                     'assessment_type': 'LLM',
                     'total_captures': len(llm_captures),
-                    'captures': [
-                        {
-                            'filename': capture.filename,
-                            'timestamp': capture.timestamp.isoformat(),
-                            'trigger': capture.capture_trigger,
-                            'file_size_bytes': capture.file_size_bytes,
-                            'llm_conversation_id': capture.llm_conversation_id
-                        }
-                        for capture in llm_captures
-                    ]
+                    'captures': []
                 }
+                for capture in llm_captures:
+                    for filename in capture.filenames:
+                        llm_metadata['captures'].append({
+                            'filename': filename,
+                            'timestamp': capture.created_at.isoformat(),
+                            'capture_type': capture.capture_type,
+                            'assessment_id': capture.assessment_id
+                        })
                 zip_file.writestr('images/llm/metadata.json', json.dumps(llm_metadata, indent=2))
 
     @staticmethod
@@ -269,16 +271,15 @@ Assessment Completion:
             summary += f"""
 PHQ Results Summary:
 - Total Score: {phq_data['total_score']}/{phq_data['max_possible_score']}
-- Severity Level: {phq_data['severity_level']}
 - Categories Assessed: {len(phq_data['responses'])}
 """
         
         # Get image organization info
         with get_session() as db:
-            captures = db.query(CameraCapture).filter_by(assessment_session_id=session.id).all()
-            phq_images = len([c for c in captures if c.phq_response_id])
-            llm_images = len([c for c in captures if c.llm_conversation_id])
-            unknown_images = len([c for c in captures if not c.phq_response_id and not c.llm_conversation_id])
+            captures = db.query(CameraCapture).filter_by(session_id=session.id).all()
+            phq_images = sum(len(c.filenames) for c in captures if c.capture_type == 'PHQ')
+            llm_images = sum(len(c.filenames) for c in captures if c.capture_type == 'LLM')
+            unknown_images = sum(len(c.filenames) for c in captures if c.capture_type == 'GENERAL')
         
         summary += f"""
 Export Details:

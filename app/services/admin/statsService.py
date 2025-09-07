@@ -72,23 +72,31 @@ class StatsService:
                         AssessmentSession.user_id == user.id
                     ).order_by(AssessmentSession.created_at).all()
                     
-                    # Get PHQ scores for each session
+                    # Get PHQ scores for each session using new JSON structure
                     session1_phq_score = None
                     session2_phq_score = None
                     
                     if len(sessions) >= 1:
-                        # Calculate PHQ sum for session 1
-                        session1_responses = db.query(PHQResponse).filter(
+                        # Calculate PHQ sum for session 1 from JSON responses
+                        session1_response_record = db.query(PHQResponse).filter(
                             PHQResponse.session_id == sessions[0].id
-                        ).all()
-                        session1_phq_score = sum(response.response_value for response in session1_responses) if session1_responses else None
+                        ).first()
+                        if session1_response_record and session1_response_record.responses:
+                            session1_phq_score = sum(
+                                response_data.get('response_value', 0) 
+                                for response_data in session1_response_record.responses.values()
+                            )
                     
                     if len(sessions) >= 2:
-                        # Calculate PHQ sum for session 2
-                        session2_responses = db.query(PHQResponse).filter(
+                        # Calculate PHQ sum for session 2 from JSON responses
+                        session2_response_record = db.query(PHQResponse).filter(
                             PHQResponse.session_id == sessions[1].id
-                        ).all()
-                        session2_phq_score = sum(response.response_value for response in session2_responses) if session2_responses else None
+                        ).first()
+                        if session2_response_record and session2_response_record.responses:
+                            session2_phq_score = sum(
+                                response_data.get('response_value', 0) 
+                                for response_data in session2_response_record.responses.values()
+                            )
                     
                     # Just rawdog the backend status values
                     session1_status = sessions[0].status if len(sessions) >= 1 else "Not done"
@@ -120,14 +128,17 @@ class StatsService:
                     AssessmentSession.status == 'COMPLETED'
                 ).all()
                 
-                # Calculate PHQ scores for each session
+                # Calculate PHQ scores for each session using new JSON structure
                 phq_scores = []
                 for session in completed_sessions:
-                    responses = db.query(PHQResponse).filter(
+                    response_record = db.query(PHQResponse).filter(
                         PHQResponse.session_id == session.id
-                    ).all()
-                    if responses:
-                        score = sum(response.response_value for response in responses)
+                    ).first()
+                    if response_record and response_record.responses:
+                        score = sum(
+                            response_data.get('response_value', 0) 
+                            for response_data in response_record.responses.values()
+                        )
                         phq_scores.append(score)
                 
                 # Categorize scores according to PHQ-9 severity levels

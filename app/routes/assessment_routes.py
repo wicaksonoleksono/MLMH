@@ -58,7 +58,7 @@ def start_assessment():
             return redirect(url_for('main.serve_index'))
     except Exception as e:
         print(f"❌ Error creating session: {str(e)}")
-        flash('Terjadi kesalahan sistem. Silakan coba lagi.', 'error')
+        flash(str(e), 'error')
         return redirect(url_for('main.serve_index'))
 
 
@@ -531,7 +531,7 @@ def reset_session_to_new_attempt(session_id):
         return redirect(url_for('main.serve_index'))
     except Exception as e:
         print(f" Error resetting session: {str(e)}")
-        flash('Terjadi kesalahan sistem. Silakan coba lagi.', 'error')
+        flash(str(e), 'error')
         return redirect(url_for('main.serve_index'))
 
 
@@ -678,11 +678,11 @@ def upload_camera_captures():
                     # Save capture
                     file_data = file.read()
                     capture = CameraCaptureService.save_capture(
-                        assessment_session_id=session_id,
+                        session_id=session_id,
                         file_data=file_data,
                         capture_trigger=trigger,
-                        phq_response_id=phq_response_id,
-                        llm_conversation_id=llm_conversation_id,
+                        assessment_id=phq_response_id or llm_conversation_id,
+                        capture_type='PHQ' if phq_response_id else 'LLM' if llm_conversation_id else 'GENERAL',
                         camera_settings_snapshot=settings_snapshot
                     )
                     
@@ -726,7 +726,7 @@ def serve_camera_capture(filename):
                 return jsonify({"error": "File not found"}), 404
                 
             # Check if user owns this capture's session
-            session = SessionService.get_session(capture.assessment_session_id)
+            session = SessionService.get_session(capture.session_id)
             if not session or int(session.user_id) != int(current_user.id):
                 return jsonify({"error": "Access denied"}), 403
         
@@ -770,7 +770,7 @@ def restart_phq_assessment(session_id):
     try:
         # Validate session belongs to current user
         session = SessionService.get_session(session_id)
-        if not session or str(session.user_id) != str(current_user.id):
+        if not session or int(session.user_id) != int(current_user.id):
             flash("Session tidak ditemukan atau akses ditolak.", "error")
             return redirect(url_for("assessment.assessment_dashboard"))
 
@@ -798,7 +798,7 @@ def restart_llm_assessment(session_id):
     try:
         # Validate session belongs to current user
         session = SessionService.get_session(session_id)
-        if not session or str(session.user_id) != str(current_user.id):
+        if not session or int(session.user_id) != int(current_user.id):
             flash("Session tidak ditemukan atau akses ditolak.", "error")
             return redirect(url_for("assessment.assessment_dashboard"))
 
@@ -834,7 +834,7 @@ def reset_session_on_refresh(session_id):
     try:
         # Validate session belongs to current user
         session = SessionService.get_session(session_id)
-        if not session or str(session.user_id) != str(current_user.id):
+        if not session or int(session.user_id) != int(current_user.id):
             flash("Session tidak ditemukan atau akses ditolak.", "error")
             return redirect(url_for("main.serve_index"))
 
@@ -957,6 +957,9 @@ def stream_sse_optimized():
                 if time.time() - last_beat > 20:
                     yield ": ping\n\n"  
                     last_beat = time.time()
+            
+            # Brief delay to ensure database save completes before checking conversation status
+            time.sleep(0.1)  # 100ms should be enough for database commit
             
             ended = chat_service.is_conversation_complete(session_id)
             yield sse({'type': 'complete', 'conversation_ended': ended})

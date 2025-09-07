@@ -204,23 +204,18 @@ class CameraManager {
         }
 
         try {
-            // Build capture-to-response mapping
-            const captureResponseMap = {};
+            // For new JSON structure: link all captures to single assessment record ID
+            const assessmentRecordId = responseIds && responseIds.length > 0 ? responseIds[0] : null;
+            const captureIds = this.captures.map(capture => capture.capture_id);
             
-            // Map each capture to its associated response ID (if any)
-            this.captures.forEach(capture => {
-                if (capture.response_id) {
-                    captureResponseMap[capture.capture_id] = capture.response_id;
-                }
-            });
-
-            // Send mapping to backend
+            // Send linking data to backend
             const linkData = {
-                capture_response_map: captureResponseMap,
+                capture_ids: captureIds,
+                assessment_record_id: assessmentRecordId,
                 assessment_type: this.assessmentType
             };
 
-            console.log(`🔗 CameraManager uploadBatch: ${this.assessmentType} linking captures with response mapping`, linkData);
+            console.log(`🔗 CameraManager uploadBatch: ${this.assessmentType} linking ${captureIds.length} captures to record ${assessmentRecordId}`, linkData);
 
             const linkResponse = await fetch(`/assessment/camera/link-responses/${this.sessionId}`, {
                 method: 'POST',

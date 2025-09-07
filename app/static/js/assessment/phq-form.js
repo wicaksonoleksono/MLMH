@@ -192,10 +192,10 @@ function phqAssessment(sessionId) {
                     this.markAsCompleted();
                     
                     console.log('📋 PHQ submit result:', result);
-                    console.log('📋 Response IDs for camera linking:', result.data.response_ids);
+                    console.log('📋 PHQ record ID for camera linking:', result.response_record_id);
                     
-                    if (this.cameraManager) {
-                        await this.cameraManager.uploadBatch(result.data.response_ids);
+                    if (this.cameraManager && result.response_record_id) {
+                        await this.cameraManager.uploadBatch([result.response_record_id]);
                     }
                     
                     setTimeout(() => {

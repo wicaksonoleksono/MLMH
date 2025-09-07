@@ -11,60 +11,20 @@ from datetime import datetime
 
 llm_assessment_bp = Blueprint('llm_assessment', __name__, url_prefix='/assessment/llm')
 
+import json
+import time
+from flask import Response
 
 
 
+# Removed duplicate /start route - using /start-chat instead
 
-@llm_assessment_bp.route('/start/<int:session_id>', methods=['POST'])
+
+@llm_assessment_bp.route('/conversation/<session_id>', methods=['GET'])
 @user_required
 @api_response
-def start_conversation_route(session_id):
-    """Initialize LLM conversation for a session"""
-    session = SessionService.get_session(session_id)
-    if not session or int(session.user_id) != int(current_user.id):
-        return {"message": "Session not found or access denied"}, 403
-    result = LLMChatService.start_conversation(session_id)
-    return result
-
-
-
-
-
-
-
-
-@llm_assessment_bp.route('/debug/validate-config', methods=['GET'])
-@user_required
-@api_response
-def validate_llm_config():
-    """Validate LLM configuration for debugging"""
-    try:
-        chat_service = LLMChatService()
-        settings = chat_service._load_llm_settings()
-        
-        return {
-            "status": "success", 
-            "message": "LLM configuration is valid",
-            "config": {
-                "has_api_key": bool(settings.get('openai_api_key_unmasked')),
-                "chat_model": settings.get('chat_model'),
-                "analysis_model": settings.get('analysis_model'),
-                "aspects_count": len(settings.get('depression_aspects', [])),
-                "analysis_scale_configured": bool(settings.get('analysis_scale'))
-            }
-        }
-    except Exception as e:
-        return {
-            "status": "error",
-            "message": str(e),
-            "error_type": type(e).__name__
-        }
-
-@llm_assessment_bp.route('/conversations/<int:session_id>', methods=['GET'])
-@user_required
-@api_response
-def get_session_conversations(session_id):
-    """Get all conversation turns for a session"""
+def get_conversation_history(session_id):
+    """Get conversation history for a session"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
@@ -76,23 +36,23 @@ def get_session_conversations(session_id):
         "session_id": session_id,
         "conversations": [
             {
-                "id": turn.id,
-                "turn_number": turn.turn_number,
-                "ai_message": turn.ai_message,
-                "user_message": turn.user_message,
-                "has_end_conversation": turn.has_end_conversation,
-                "user_message_length": turn.user_message_length,
-                "ai_model_used": turn.ai_model_used,
-                "response_audio_path": turn.response_audio_path,
-                "transcription": turn.transcription,
-                "created_at": turn.created_at.isoformat() if turn.created_at else None
+                "turn_number": turn.get("turn_number"),
+                "ai_message": turn.get("ai_message"),
+                "user_message": turn.get("user_message"),
+                "has_end_conversation": turn.get("has_end_conversation"),
+                "user_message_length": turn.get("user_message_length"),
+                "ai_model_used": turn.get("ai_model_used"),
+                "response_audio_path": turn.get("response_audio_path"),
+                "transcription": turn.get("transcription"),
+                "created_at": turn.get("created_at")
             }
             for turn in conversations
-        ]
+        ],
+        "total_turns": len(conversations)
     }
 
 
-@llm_assessment_bp.route('/conversation/<int:turn_id>', methods=['GET'])
+@llm_assessment_bp.route('/conversation-turn/<int:turn_id>', methods=['GET'])
 @user_required
 @api_response
 def get_conversation_turn(turn_id):
@@ -121,17 +81,13 @@ def get_conversation_turn(turn_id):
     }
 
 
-@llm_assessment_bp.route('/conversation/<int:turn_id>', methods=['PUT'])
+@llm_assessment_bp.route('/conversation/<session_id>/<int:turn_number>', methods=['PUT'])
 @user_required
 @api_response
-def update_conversation_turn(turn_id):
+def update_conversation_turn(session_id, turn_number):
     """Update a conversation turn"""
-    turn = LLMConversationService.get_conversation_by_id(turn_id)
-    if not turn:
-        return {"message": "Conversation turn not found"}, 404
-
     # Validate session belongs to current user
-    session = SessionService.get_session(turn.session_id)
+    session = SessionService.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Access denied"}, 403
 
@@ -148,46 +104,53 @@ def update_conversation_turn(turn_id):
         return {"message": "No valid fields to update"}, 400
 
     try:
-        updated_turn = LLMConversationService.update_conversation_turn(turn_id, updates)
+        updated_record = LLMConversationService.update_conversation_turn(session_id, turn_number, updates)
+        
+        # Extract the specific turn data from the JSON structure
+        turns = updated_record.conversation_history.get("turns", [])
+        updated_turn = None
+        for turn in turns:
+            if turn.get("turn_number") == turn_number:
+                updated_turn = turn
+                break
+        
+        if not updated_turn:
+            return {"message": "Conversation turn not found"}, 404
+            
         return {
-            "id": updated_turn.id,
-            "session_id": updated_turn.session_id,
-            "turn_number": updated_turn.turn_number,
-            "ai_message": updated_turn.ai_message,
-            "user_message": updated_turn.user_message,
-            "has_end_conversation": updated_turn.has_end_conversation,
-            "user_message_length": updated_turn.user_message_length,
-            "ai_model_used": updated_turn.ai_model_used,
-            "response_audio_path": updated_turn.response_audio_path,
-            "transcription": updated_turn.transcription,
-            "created_at": updated_turn.created_at.isoformat() if updated_turn.created_at else None
+            "session_id": updated_record.session_id,
+            "turn_number": updated_turn.get("turn_number"),
+            "ai_message": updated_turn.get("ai_message"),
+            "user_message": updated_turn.get("user_message"),
+            "has_end_conversation": updated_turn.get("has_end_conversation"),
+            "user_message_length": updated_turn.get("user_message_length"),
+            "ai_model_used": updated_turn.get("ai_model_used"),
+            "response_audio_path": updated_turn.get("response_audio_path"),
+            "transcription": updated_turn.get("transcription"),
+            "created_at": updated_turn.get("created_at")
         }
     except ValueError as e:
         return {"message": str(e)}, 404
 
 
-@llm_assessment_bp.route('/conversation/<int:turn_id>', methods=['DELETE'])
+@llm_assessment_bp.route('/conversation/<session_id>/<int:turn_number>', methods=['DELETE'])
 @user_required
 @api_response
-def delete_conversation_turn(turn_id):
+def delete_conversation_turn(session_id, turn_number):
     """Delete a conversation turn"""
-    turn = LLMConversationService.get_conversation_by_id(turn_id)
-    if not turn:
-        return {"message": "Conversation turn not found"}, 404
-
     # Validate session belongs to current user
-    session = SessionService.get_session(turn.session_id)
+    session = SessionService.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Access denied"}, 403
 
     try:
-        LLMConversationService.delete_conversation_turn(turn_id)
+        LLMConversationService.delete_conversation_turn(session_id, turn_number)
         return {"message": "Conversation turn deleted successfully"}
     except ValueError as e:
         return {"message": str(e)}, 404
 
 
-@llm_assessment_bp.route('/status/<int:session_id>', methods=['GET'])
+@llm_assessment_bp.route('/status/<session_id>', methods=['GET'])
 @user_required
 @api_response
 def get_conversation_status_route(session_id):
@@ -225,7 +188,7 @@ def get_conversation_status_route(session_id):
     }
 
 
-@llm_assessment_bp.route('/cleanup/<int:session_id>', methods=['POST'])
+@llm_assessment_bp.route('/cleanup/<session_id>', methods=['POST'])
 @user_required
 @api_response
 def cleanup_session_route(session_id):
@@ -240,7 +203,7 @@ def cleanup_session_route(session_id):
     return result
 
 
-@llm_assessment_bp.route('/refresh-settings/<int:session_id>', methods=['POST'])
+@llm_assessment_bp.route('/refresh-settings/<session_id>', methods=['POST'])
 @user_required
 @api_response
 def force_refresh_settings_route(session_id):
@@ -255,7 +218,7 @@ def force_refresh_settings_route(session_id):
     return result
 
 
-@llm_assessment_bp.route('/check/<int:session_id>', methods=['GET'])
+@llm_assessment_bp.route('/check/<session_id>', methods=['GET'])
 @user_required
 @api_response
 def check_conversation_complete(session_id):
@@ -282,7 +245,7 @@ def check_conversation_complete(session_id):
 
 
 
-@llm_assessment_bp.route('/save-conversation/<int:session_id>', methods=['POST'])
+@llm_assessment_bp.route('/save-conversation/<session_id>', methods=['POST'])
 @user_required
 @api_response
 def save_conversation(session_id):
@@ -324,29 +287,6 @@ def save_conversation(session_id):
         }, 500
 
 
-@llm_assessment_bp.route('/debug-session/<int:session_id>', methods=['GET'])
-@user_required
-@api_response
-def debug_session_status(session_id):
-    """Debug endpoint to check session status"""
-    # Validate session belongs to current user
-    session = SessionService.get_session(session_id)
-    if not session or int(session.user_id) != int(current_user.id):
-        return {"message": "Session not found or access denied"}, 403
-
-    return {
-        "session_id": session.id,
-        "status": session.status,
-        "is_first": session.is_first,
-        "consent_completed": session.consent_completed_at is not None,
-        "camera_completed": session.camera_completed,
-        "phq_completed": session.phq_completed_at is not None,
-        "llm_completed": session.llm_completed_at is not None,
-        "next_assessment_type": session.next_assessment_type,
-        "can_start_assessment": session.can_start_assessment,
-        "session_metadata_keys": list(session.session_metadata.keys()) if session.session_metadata else [],
-        "assessment_order": session.assessment_order
-    }
 
 
 @llm_assessment_bp.route('/start-chat/<session_id>', methods=['POST'])
@@ -356,7 +296,7 @@ def start_chat(session_id):
     """Initialize LLM chat using new LangChain service"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or str(session.user_id) != str(current_user.id):
+    if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     try:
@@ -415,7 +355,7 @@ def finish_chat(session_id):
     """Finish conversation and prepare for completion handler"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
-    if not session or str(session.user_id) != str(current_user.id):
+    if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     try:
@@ -460,3 +400,54 @@ def llm_instructions():
 
 
 
+
+# @llm_assessment_bp.route('/debug/validate-config', methods=['GET'])
+# @user_required
+# @api_response
+# def validate_llm_config():
+#     """Validate LLM configuration for debugging"""
+#     try:
+#         chat_service = LLMChatService()
+#         settings = chat_service._load_llm_settings()
+        
+#         return {
+#             "status": "success", 
+#             "message": "LLM configuration is valid",
+#             "config": {
+#                 "has_api_key": bool(settings.get('openai_api_key_unmasked')),
+#                 "chat_model": settings.get('chat_model'),
+#                 "analysis_model": settings.get('analysis_model'),
+#                 "aspects_count": len(settings.get('depression_aspects', [])),
+#                 "analysis_scale_configured": bool(settings.get('analysis_scale'))
+#             }
+#         }
+#     except Exception as e:
+#         return {
+#             "status": "error",
+#             "message": str(e),
+#             "error_type": type(e).__name__
+#         }
+
+# @llm_assessment_bp.route('/debug-session/<session_id>', methods=['GET'])
+# @user_required
+# @api_response
+# def debug_session_status(session_id):
+#     """Debug endpoint to check session status"""
+#     # Validate session belongs to current user
+#     session = SessionService.get_session(session_id)
+#     if not session or int(session.user_id) != int(current_user.id):
+#         return {"message": "Session not found or access denied"}, 403
+
+#     return {
+#         "session_id": session.id,
+#         "status": session.status,
+#         "is_first": session.is_first,
+#         "consent_completed": session.consent_completed_at is not None,
+#         "camera_completed": session.camera_completed,
+#         "phq_completed": session.phq_completed_at is not None,
+#         "llm_completed": session.llm_completed_at is not None,
+#         "next_assessment_type": session.next_assessment_type,
+#         "can_start_assessment": session.can_start_assessment,
+#         "session_metadata_keys": list(session.session_metadata.keys()) if session.session_metadata else [],
+#         "assessment_order": session.assessment_order
+#     }

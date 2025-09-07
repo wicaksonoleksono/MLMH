@@ -12,14 +12,14 @@ class PHQResponseService:
     """Service for handling PHQ assessment responses with CRUD operations"""
 
     @staticmethod
-    def create_response(
-        session_id: int,
+    def add_response(
+        session_id: str,
         question_id: int,
         response_value: int,
         response_text: str,
         response_time_ms: Optional[int] = None
     ) -> PHQResponse:
-        """Create a PHQ response for a session"""
+        """Add a PHQ response to the session's response collection"""
         with get_session() as db:
             # Get session and scale for validation
             session = db.query(AssessmentSession).filter_by(id=session_id).first()
@@ -44,23 +44,34 @@ class PHQResponseService:
             if response_value < scale.min_value or response_value > scale.max_value:
                 raise ValueError(f"Response value must be between {scale.min_value}-{scale.max_value}")
 
-            response = PHQResponse(
-                session_id=session_id,
-                question_id=question_id,
-                question_number=question.order_index,
-                question_text=question.question_text_id,  # Use Indonesian text
-                category_name=question.category_name_id,  # ANHEDONIA, DEPRESSED_MOOD, etc.
-                response_value=response_value,
-                response_text=response_text,
-                response_time_ms=response_time_ms
-            )
+            # Get existing PHQ response record for this session or create new one
+            phq_response_record = db.query(PHQResponse).filter_by(session_id=session_id).first()
+            if not phq_response_record:
+                phq_response_record = PHQResponse(
+                    session_id=session_id,
+                    responses={}
+                )
+                db.add(phq_response_record)
 
-            db.add(response)
+            # Add response to the JSON structure
+            response_data = {
+                "question_number": question.order_index,
+                "question_text": question.question_text_id,  # Use Indonesian text
+                "category_name": question.category_name_id,  # ANHEDONIA, DEPRESSED_MOOD, etc.
+                "response_value": response_value,
+                "response_text": response_text,
+                "response_time_ms": response_time_ms
+            }
+
+            # Update the responses JSON
+            phq_response_record.responses[str(question_id)] = response_data
+            phq_response_record.updated_at = datetime.utcnow()
+
             db.commit()
-            return response
+            return phq_response_record
 
     @staticmethod
-    def get_session_questions(session_id: int) -> List[Dict[str, Any]]:
+    def get_session_questions(session_id: str) -> List[Dict[str, Any]]:
         """Get randomized PHQ questions per category for a session"""
         with get_session() as db:
             # Get session and PHQ settings
@@ -137,29 +148,33 @@ class PHQResponseService:
             return selected_questions
 
     @staticmethod
-    def get_session_responses(session_id: int) -> List[PHQResponse]:
+    def get_session_responses(session_id: str) -> PHQResponse:
         """Get all PHQ responses for a session"""
         with get_session() as db:
-            return db.query(PHQResponse).filter_by(session_id=session_id).order_by(PHQResponse.question_number).all()
+            return db.query(PHQResponse).filter_by(session_id=session_id).first()
 
     @staticmethod
     def get_response_by_id(response_id: int) -> Optional[PHQResponse]:
-        """Get a specific PHQ response by ID"""
+        """Get a specific PHQ response record by ID"""
         with get_session() as db:
             return db.query(PHQResponse).filter_by(id=response_id).first()
 
     @staticmethod
-    def update_response(response_id: int, updates: Dict[str, Any]) -> PHQResponse:
-        """Update a PHQ response"""
+    def update_response(session_id: str, question_id: int, updates: Dict[str, Any]) -> PHQResponse:
+        """Update a PHQ response for a specific question in the session"""
         with get_session() as db:
-            response = db.query(PHQResponse).filter_by(id=response_id).first()
-            if not response:
-                raise ValueError(f"PHQ response with ID {response_id} not found")
+            phq_response_record = db.query(PHQResponse).filter_by(session_id=session_id).first()
+            if not phq_response_record:
+                raise ValueError(f"PHQ response record for session {session_id} not found")
 
-            # Validate response_value if being updated
+            # Check if question exists in responses
+            question_key = str(question_id)
+            if question_key not in phq_response_record.responses:
+                raise ValueError(f"Question {question_id} not found in session responses")
+
+            # Get session and scale for validation if response_value is being updated
             if 'response_value' in updates:
-                # Get session and scale for validation
-                session = db.query(AssessmentSession).filter_by(id=response.session_id).first()
+                session = db.query(AssessmentSession).filter_by(id=session_id).first()
                 if session and session.phq_settings and session.phq_settings.scale:
                     scale = session.phq_settings.scale
                     if updates['response_value'] < scale.min_value or updates['response_value'] > scale.max_value:
@@ -167,33 +182,42 @@ class PHQResponseService:
                 else:
                     raise ValueError("Cannot validate response value: scale configuration not found")
 
-            for key, value in updates.items():
-                if hasattr(response, key):
-                    setattr(response, key, value)
+            # Update the specific response
+            response_data = phq_response_record.responses[question_key]
+            response_data.update(updates)
+            phq_response_record.responses[question_key] = response_data
+            phq_response_record.updated_at = datetime.utcnow()
 
             db.commit()
-            return response
+            return phq_response_record
 
     @staticmethod
-    def delete_response(response_id: int) -> bool:
-        """Delete a PHQ response"""
+    def delete_response(session_id: str, question_id: int) -> bool:
+        """Delete a PHQ response for a specific question from the session"""
         with get_session() as db:
-            response = db.query(PHQResponse).filter_by(id=response_id).first()
-            if not response:
-                raise ValueError(f"PHQ response with ID {response_id} not found")
+            phq_response_record = db.query(PHQResponse).filter_by(session_id=session_id).first()
+            if not phq_response_record:
+                raise ValueError(f"PHQ response record for session {session_id} not found")
 
-            db.delete(response)
+            question_key = str(question_id)
+            if question_key not in phq_response_record.responses:
+                raise ValueError(f"Question {question_id} not found in session responses")
+
+            # Remove the specific response
+            del phq_response_record.responses[question_key]
+            phq_response_record.updated_at = datetime.utcnow()
+
             db.commit()
             return True
 
     @staticmethod
-    def calculate_session_score(session_id: int) -> int:
+    def calculate_session_score(session_id: str) -> int:
         """Calculate total PHQ score for a session"""
         result = PHQResponseService.get_detailed_session_scores(session_id)
         return result.get("total_score", 0)
 
     @staticmethod
-    def get_detailed_session_scores(session_id: int) -> Dict[str, Any]:
+    def get_detailed_session_scores(session_id: str) -> Dict[str, Any]:
         """Calculate PHQ score for a session by category"""
         with get_session() as db:
             # Get session to access scale configuration
@@ -206,7 +230,12 @@ class PHQResponseService:
             if session.phq_settings and session.phq_settings.scale:
                 scale_max = session.phq_settings.scale.max_value
 
-            responses = db.query(PHQResponse).filter_by(session_id=session_id).all()
+            # Get PHQ response record
+            phq_response_record = db.query(PHQResponse).filter_by(session_id=session_id).first()
+            if not phq_response_record:
+                return {"total_score": 0, "category_scores": {}, "response_count": 0}
+
+            responses = phq_response_record.responses
 
             if not responses:
                 return {"total_score": 0, "category_scores": {}, "response_count": 0}
@@ -215,8 +244,11 @@ class PHQResponseService:
             category_scores = {}
             total_score = 0
 
-            for response in responses:
-                category = response.category_name
+            for question_id, response_data in responses.items():
+                # Extract response_value from JSON structure
+                response_value = response_data.get("response_value", 0)
+                
+                category = response_data.get("category_name", "UNKNOWN")
                 if category not in category_scores:
                     category_scores[category] = {
                         "score": 0,
@@ -224,10 +256,10 @@ class PHQResponseService:
                         "question_count": 0
                     }
 
-                category_scores[category]["score"] += response.response_value
+                category_scores[category]["score"] += response_value
                 category_scores[category]["max_possible"] += scale_max  # Use dynamic max value
                 category_scores[category]["question_count"] += 1
-                total_score += response.response_value
+                total_score += response_value
 
             # Calculate percentages for each category
             for category in category_scores:
@@ -250,24 +282,45 @@ class PHQResponseService:
             }
 
     @staticmethod
-    def bulk_create_responses(session_id: int, responses_data: List[Dict[str, Any]]) -> List[PHQResponse]:
-        """Create multiple PHQ responses at once"""
-        created_responses = []
+    def save_session_responses(
+        session_id: str,
+        responses_data: List[Dict[str, Any]]
+    ) -> PHQResponse:
+        """Save multiple PHQ responses at once using JSON column approach"""
+        with get_session() as db:
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                raise ValueError(f"Session {session_id} not found")
 
-        for response_data in responses_data:
-            response = PHQResponseService.create_response(
-                session_id=session_id,
-                question_id=response_data['question_id'],
-                response_value=response_data['response_value'],
-                response_text=response_data['response_text'],
-                response_time_ms=response_data.get('response_time_ms')
-            )
-            created_responses.append(response)
-
-        return created_responses
+            # Process each response one by one using existing add_response method
+            # This method handles get-or-create logic properly
+            for response_data in responses_data:
+                question_id = response_data.get('question_id')
+                response_value = response_data.get('response_value')
+                response_text = response_data.get('response_text', '')
+                response_time_ms = response_data.get('response_time_ms')
+                
+                if question_id is not None and response_value is not None:
+                    # Use existing add_response method which handles record creation safely
+                    PHQResponseService.add_response(
+                        session_id=session_id,
+                        question_id=question_id,
+                        response_value=response_value,
+                        response_text=response_text,
+                        response_time_ms=response_time_ms
+                    )
+            
+            # Get the record (guaranteed to exist now) and mark as completed
+            phq_response_record = db.query(PHQResponse).filter_by(session_id=session_id).first()
+            if phq_response_record:
+                phq_response_record.is_completed = True
+                phq_response_record.updated_at = datetime.utcnow()
+                db.commit()
+            
+            return phq_response_record
 
     @staticmethod
-    def validate_session_complete(session_id: int) -> bool:
+    def validate_session_complete(session_id: str) -> bool:
         """Check if all required PHQ questions have been answered for session"""
         with get_session() as db:
             # Get session to find PHQ settings used
@@ -275,80 +328,44 @@ class PHQResponseService:
             if not session:
                 raise ValueError(f"Session {session_id} not found")
 
-            # Get PHQ settings to determine required questions
-            phq_settings = session.phq_settings
+            # Get PHQ response record
+            phq_response_record = db.query(PHQResponse).filter_by(session_id=session_id).first()
+            response_count = len(phq_response_record.responses) if phq_response_record else 0
 
-            # Get all responses for this session
-            responses = db.query(PHQResponse).filter_by(session_id=session_id).all()
-            response_question_ids = {r.question_id for r in responses}
-
-            # Get required questions based on settings
-            # This would depend on how PHQ settings determine which questions to ask
-            # For now, assume all active questions
-            required_questions = db.query(PHQQuestion).filter(
-                PHQQuestion.is_active == True
-            ).all()
-
-            required_question_ids = {q.id for q in required_questions}
+            # Get expected number of responses based on settings
+            expected_count = PHQResponseService.get_expected_response_count(session_id)
 
             # Check if all required questions have been answered
-            return required_question_ids.issubset(response_question_ids)
+            return response_count >= expected_count
 
     @staticmethod
-    def get_category_scores(session_id: int) -> Dict[str, Dict[str, Any]]:
+    def get_category_scores(session_id: str) -> Dict[str, Dict[str, Any]]:
         """Get detailed category-wise scores"""
         result = PHQResponseService.get_detailed_session_scores(session_id)
         return result.get("category_scores", {})
 
-    @staticmethod
-    def get_score_analysis(total_score: int) -> Dict[str, Any]:
-        """Get PHQ score analysis and interpretation"""
-        if total_score <= 4:
-            severity = "Minimal"
-            description = "Minimal or no depression symptoms"
-        elif total_score <= 9:
-            severity = "Mild"
-            description = "Mild depression symptoms"
-        elif total_score <= 14:
-            severity = "Moderate"
-            description = "Moderate depression symptoms"
-        elif total_score <= 19:
-            severity = "Moderately Severe"
-            description = "Moderately severe depression symptoms"
-        else:
-            severity = "Severe"
-            description = "Severe depression symptoms"
-        return {
-            "severity_level": severity,
-            "description": description,
-            "score": total_score,
-            "interpretation": f"PHQ-9 score of {total_score} suggests {severity.lower()} depression"
-        }
+    # Removed get_score_analysis and get_severity_level - overly verbose and unnecessary
 
     @staticmethod
-    def get_severity_level(total_score: int) -> str:
-        """Get severity level string"""
-        return PHQResponseService.get_score_analysis(total_score)["severity_level"]
-
-    @staticmethod
-    def is_assessment_complete(session_id: int) -> bool:
+    def is_assessment_complete(session_id: str) -> bool:
         """Check if PHQ assessment is complete for session"""
         with get_session() as db:
-            session = db.query(AssessmentSession).filter_by(id=session_id).first()
-            if not session:
+            phq_response_record = db.query(PHQResponse).filter_by(session_id=session_id).first()
+            if not phq_response_record:
                 return False
 
-            # Check if PHQ completion timestamp exists
-            return session.phq_completed_at is not None
+            # Check if the record is marked as completed
+            return phq_response_record.is_completed
 
     @staticmethod
-    def get_response_count(session_id: int) -> int:
+    def get_response_count(session_id: str) -> int:
         """Get number of responses completed for session"""
         with get_session() as db:
-            return db.query(PHQResponse).filter_by(session_id=session_id).count()
+            phq_response_record = db.query(PHQResponse).filter_by(session_id=session_id).first()
+            return len(phq_response_record.responses) if phq_response_record else 0
 
     @staticmethod
-    def get_expected_response_count(session_id: int) -> int:
+    def get_expected_response_count(session_id: str) -> int:
         """Get expected number of responses for session based on settings"""
         with get_session() as db:
             session = db.query(AssessmentSession).filter_by(id=session_id).first()
@@ -361,7 +378,7 @@ class PHQResponseService:
             return active_categories * phq_settings.questions_per_category
 
     @staticmethod
-    def get_max_possible_score(session_id: int) -> int:
+    def get_max_possible_score(session_id: str) -> int:
         """Get maximum possible score for session"""
         with get_session() as db:
             # Get session to access scale configuration
@@ -374,18 +391,75 @@ class PHQResponseService:
             if session.phq_settings and session.phq_settings.scale:
                 scale_max = session.phq_settings.scale.max_value
 
-            expected_responses = PHQResponseService.get_expected_response_count(session_id)
-            return expected_responses * scale_max
-
     @staticmethod
-    def clear_session_responses(session_id: int) -> int:
+    def clear_session_responses(session_id: str) -> int:
         """Clear all PHQ responses for a session - used for restart functionality"""
         with get_session() as db:
-            responses = db.query(PHQResponse).filter_by(session_id=session_id).all()
-            count = len(responses)
-            
-            for response in responses:
-                db.delete(response)
-            
+            phq_response_record = db.query(PHQResponse).filter_by(session_id=session_id).first()
+            if phq_response_record:
+                count = len(phq_response_record.responses)
+                phq_response_record.responses = {}
+                phq_response_record.updated_at = datetime.utcnow()
+                db.commit()
+                return count
+            return 0
+
+    @staticmethod
+    def save_session_responses(session_id: str, responses_data: List[Dict[str, Any]]) -> PHQResponse:
+        """Save all PHQ responses for a session in a single JSON structure"""
+        with get_session() as db:
+            # Get session and scale for validation
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                raise ValueError(f"Session {session_id} not found")
+
+            # Get scale for dynamic validation
+            phq_settings = session.phq_settings
+            if not phq_settings:
+                raise ValueError(f"Session {session_id} has no PHQ settings")
+
+            scale = phq_settings.scale
+            if not scale:
+                raise ValueError(f"PHQ settings has no scale configured")
+
+            # Validate all responses first
+            for response_data in responses_data:
+                response_value = response_data['response_value']
+                if response_value < scale.min_value or response_value > scale.max_value:
+                    raise ValueError(f"Response value must be between {scale.min_value}-{scale.max_value}")
+
+            # Get existing PHQ response record for this session or create new one
+            phq_response_record = db.query(PHQResponse).filter_by(session_id=session_id).first()
+            if not phq_response_record:
+                phq_response_record = PHQResponse(
+                    session_id=session_id,
+                    responses={}
+                )
+                db.add(phq_response_record)
+
+            # Build responses JSON structure
+            responses_dict = {}
+            for response_data in responses_data:
+                question_id = response_data['question_id']
+                
+                # Get question details for snapshot
+                question = db.query(PHQQuestion).filter_by(id=question_id).first()
+                if not question:
+                    raise ValueError(f"PHQ question with ID {question_id} not found")
+                
+                responses_dict[str(question_id)] = {
+                    "question_number": question.order_index,
+                    "question_text": question.question_text_id,  # Use Indonesian text
+                    "category_name": question.category_name_id,  # ANHEDONIA, DEPRESSED_MOOD, etc.
+                    "response_value": response_data['response_value'],
+                    "response_text": response_data.get('response_text', ''),
+                    "response_time_ms": response_data.get('response_time_ms')
+                }
+
+            # Update the responses JSON
+            phq_response_record.responses = responses_dict
+            phq_response_record.is_completed = True
+            phq_response_record.updated_at = datetime.utcnow()
+
             db.commit()
-            return count
+            return phq_response_record

@@ -215,9 +215,9 @@ function chatInterface(sessionId) {
               this.isTyping = false;
               this.exchangeCount++;
               eventSource.close();
-              if (data.conversation_ended) {
-                this.handleConversationEnd();
-              }
+              
+              // Check if conversation ended after every message delivery
+              this.checkConversationStatus();
             } else if (data.type === "error") {
               clearTimeout(timeoutId);
               botMessage.content = data.message;
@@ -306,13 +306,37 @@ function chatInterface(sessionId) {
         }
       },
 
+      async checkConversationStatus() {
+        try {
+          console.log(`🔍 Checking conversation status for session ${this.sessionId}`);
+          const response = await fetch(`/assessment/llm/check/${this.sessionId}`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          
+          const result = await response.json();
+          console.log('🔍 Raw API response:', result);
+          
+          const actualResult = result.status === 'OLKORECT' ? result.data : result;
+          console.log('🔍 Processed result:', actualResult);
+          console.log(`🔍 conversation_complete: ${actualResult.conversation_complete}`);
+          
+          if (actualResult.conversation_complete) {
+            console.log('🔍 ✅ CONVERSATION COMPLETE - triggering end');
+            this.handleConversationEnd();
+          } else {
+            console.log('🔍 ❌ Conversation not complete yet');
+          }
+        } catch (error) {
+          console.log('🔍 Error checking conversation status:', error);
+        }
+      },
+
       handleConversationEnd() {
         this.conversationEnded = true;
 
-        // Auto-finish after a short delay to ensure all messages are processed
-        setTimeout(() => {
-          this.finishConversation();
-        }, 3000); // Increased from 2000 to 3000ms to give more time
+        // Auto-finish immediately when conversation ends
+        this.finishConversation();
       },
 
       startConversationTimer() {

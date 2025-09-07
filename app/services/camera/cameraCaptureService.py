@@ -53,11 +53,11 @@ class CameraCaptureService:
 
     @staticmethod
     def save_capture(
-        assessment_session_id: str,
+        session_id: str,
         file_data: bytes,
         capture_trigger: str,
-        phq_response_id: Optional[str] = None,
-        llm_conversation_id: Optional[str] = None,
+        assessment_id: Optional[str] = None,
+        capture_type: str = 'GENERAL',
         camera_settings_snapshot: Optional[Dict[str, Any]] = None
     ) -> CameraCapture:
         """Save camera capture file and database record"""
@@ -70,15 +70,15 @@ class CameraCaptureService:
         session_number = None
         with get_session() as db:
             from ...model.assessment.sessions import AssessmentSession
-            session = db.query(AssessmentSession).filter_by(id=assessment_session_id).first()
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
             if session and session.user:
                 username = session.user.uname
                 session_number = session.session_number
         
         # Generate filename based on context
         timestamp = datetime.utcnow()
-        assessment_type = 'phq' if phq_response_id else 'llm' if llm_conversation_id else 'general'
-        target_id = phq_response_id or llm_conversation_id or assessment_session_id
+        assessment_type = capture_type.lower()
+        target_id = assessment_id or session_id
         
         filename = CameraCaptureService.generate_filename(timestamp, assessment_type, target_id, username, session_number)
         full_path = os.path.join(upload_path, filename)
@@ -89,17 +89,14 @@ class CameraCaptureService:
         
         file_size = len(file_data)
         
-        # Save database record
+        # Save database record using new model structure
         with get_session() as db:
             capture = CameraCapture(
-                assessment_session_id=assessment_session_id,
-                phq_response_id=phq_response_id,
-                llm_conversation_id=llm_conversation_id,
-                filename=filename,
-                file_size_bytes=file_size,
-                capture_trigger=capture_trigger,
-                timestamp=timestamp,
-                camera_settings_snapshot=camera_settings_snapshot
+                session_id=session_id,
+                assessment_id=assessment_id,
+                filenames=[filename],  # New model uses JSON array
+                capture_type=capture_type,
+                created_at=timestamp
             )
             
             db.add(capture)
@@ -107,11 +104,11 @@ class CameraCaptureService:
             return capture
 
     @staticmethod
-    def get_session_captures(assessment_session_id: str) -> List[Dict[str, Any]]:
-        """Get all captures for a session with reconstructed paths"""
+    def get_session_captures(session_id: str) -> List[Dict[str, Any]]:
+        """Get all captures for a session with new model structure"""
         with get_session() as db:
             captures = db.query(CameraCapture).filter_by(
-                assessment_session_id=assessment_session_id
+                session_id=session_id
             ).order_by(CameraCapture.timestamp).all()
             
             upload_path = CameraCaptureService.get_upload_path()
@@ -243,25 +240,26 @@ class CameraCaptureService:
             return len(old_captures)
 
     @staticmethod
-    def cleanup_session_captures(assessment_session_id: str):
+    def cleanup_session_captures(session_id: str):
         """Clean up all captures for a specific session (files + DB records)"""
         upload_path = CameraCaptureService.get_upload_path()
         deleted_count = 0
         
         with get_session() as db:
             session_captures = db.query(CameraCapture).filter_by(
-                assessment_session_id=assessment_session_id
+                session_id=session_id
             ).all()
             
             for capture in session_captures:
-                # Delete physical file with error handling
-                file_path = os.path.join(upload_path, capture.filename)
-                try:
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
-                        deleted_count += 1
-                except Exception as e:
-                    print(f"Failed to delete camera capture file {capture.filename}: {e}")
+                # Delete physical files with error handling (new model uses JSON array)
+                for filename in capture.filenames:
+                    file_path = os.path.join(upload_path, filename)
+                    try:
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                            deleted_count += 1
+                    except Exception as e:
+                        print(f"Failed to delete camera capture file {filename}: {e}")
                 
                 # DB record will be auto-deleted by CASCADE foreign key
             
@@ -309,14 +307,14 @@ class CameraCaptureService:
         with get_session() as db:
             # Find captures that are only linked to session (no specific assessment)
             unlinked_captures = db.query(CameraCapture).filter_by(
-                assessment_session_id=session_id,
-                phq_response_id=None,
-                llm_conversation_id=None
+                session_id=session_id,
+                assessment_id=None
             ).all()
             
             linked_count = 0
             for capture in unlinked_captures:
-                capture.phq_response_id = phq_response_id
+                capture.assessment_id = phq_response_id
+                capture.capture_type = 'PHQ'
                 linked_count += 1
             
             db.commit()
@@ -328,14 +326,14 @@ class CameraCaptureService:
         with get_session() as db:
             # Find captures that are only linked to session (no specific assessment)
             unlinked_captures = db.query(CameraCapture).filter_by(
-                assessment_session_id=session_id,
-                phq_response_id=None,
-                llm_conversation_id=None
+                session_id=session_id,
+                assessment_id=None
             ).all()
             
             linked_count = 0
             for capture in unlinked_captures:
-                capture.llm_conversation_id = llm_conversation_id
+                capture.assessment_id = llm_conversation_id
+                capture.capture_type = 'LLM'
                 linked_count += 1
             
             db.commit()

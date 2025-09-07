@@ -60,10 +60,7 @@ class LLMConversationService:
                 "created_at": datetime.utcnow().isoformat()
             }
 
-            # Add or update turn in conversation history
             turns = conversation_record.conversation_history.get("turns", [])
-            
-            # Check if turn already exists and update it, otherwise add new turn
             turn_exists = False
             for i, existing_turn in enumerate(turns):
                 if existing_turn.get("turn_number") == turn_number:
@@ -83,9 +80,6 @@ class LLMConversationService:
                 "total_turns": len(turns),
                 "last_updated": datetime.utcnow().isoformat()
             }
-
-            print(f"💾 Saving turn {turn_number} for session {session_id}, total turns: {len(turns)}")
-            print(f"💾 Turn data: has_end_conversation={has_end_conversation}, ai_message_preview='{ai_message[:50]}...'")
 
             db.commit()
             return conversation_record
@@ -363,22 +357,14 @@ class LLMConversationService:
         with get_session() as db:
             conversation_record = db.query(LLMConversation).filter_by(session_id=session_id).first()
             if not conversation_record:
-                print(f"🔍 No conversation record found for session {session_id}")
                 return False
             
             turns = conversation_record.conversation_history.get("turns", [])
-            print(f"🔍 Checking {len(turns)} turns for session {session_id}")
-            
-            # Check for end conversation flag in any turn
             for i, turn in enumerate(turns):
                 has_end = turn.get("has_end_conversation", False)
                 ai_msg = turn.get("ai_message", "")
-                print(f"🔍  Turn {i}: has_end_conversation={has_end}, ai_message contains </end_conversation>: {'</end_conversation>' in ai_msg.lower()}")
                 if has_end:
-                    print(f"🔍 ✅ CONVERSATION ENDED DETECTED in turn {i}")
                     return True
-            
-            print(f"🔍 ❌ No end conversation detected in {len(turns)} turns")
             return False
     
     @staticmethod

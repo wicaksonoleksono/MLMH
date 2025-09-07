@@ -1,79 +1,81 @@
-{% extends "admin/base.html" %}
-
-{% block content %}
+{% extends "admin/base.html" %} {% block content %}
 <div class="space-y-6">
-    <div class="bg-white rounded-3xl shadow-sm border border-gray-200 p-6">
-        <h2 class="text-xl font-semibold text-gray-900 mb-4">Manajemen Sesi</h2>
-        
-        <!-- Tab Navigation -->
-        <div class="border-b border-gray-200 mb-6">
-            <nav class="-mb-px flex space-x-8">
-                <a href="{{ url_for('session2.get_eligible_users') }}" 
-                   class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm {% if request.endpoint == 'session2.get_eligible_users' %}border-indigo-500 text-indigo-600{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
-                    Pengguna yang Memenuhi Syarat
-                </a>
-                <a href="{{ url_for('session2.get_pending_notifications') }}" 
-                   class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm {% if request.endpoint == 'session2.get_pending_notifications' %}border-indigo-500 text-indigo-600{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}">
-                    Notifikasi Tertunda
-                </a>
-            </nav>
-        </div>
-        
-        <!-- Tab Content -->
-        {% block tab_content %}{% endblock %}
+  <div class="bg-white rounded-3xl shadow-sm border border-gray-200 p-6">
+    <h2 class="text-xl font-semibold text-gray-900 mb-4">Manajemen Sesi</h2>
+
+    <!-- Tab Navigation -->
+    <div class="border-b border-gray-200 mb-6">
+      <nav class="-mb-px flex space-x-8">
+        <a
+          href="{{ url_for('session2.get_eligible_users') }}"
+          class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm {% if request.endpoint == 'session2.get_eligible_users' %}border-indigo-500 text-indigo-600{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}"
+        >
+          Pengguna yang Memenuhi Syarat
+        </a>
+        <a
+          href="{{ url_for('session2.get_pending_notifications') }}"
+          class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm {% if request.endpoint == 'session2.get_pending_notifications' %}border-indigo-500 text-indigo-600{% else %}border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300{% endif %}"
+        >
+          Notifikasi Tertunda
+        </a>
+      </nav>
     </div>
+
+    <!-- Tab Content -->
+    {% block tab_content %}{% endblock %}
+  </div>
 </div>
 
 <script>
-// Global function to send Session 2 notification
-function sendSession2Notification(userId) {
-    fetch('/admin/session2/send-notification', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            user_id: userId
-        })
+  // Global function to send Session 2 notification
+  function sendSession2Notification(userId) {
+    fetch("/admin/session2/send-notification", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        user_id: userId,
+      }),
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            alert('Notifikasi berhasil dikirim!');
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.status === "success") {
+          alert("Notifikasi berhasil dikirim!");
+          // Refresh the page to update the UI
+          location.reload();
+        } else {
+          alert("Gagal mengirim notifikasi: " + data.message);
+        }
+      })
+      .catch((error) => {
+        alert("Terjadi kesalahan saat mengirim notifikasi");
+      });
+  }
+
+  // Global function to trigger automatic notifications
+  function triggerAutomaticNotifications() {
+    if (confirm("Apakah Anda yakin ingin memicu notifikasi otomatis?")) {
+      fetch("/admin/session2/trigger-automatic", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          if (data.status === "success") {
+            alert(data.message);
             // Refresh the page to update the UI
             location.reload();
-        } else {
-            alert('Gagal mengirim notifikasi: ' + data.message);
-        }
-    })
-    .catch(error => {
-        alert('Terjadi kesalahan saat mengirim notifikasi');
-    });
-}
-
-// Global function to trigger automatic notifications
-function triggerAutomaticNotifications() {
-    if (confirm('Apakah Anda yakin ingin memicu notifikasi otomatis?')) {
-        fetch('/admin/session2/trigger-automatic', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
+          } else {
+            alert("Gagal memicu notifikasi: " + data.message);
+          }
         })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                alert(data.message);
-                // Refresh the page to update the UI
-                location.reload();
-            } else {
-                alert('Gagal memicu notifikasi: ' + data.message);
-            }
-        })
-        .catch(error => {
-            alert('Terjadi kesalahan saat memicu notifikasi');
+        .catch((error) => {
+          alert("Terjadi kesalahan saat memicu notifikasi");
         });
     }
-}
+  }
 </script>
 {% endblock %}

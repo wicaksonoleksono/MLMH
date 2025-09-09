@@ -138,38 +138,28 @@ def update_conversation_turn(session_id, turn_number):
 @api_response
 def delete_conversation_turn(session_id, turn_number):
     """Delete a conversation turn"""
-    # Validate session belongs to current user
     session = SessionService.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Access denied"}, 403
-
     try:
         LLMConversationService.delete_conversation_turn(session_id, turn_number)
         return {"message": "Conversation turn deleted successfully"}
     except ValueError as e:
         return {"message": str(e)}, 404
 
-
 @llm_assessment_bp.route('/status/<session_id>', methods=['GET'])
 @user_required
 @api_response
 def get_conversation_status_route(session_id):
     """Get conversation status for a session"""
-    # Validate session belongs to current user
     session = SessionService.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
-
-    # Get status from chat service and conversation service
     status = {
         "conversation_complete": LLMChatService.is_conversation_complete(session_id),
         "chat_history": LLMChatService.get_session_chat_history(session_id)
     }
-
-    # Get conversation summary from assessment service
     summary = LLMConversationService.get_conversation_summary(session_id)
-
-    # Get analysis result if available
     analysis = LLMConversationService.get_session_analysis(session_id)
 
     return {

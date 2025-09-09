@@ -70,6 +70,7 @@ class LLMConversationService:
             normalized_ai_message = ai_message.lower().strip()
             has_end_conversation = (
                 "</end_conversation>" in normalized_ai_message or 
+                "<end_conversation>" in normalized_ai_message or 
                 "\u003c/end_conversation\u003e" in normalized_ai_message
             )
             

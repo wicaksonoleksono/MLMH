@@ -149,7 +149,7 @@ class SessionManager:
             session_id = str(uuid.uuid4())
             
             # Determine assessment order (50:50 deterministic based on user_id hash)
-            # This ensures same user gets same pattern but overall distribution is 50:50
+            # This ensures same user gets same pattern for ALL sessions but overall distribution is 50:50
             user_hash = hashlib.md5(str(user_id).encode()).hexdigest()
             is_first = 'phq' if int(user_hash[-1], 16) % 2 == 0 else 'llm'
 

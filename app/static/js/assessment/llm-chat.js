@@ -226,6 +226,15 @@ function chatInterface(sessionId) {
             }
             botMessage.content += data.data;
             this.scrollToBottom();
+            
+            // Check for end_conversation tag immediately during streaming
+            const normalizedContent = botMessage.content.toLowerCase();
+            if (normalizedContent.includes("<end_conversation>") || normalizedContent.includes("</end_conversation>")) {
+              // Delay slightly to let the streaming complete, then check status
+              setTimeout(() => {
+                this.checkConversationStatus();
+              }, 1000);
+            }
           } else if (data.type === "complete") {
             clearTimeout(timeoutId);
             botMessage.streaming = false;

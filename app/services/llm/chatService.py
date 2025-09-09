@@ -174,7 +174,7 @@ class LLMChatService:
         # If conversation ended, clear LangChain memory AND complete the session
         # More robust end conversation detection
         normalized_response = ai_response.lower().strip()
-        if "</end_conversation>" in normalized_response or "\\u003c/end_conversation\\u003e" in normalized_response:
+        if "</end_conversation>" in normalized_response or "<end_conversation>" in normalized_response or "\\u003c/end_conversation\\u003e" in normalized_response:
             history = get_by_session_id(str(session_id))
             history.clear()
             if session_id in store:

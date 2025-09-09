@@ -93,4 +93,17 @@
     </form>
   </div>
 </div>
+
+{% include 'components/otp_modal.html' %}
+
+<script src="{{ url_for('static', filename='js/components/otp.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Initialize OTP component for login page
+  // On success, redirect to dashboard instead of login
+  new OTPComponent(function(result) {
+    window.location.href = '/';  // Redirect to dashboard after successful verification
+  });
+});
+</script>
 {% endblock %}

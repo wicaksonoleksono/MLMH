@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Email Terverifikasi - Penilaian Kesehatan Mental{% endblock %}
+
+{% block content %}
+<div class="min-h-full flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+  <div class="max-w-md w-full space-y-8">
+    <div class="text-center">
+      <svg class="mx-auto h-16 w-16 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+      </svg>
+      
+      <h2 class="mt-6 text-center text-3xl font-bold tracking-tight text-gray-900">
+        Email Berhasil Diverifikasi!
+      </h2>
+      
+      <p class="mt-2 text-center text-sm text-gray-600">
+        Selamat! Email Anda telah berhasil diverifikasi. 
+        Sekarang Anda dapat menggunakan semua fitur platform Mental Health Assessment.
+      </p>
+    </div>
+    
+    <div class="mt-8 space-y-4">
+      <a href="{{ url_for('main.serve_index') }}" 
+         class="group relative w-full flex justify-center py-3 px-4 border border-transparent 
+                text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 
+                focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500
+                transition-colors">
+        Lanjutkan ke Dashboard
+      </a>
+      
+      <a href="{{ url_for('auth.profile') }}" 
+         class="group relative w-full flex justify-center py-3 px-4 border border-gray-300 
+                text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 
+                focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500
+                transition-colors">
+        Lihat Profil Saya
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -12,7 +12,6 @@ class UserManagerService:
     # TODO: ADD USERNAME VERIVICATION. MAYBE NOT IN HERE. 
 
     @staticmethod
-    @api_response
     def create_user(uname: str, password: str, user_type_name: str,
                     email: Optional[str] = None, phone: Optional[str] = None,
                     age: Optional[int] = None, gender: Optional[str] = None,
@@ -56,6 +55,23 @@ class UserManagerService:
                 return user
             except IntegrityError:
                 raise ValueError(f"Username '{uname}' already exists")
+    
+    @staticmethod
+    @api_response
+    def create_user_api(uname: str, password: str, user_type_name: str,
+                       email: Optional[str] = None, phone: Optional[str] = None,
+                       age: Optional[int] = None, gender: Optional[str] = None,
+                       educational_level: Optional[str] = None, cultural_background: Optional[str] = None,
+                       medical_conditions: Optional[str] = None, medications: Optional[str] = None,
+                       emergency_contact: Optional[str] = None) -> User:
+        """Create a new user (API endpoint)."""
+        return UserManagerService.create_user(
+            uname=uname, password=password, user_type_name=user_type_name,
+            email=email, phone=phone, age=age, gender=gender,
+            educational_level=educational_level, cultural_background=cultural_background,
+            medical_conditions=medical_conditions, medications=medications,
+            emergency_contact=emergency_contact
+        )
 
     @staticmethod
     def _get_user_data_by_id(user_id: int) -> Optional[dict]:
@@ -91,11 +107,16 @@ class UserManagerService:
         return UserManagerService._get_user_data_by_id(user_id)
 
     @staticmethod
-    @api_response
     def get_user_by_username(uname: str) -> Optional[User]:
-        """Get user by username."""
+        """Get user by username (internal method)."""
         with get_session() as db:
             return db.query(User).filter_by(uname=uname).first()
+    
+    @staticmethod
+    @api_response
+    def get_user_by_username_api(uname: str) -> Optional[User]:
+        """Get user by username (API endpoint)."""
+        return UserManagerService.get_user_by_username(uname)
 
     @staticmethod
     @api_response
@@ -183,6 +204,7 @@ class UserManagerService:
                     'user_type_name': user.user_type.name,
                     'is_active': user.is_active,
                     'is_admin': user.user_type.name.lower() == 'admin',
+                    'email_verified': user.email_verified,
                     'created_at': user.created_at.isoformat() if user.created_at else None,
                     'updated_at': user.updated_at.isoformat() if user.updated_at else None
                 }

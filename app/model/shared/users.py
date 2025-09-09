@@ -2,7 +2,7 @@ from typing import Optional, List, TYPE_CHECKING
 from datetime import datetime
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash as gpw, check_password_hash as cpw
-from sqlalchemy import String, Boolean, ForeignKey, Text, Integer
+from sqlalchemy import String, Boolean, ForeignKey, Text, Integer, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..base import BaseModel, StatusMixin
 
@@ -26,6 +26,11 @@ class User(BaseModel, UserMixin, StatusMixin):
     medical_conditions: Mapped[Optional[str]] = mapped_column(Text)
     medications: Mapped[Optional[str]] = mapped_column(Text)
     emergency_contact: Mapped[Optional[str]] = mapped_column(String(200))
+    
+    # Email OTP verification fields
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    email_otp_code: Mapped[Optional[str]] = mapped_column(String(6))
+    email_otp_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     
     # Foreign key to UserType
     user_type_id: Mapped[int] = mapped_column(ForeignKey("user_type.id"), nullable=False)

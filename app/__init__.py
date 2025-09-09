@@ -39,6 +39,11 @@ def create_app():
             'main.auth_page',
             'auth.login', 
             'auth.register',
+            'auth.verify_email',
+            'auth.check_username_availability',
+            'auth.send_otp',
+            'auth.verify_otp',
+            'auth.resend_otp',
             'static'
         ]
         if request.endpoint in public_routes:

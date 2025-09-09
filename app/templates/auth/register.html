@@ -57,24 +57,43 @@
             class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm 
                    focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500
                    placeholder-gray-400">
+          <div id="usernameStatus" class="mt-1 text-xs hidden"></div>
           <p class="mt-1 text-xs text-gray-500">
             <b>PERINGATAN</b>: Demi menjaga privasi, jangan gunakan nama asli
           </p>
         </div>
         
-        <div>
-          <label for="email" class="block text-sm font-medium text-gray-700">
-            Email <span class="text-red-500">*</span>
-          </label>
-          <input 
-            id="email" 
-            name="email" 
-            type="email" 
-            required 
-            value="{{ request.form.email if request.form.email else '' }}"
-            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm 
-                   focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500
-                   placeholder-gray-400">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label for="email" class="block text-sm font-medium text-gray-700">
+              Email <span class="text-red-500">*</span>
+            </label>
+            <input 
+              id="email" 
+              name="email" 
+              type="email" 
+              required 
+              value="{{ request.form.email if request.form.email else '' }}"
+              class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm 
+                     focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500
+                     placeholder-gray-400">
+          </div>
+          
+          <div>
+            <label for="phone" class="block text-sm font-medium text-gray-700">
+              Nomor Telepon <span class="text-red-500">*</span>
+            </label>
+            <input 
+              id="phone" 
+              name="phone" 
+              type="tel" 
+              required 
+              placeholder="08xxxxxxxxxx atau +62xxxxxxxxxx"
+              value="{{ request.form.phone if request.form.phone else '' }}"
+              class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm 
+                     focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500
+                     placeholder-gray-400">
+          </div>
         </div>
         
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -192,8 +211,8 @@
           class="group relative w-full flex justify-center py-3 px-4 border border-transparent 
                  text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 
                  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500
-                 transition-colors">
-          Buat Akun
+                 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+          Periksa Username
         </button>
       </div>
       
@@ -206,34 +225,8 @@
   </div>
 </div>
 
-<script>
-  document.getElementById('registerForm').addEventListener('submit', function(e) {
-    const password = document.getElementById('password').value;
-    const confirmPassword = document.getElementById('confirm_password').value;
-    
-    if (password !== confirmPassword) {
-      e.preventDefault();
-      alert('Kata sandi dan konfirmasi kata sandi tidak cocok.');
-      return false;
-    }
-    
-    if (password.length < 6) {
-      e.preventDefault();
-      alert('Kata sandi harus minimal 6 karakter.');
-      return false;
-    }
-    
-    // Check required fields
-    const requiredFields = ['username', 'email', 'password', 'confirm_password', 'age', 'gender', 'educational_level', 'cultural_background'];
-    for (let i = 0; i < requiredFields.length; i++) {
-      const field = document.getElementById(requiredFields[i]);
-      if (!field.value.trim()) {
-        e.preventDefault();
-        alert('Harap isi semua field yang wajib diisi.');
-        field.focus();
-        return false;
-      }
-    }
-  });
-</script>
+{% include 'components/otp_modal.html' %}
+
+<script src="{{ url_for('static', filename='js/components/otp.js') }}"></script>
+<script src="{{ url_for('static', filename='js/auth/register.js') }}"></script>
 {% endblock %}

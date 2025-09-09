@@ -1,6 +1,7 @@
 from flask import Blueprint, request, redirect, url_for, jsonify, render_template, flash
 from flask_login import login_user, logout_user, login_required, current_user
 from ..services.shared.usManService import UserManagerService
+from ..services.shared.emailOTPService import EmailOTPService
 from ..decorators import raw_response, api_response
 from ..utils.jwt_utils import JWTManager
 
@@ -30,6 +31,14 @@ def login():
     user_data = UserManagerService.authenticate_user(username, password)
 
     if user_data:
+        # Check if user's email is verified
+        if user_data.get('email') and not user_data.get('email_verified', False):
+            # User exists but email not verified - show OTP modal on login page
+            if not request.is_json:
+                flash('Email Anda belum diverifikasi. Silakan masukkan kode OTP yang telah dikirim.', 'warning')
+                return redirect(url_for('auth.login', otp_user_id=user_data['id']))
+            else:
+                return {"status": "SNAFU", "error": "Email belum diverifikasi", "requires_otp": True, "user_id": user_data['id']}, 403
         token = JWTManager.generate_token(user_data)
 
         # Create SimpleUser for Flask-Login session support (for templates)
@@ -104,7 +113,7 @@ def register():
             'uname': request.form.get('username'),
             'password': password,
             'email': request.form.get('email'),
-            'phone': None,  # We don't collect phone in the new form
+            'phone': request.form.get('phone') or None,
             'age': int(request.form.get('age')) if request.form.get('age') else None,
             'gender': request.form.get('gender') or None,
             'educational_level': request.form.get('educational_level') or None,
@@ -131,10 +140,24 @@ def register():
             emergency_contact=data.get('emergency_contact') or None
         )
         
-        # If this was a form submission, show success message and redirect
+        # Send OTP email if user provided email
+        if user.email:
+            try:
+                otp_result = EmailOTPService.send_otp_email(user.id)
+                if otp_result["status"] == "success":
+                    success_message = 'Pendaftaran berhasil! Kode OTP telah dikirim ke email Anda. Silakan cek inbox dan masukkan kode 6 digit untuk verifikasi.'
+                else:
+                    success_message = f'Pendaftaran berhasil! Namun gagal mengirim OTP: {otp_result["message"]}'
+            except Exception as e:
+                print(f"Failed to send OTP email: {e}")
+                success_message = 'Pendaftaran berhasil! Namun OTP gagal dikirim. Anda dapat meminta pengiriman ulang setelah login.'
+        else:
+            success_message = 'Pendaftaran berhasil! Silakan masuk dengan akun Anda.'
+        
+        # If this was a form submission, redirect to register page with OTP modal
         if not request.is_json:
-            flash('Pendaftaran berhasil! Silakan masuk dengan akun Anda.', 'success')
-            return redirect(url_for('auth.login'))
+            flash(success_message, 'success')
+            return redirect(url_for('auth.register', otp_user_id=user.id))
         
         # If this was an API request, return JSON
         return {"message": "Pendaftaran berhasil!"}
@@ -184,4 +207,132 @@ def profile():
             "is_admin": current_user.is_admin(),
             "is_active": current_user.is_active
         }
+    }
+
+
+@auth_bp.route('/verify-email/<token>', methods=['GET'])
+@raw_response
+def verify_email(token):
+    """Verify email address using verification token."""
+    result = EmailVerificationService.verify_email_token(token)
+    
+    if result["status"] == "success":
+        flash('Email berhasil diverifikasi! Sekarang Anda dapat menggunakan semua fitur platform.', 'success')
+        return redirect(url_for('auth.login'))
+    else:
+        flash(f'Verifikasi email gagal: {result["message"]}', 'error')
+        return redirect(url_for('auth.login'))
+
+
+@auth_bp.route('/send-otp', methods=['POST'])
+@api_response
+def send_otp():
+    """Send OTP to user's email."""
+    data = request.get_json()
+    user_id = data.get('user_id')
+    
+    if not user_id:
+        return {"message": "User ID diperlukan"}, 400
+    
+    result = EmailOTPService.send_otp_email(user_id)
+    
+    if result["status"] == "success":
+        return {"message": "Kode OTP telah dikirim ke email Anda"}
+    else:
+        return {"message": result["message"]}, 400
+
+
+@auth_bp.route('/verify-otp', methods=['POST'])
+@api_response
+def verify_otp():
+    """Verify OTP code."""
+    data = request.get_json()
+    user_id = data.get('user_id')
+    otp_code = data.get('otp_code', '').strip()
+    
+    if not user_id or not otp_code:
+        return {"message": "User ID dan kode OTP diperlukan"}, 400
+    
+    if len(otp_code) != 6 or not otp_code.isdigit():
+        return {"message": "Kode OTP harus 6 digit angka"}, 400
+    
+    result = EmailOTPService.verify_otp(user_id, otp_code)
+    
+    if result["status"] == "success":
+        return {"message": "Email berhasil diverifikasi!", "username": result.get("username")}
+    else:
+        return {"message": result["message"]}, 400
+
+
+@auth_bp.route('/resend-otp', methods=['POST'])
+@api_response
+def resend_otp():
+    """Resend OTP code."""
+    data = request.get_json()
+    user_id = data.get('user_id')
+    
+    if not user_id:
+        return {"message": "User ID diperlukan"}, 400
+    
+    if not EmailOTPService.can_resend_otp(user_id):
+        return {"message": "Silakan tunggu 5 menit sebelum mengirim ulang kode OTP"}, 429
+    
+    result = EmailOTPService.send_otp_email(user_id)
+    
+    if result["status"] == "success":
+        return {"message": "Kode OTP baru telah dikirim ke email Anda"}
+    else:
+        return {"message": result["message"]}, 400
+
+
+@auth_bp.route('/check-username', methods=['POST'])
+@api_response
+def check_username_availability():
+    """Check if username is available for registration."""
+    data = request.get_json()
+    username = data.get('username', '').strip()
+    
+    if not username:
+        return {"available": False, "message": "Username tidak boleh kosong"}
+    
+    if len(username) < 3 or len(username) > 50:
+        return {"available": False, "message": "Username harus 3-50 karakter"}
+    
+    import re
+    if not re.match(r'^[a-zA-Z0-9_]+$', username):
+        return {"available": False, "message": "Username hanya boleh huruf, angka, dan underscore"}
+    
+    # Check if username exists
+    try:
+        existing_user = UserManagerService.get_user_by_username(username)
+        if existing_user:
+            return {"available": False, "message": "Username sudah digunakan"}
+        
+        return {"available": True, "message": "Username tersedia"}
+    except Exception as e:
+        print(f"Username check error: {e}")
+        return {"available": False, "message": "Gagal mengecek username"}
+
+
+@auth_bp.route('/verification-status', methods=['GET'])
+@login_required
+@api_response
+def verification_status():
+    """Get verification status for current user."""
+    return {
+        "email_verified": current_user.email_verified if hasattr(current_user, 'email_verified') else False,
+        "can_resend_otp": EmailOTPService.can_resend_otp(current_user.id) if hasattr(current_user, 'email_verified') and not current_user.email_verified else False
+    }
+
+
+@auth_bp.route('/cleanup-expired-users', methods=['POST'])
+@api_response  
+def cleanup_expired_users():
+    """Manual cleanup of expired OTP users - DANGER ZONE."""
+    # This could be protected with admin auth if needed
+    result = EmailOTPService.force_cleanup_expired_users()
+    return {
+        "message": f"Cleanup complete: {result['deleted_users']} users deleted, {result['cleaned_otps']} OTPs cleaned",
+        "deleted_users": result['deleted_users'],
+        "cleaned_otps": result['cleaned_otps']
     }

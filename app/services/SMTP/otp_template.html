@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html
+  lang="id"
+  xmlns:v="urn:schemas-microsoft-com:vml"
+  xmlns:o="urn:schemas-microsoft-com:office:office"
+>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta http-equiv="x-ua-compatible" content="ie=edge" />
+    <title>Kode Verifikasi Email</title>
+
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #f4f4f4;
+      }
+      .container {
+        max-width: 600px;
+        margin: 0 auto;
+        background-color: #ffffff;
+      }
+      .header {
+        background-color: #0f766e;
+        color: white;
+        text-align: center;
+        padding: 30px 20px;
+      }
+      .content {
+        padding: 40px 30px;
+      }
+      .otp-box {
+        background-color: #f8f9fa;
+        border: 2px dashed #0f766e;
+        border-radius: 8px;
+        text-align: center;
+        padding: 30px;
+        margin: 30px 0;
+      }
+      .otp-code {
+        font-size: 32px;
+        font-weight: bold;
+        color: #0f766e;
+        letter-spacing: 4px;
+        margin: 10px 0;
+      }
+      .footer {
+        background-color: #f8f9fa;
+        text-align: center;
+        padding: 20px;
+        color: #666;
+        font-size: 12px;
+      }
+      .warning {
+        background-color: #fff3cd;
+        border-left: 4px solid #ffc107;
+        padding: 15px;
+        margin: 20px 0;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <!-- Header -->
+      <div class="header">
+        <h1>Mental Health Assessment</h1>
+        <p>Verifikasi Email Anda</p>
+      </div>
+
+      <!-- Content -->
+      <div class="content">
+        <h2>Halo {{ user_name }}!</h2>
+
+        <p>
+          Terima kasih telah mendaftar di platform Mental Health Assessment.
+          Untuk melengkapi pendaftaran Anda, masukkan kode verifikasi berikut:
+        </p>
+
+        <!-- OTP Box -->
+        <div class="otp-box">
+          <p style="margin: 0; color: #666; font-size: 14px">
+            Kode Verifikasi Anda:
+          </p>
+          <div class="otp-code">{{ otp_code }}</div>
+          <p style="margin: 0; color: #666; font-size: 12px">
+            Masukkan kode ini di halaman verifikasi
+          </p>
+        </div>
+
+        <!-- Warning -->
+        <div class="warning">
+          <strong>Penting:</strong>
+          <ul style="margin: 10px 0; padding-left: 20px">
+            <li>Kode ini akan kedaluwarsa dalam {{ expiry_hours }} jam</li>
+            <li>Kode hanya dapat digunakan sekali</li>
+            <li>Jangan bagikan kode ini kepada siapa pun</li>
+          </ul>
+        </div>
+
+        <p>
+          Jika Anda tidak mendaftar akun di platform kami, silakan abaikan email
+          ini.
+        </p>
+
+        <p style="margin-top: 30px">
+          Salam,<br />
+          <strong>Anisa Kesehatan Mental.</strong>
+        </p>
+      </div>
+
+      <!-- Footer -->
+      <div class="footer">
+        <p>Email ini dikirim otomatis, mohon jangan membalas email ini.</p>
+        <p>&copy; 2025 Anisa Kesehatan Mental. All rights reserved.</p>
+      </div>
+    </div>
+  </body>
+</html>

@@ -148,7 +148,7 @@ class LLMAnalysisResultProcessor:
                 # Verify session exists
                 session = db.query(AssessmentSession).filter(AssessmentSession.id == session_id).first()
                 if not session:
-                    print(f"❌ Session {session_id} not found for analysis storage")
+                    print(f"Session {session_id} not found for analysis storage")
                     return None
                 
                 # Calculate metrics
@@ -177,7 +177,7 @@ class LLMAnalysisResultProcessor:
                 return analysis_result
                 
         except Exception as e:
-            print(f"❌ Error storing analysis result: {str(e)}")
+            print(f"Error storing analysis result: {str(e)}")
             return None
 
     @classmethod
@@ -202,23 +202,23 @@ class LLMAnalysisResultProcessor:
         Returns:
             LLMAnalysisResult if successful, None if processing failed
         """
-        print(f"🔍 Processing analysis response for session {session_id}")
+        print(f"Processing analysis response for session {session_id}")
         
         # Extract JSON from response
         parsed_result = cls.extract_json_from_response(raw_llm_response)
         if parsed_result is None:
-            print(f"❌ Failed to extract JSON from LLM response")
+            print(f"Failed to extract JSON from LLM response")
             return None
         
         # Validate the result
         is_valid, errors = cls.validate_analysis_result(parsed_result, depression_aspects)
         if not is_valid:
-            print(f"❌ Analysis result validation failed:")
+            print(f"Analysis result validation failed:")
             for error in errors:
                 print(f"   - {error}")
             return None
         
-        print(f"✅ Analysis result validated successfully")
+        print(f"Analysis result validated successfully")
         
         # Store in database
         return cls.store_analysis_result(

@@ -293,14 +293,23 @@ def save_conversation(session_id):
 @user_required
 @api_response
 def start_chat(session_id):
-    """Initialize LLM chat using new LangChain service"""
+    """Initialize LLM chat - CREATE EMPTY CONVERSATION RECORD IMMEDIATELY (assessment-first approach)"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     try:
+        # CREATE EMPTY LLM CONVERSATION RECORD IMMEDIATELY (assessment-first approach)
+        conversation_record = LLMConversationService.create_empty_conversation_record(session_id)
+        
+        # Initialize LLM chat service
         result = LLMChatService.start_conversation(session.id)
+        
+        # Add conversation_id to result for camera to use
+        if result.get("status") == "success":
+            result["conversation_id"] = conversation_record.id
+        
         return result
     except Exception as e:
         return {"status": "error", "message": str(e)}, 500
@@ -360,10 +369,10 @@ def finish_chat(session_id):
     
     try:
         result = LLMChatService.finish_conversation(session.id)
-        print(f"🎬 LLM FINISH RESULT: session={session_id}, result={result}")
+        print(f"LLM FINISH RESULT: session={session_id}, result={result}")
         return result
     except Exception as e:
-        print(f"❌ LLM FINISH ERROR: session={session_id}, error={str(e)}")
+        print(f"LLM FINISH ERROR: session={session_id}, error={str(e)}")
         return {"status": "error", "message": str(e)}, 500
 
 

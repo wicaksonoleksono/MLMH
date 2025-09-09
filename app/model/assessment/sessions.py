@@ -360,33 +360,24 @@ class LLMConversation(BaseModel):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow())
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow(), onupdate=lambda: datetime.utcnow())
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    
     session = relationship("AssessmentSession", back_populates="llm_conversations")
-    
     def __repr__(self):
         return f'<LLMConversation {self.id}: Session {self.session_id}>'
 
-
 class CameraCapture(BaseModel):
     __tablename__ = 'camera_captures'
-    
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
-    assessment_id: Mapped[str] = mapped_column(String(36), nullable=False)  # Can reference either LLM or PHQ record
-    
-    # List of filenames instead of separate rows
+    assessment_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)  # Can reference either LLM or PHQ record, set after assessment creation
     filenames: Mapped[List[str]] = mapped_column(JSON, nullable=False)
-    
     capture_type: Mapped[str] = mapped_column(String(50), nullable=False)  # LLM or PHQ
+    capture_metadata: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=True)  # Rich batch metadata
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow())
-    
     session = relationship("AssessmentSession", back_populates="camera_captures")
     
     def __repr__(self):
         return f'<CameraCapture {self.id}: {len(self.filenames)} files for session {self.session_id}>'
 
-
-# LATER ON.. 
 
 class LLMAnalysisResult(BaseModel):
     __tablename__ = 'llm_analysis_results'

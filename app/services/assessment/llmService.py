@@ -21,6 +21,31 @@ class LLMConversationService:
         return aspect_name.lower().replace(" ", "_").replace("-", "_")
     
     @staticmethod
+    def create_empty_conversation_record(session_id: str) -> LLMConversation:
+        """Create empty LLM conversation record immediately on assessment start (assessment-first approach)"""
+        with get_session() as db:
+            # Get session for validation
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                raise ValueError(f"Session {session_id} not found")
+
+            # Check if LLM conversation record already exists
+            existing_record = db.query(LLMConversation).filter_by(session_id=session_id).first()
+            if existing_record:
+                return existing_record
+
+            # Create empty LLM conversation record
+            conversation_record = LLMConversation(
+                session_id=session_id,
+                conversation_history={"turns": []}  # Empty turns array, will be populated later
+            )
+            db.add(conversation_record)
+            db.commit()
+            db.refresh(conversation_record)
+            
+            return conversation_record
+
+    @staticmethod
     def create_conversation_turn(
         session_id: str,
         turn_number: int,

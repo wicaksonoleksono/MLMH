@@ -86,7 +86,7 @@ def save_all_settings():
             is_default=True
         )
         
-        flash('PHQ settings saved successfully! ✅', 'success')
+        flash('PHQ settings saved successfully!', 'success')
         return redirect(url_for('phq.phq_settings_page'))
         
     except Exception as e:

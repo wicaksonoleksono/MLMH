@@ -9,6 +9,7 @@ from ...db import get_session
 
 class UserManagerService:
     """User Manager Service for CRUD operations."""
+    # TODO: ADD USERNAME VERIVICATION. MAYBE NOT IN HERE. 
 
     @staticmethod
     @api_response
@@ -24,7 +25,6 @@ class UserManagerService:
             user_type = db.query(UserType).filter_by(name=user_type_name).first()
             if not user_type:
                 raise ValueError(f"User type '{user_type_name}' not found")
-
             # Create user - extended fields only for regular users
             if user_type_name.lower() == 'user':
                 user = User.create_user(

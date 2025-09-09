@@ -109,38 +109,38 @@ class CameraCaptureService:
         with get_session() as db:
             captures = db.query(CameraCapture).filter_by(
                 session_id=session_id
-            ).order_by(CameraCapture.timestamp).all()
+            ).order_by(CameraCapture.created_at).all()
             
             upload_path = CameraCaptureService.get_upload_path()
             
             return [{
                 'id': capture.id,
-                'filename': capture.filename,
-                'full_path': os.path.join(upload_path, capture.filename),
-                'url': f"/assessment/camera/file/{capture.filename}",
-                'timestamp': capture.timestamp,
-                'capture_trigger': capture.capture_trigger,
-                'file_size_bytes': capture.file_size_bytes,
-                'phq_response_id': capture.phq_response_id,
-                'llm_conversation_id': capture.llm_conversation_id,
-                'assessment_type': 'phq' if capture.phq_response_id else 'llm' if capture.llm_conversation_id else 'general'
+                'filename': capture.filenames[0] if capture.filenames else '',  # Take first filename for backward compatibility
+                'full_path': os.path.join(upload_path, capture.filenames[0]) if capture.filenames else '',
+                'url': f"/assessment/camera/file/{capture.filenames[0]}" if capture.filenames else '',
+                'timestamp': capture.created_at,
+                'capture_type': capture.capture_type.lower(),
+                'assessment_id': capture.assessment_id,
+                'assessment_type': capture.capture_type.lower()
             } for capture in captures]
 
     @staticmethod
     def get_captures_by_phq_response(phq_response_id: str) -> List[CameraCapture]:
         """Get captures linked to specific PHQ response"""
         with get_session() as db:
-            return db.query(CameraCapture).filter_by(
-                phq_response_id=phq_response_id
-            ).order_by(CameraCapture.timestamp).all()
+            return db.query(CameraCapture).filter(
+                CameraCapture.assessment_id == phq_response_id,
+                CameraCapture.capture_type == 'PHQ'
+            ).order_by(CameraCapture.created_at).all()
 
     @staticmethod
     def get_captures_by_llm_conversation(llm_conversation_id: str) -> List[CameraCapture]:
         """Get captures linked to specific LLM conversation"""
         with get_session() as db:
-            return db.query(CameraCapture).filter_by(
-                llm_conversation_id=llm_conversation_id
-            ).order_by(CameraCapture.timestamp).all()
+            return db.query(CameraCapture).filter(
+                CameraCapture.assessment_id == llm_conversation_id,
+                CameraCapture.capture_type == 'LLM'
+            ).order_by(CameraCapture.created_at).all()
 
     @staticmethod
     def get_camera_settings_for_session(session_id: str) -> Optional[CameraSettings]:
@@ -191,33 +191,7 @@ class CameraCaptureService:
             'capture_on_question_start': settings.capture_on_question_start
         }
 
-    @staticmethod
-    def should_capture_on_trigger(settings: CameraSettings, trigger: str) -> bool:
-        """Check if capture should happen based on settings and trigger - MUTUALLY EXCLUSIVE ENFORCEMENT"""
-        if not settings:
-            return False
-        
-        # 🔒 ENFORCE MUTUALLY EXCLUSIVE MODES - NO MIXED MODE BULLSHIT!
-        if settings.recording_mode not in ['INTERVAL', 'EVENT_DRIVEN']:
-            return False  # Invalid mode = no capture
-            
-        if settings.recording_mode == 'INTERVAL':
-            # INTERVAL mode: ONLY respond to interval triggers, ignore all events
-            return trigger == 'interval'
-            
-        elif settings.recording_mode == 'EVENT_DRIVEN':
-            # EVENT_DRIVEN mode: ONLY respond to enabled event triggers, ignore intervals
-            if trigger == 'interval':
-                return False  # Reject interval triggers in event mode
-            
-            trigger_map = {
-                'button_click': settings.capture_on_button_click,
-                'message_send': settings.capture_on_message_send,
-                'question_start': settings.capture_on_question_start
-            }
-            return trigger_map.get(trigger, False)
-        
-        return False  # Default: no capture
+    # Validation removed - frontend handles all capture logic in "sent mode"
 
     @staticmethod
     def cleanup_old_captures(retention_days: int = 30):
@@ -229,12 +203,17 @@ class CameraCaptureService:
         
         with get_session() as db:
             old_captures = db.query(CameraCapture).filter(
-                CameraCapture.timestamp < cutoff_date
+                CameraCapture.created_at < cutoff_date
             ).all()
             for capture in old_captures:
-                file_path = os.path.join(upload_path, capture.filename)
-                if os.path.exists(file_path):
-                    os.remove(file_path)
+                # Delete physical files with error handling (new model uses JSON array)
+                for filename in capture.filenames:
+                    file_path = os.path.join(upload_path, filename)
+                    try:
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                    except Exception as e:
+                        print(f"Failed to delete camera capture file {filename}: {e}")
                 db.delete(capture)
             db.commit()
             return len(old_captures)
@@ -271,15 +250,20 @@ class CameraCaptureService:
         upload_path = CameraCaptureService.get_upload_path()
         
         with get_session() as db:
-            phq_captures = db.query(CameraCapture).filter_by(
-                phq_response_id=phq_response_id
+            phq_captures = db.query(CameraCapture).filter(
+                CameraCapture.assessment_id == phq_response_id,
+                CameraCapture.capture_type == 'PHQ'
             ).all()
             
             for capture in phq_captures:
-                # Delete physical file
-                file_path = os.path.join(upload_path, capture.filename)
-                if os.path.exists(file_path):
-                    os.remove(file_path)
+                # Delete physical files with error handling (new model uses JSON array)
+                for filename in capture.filenames:
+                    file_path = os.path.join(upload_path, filename)
+                    try:
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                    except Exception as e:
+                        print(f"Failed to delete camera capture file {filename}: {e}")
             
             return len(phq_captures)
 
@@ -289,15 +273,20 @@ class CameraCaptureService:
         upload_path = CameraCaptureService.get_upload_path()
         
         with get_session() as db:
-            llm_captures = db.query(CameraCapture).filter_by(
-                llm_conversation_id=llm_conversation_id
+            llm_captures = db.query(CameraCapture).filter(
+                CameraCapture.assessment_id == llm_conversation_id,
+                CameraCapture.capture_type == 'LLM'
             ).all()
             
             for capture in llm_captures:
-                # Delete physical file
-                file_path = os.path.join(upload_path, capture.filename)
-                if os.path.exists(file_path):
-                    os.remove(file_path)
+                # Delete physical files with error handling (new model uses JSON array)
+                for filename in capture.filenames:
+                    file_path = os.path.join(upload_path, filename)
+                    try:
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                    except Exception as e:
+                        print(f"Failed to delete camera capture file {filename}: {e}")
             
             return len(llm_captures)
 
@@ -306,9 +295,9 @@ class CameraCaptureService:
         """Bulk link unlinked session captures to PHQ assessment"""
         with get_session() as db:
             # Find captures that are only linked to session (no specific assessment)
-            unlinked_captures = db.query(CameraCapture).filter_by(
-                session_id=session_id,
-                assessment_id=None
+            unlinked_captures = db.query(CameraCapture).filter(
+                CameraCapture.session_id == session_id,
+                CameraCapture.assessment_id == session_id  # Unlinked captures have session_id as assessment_id
             ).all()
             
             linked_count = 0
@@ -325,9 +314,9 @@ class CameraCaptureService:
         """Bulk link unlinked session captures to LLM assessment"""
         with get_session() as db:
             # Find captures that are only linked to session (no specific assessment)
-            unlinked_captures = db.query(CameraCapture).filter_by(
-                session_id=session_id,
-                assessment_id=None
+            unlinked_captures = db.query(CameraCapture).filter(
+                CameraCapture.session_id == session_id,
+                CameraCapture.assessment_id == session_id  # Unlinked captures have session_id as assessment_id
             ).all()
             
             linked_count = 0

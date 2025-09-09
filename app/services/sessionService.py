@@ -281,10 +281,8 @@ class SessionService:
             session.complete_phq()
             db.commit()
             
-            # Camera linking now handled by frontend CameraManager via /link-responses/ endpoint
-            # Clean up any unlinked captures to prevent contamination in next assessment phase
-            from .assessment.cameraAssessmentService import CameraAssessmentService
-            CameraAssessmentService.cleanup_unlinked_captures(session_id)
+            # No camera linking needed - assessment-first approach handles this automatically
+            # Camera batches are created with assessment_id already set during batch creation
             
             # Get updated session to check status
             updated_session = db.query(AssessmentSession).filter_by(id=session_id).first()
@@ -327,7 +325,8 @@ class SessionService:
             session.complete_llm()
             db.commit()
             
-            # Camera linking now handled by frontend CameraManager via /link-responses/ endpoint
+            # No camera linking needed - assessment-first approach handles this automatically
+            # Camera batches are created with assessment_id already set during batch creation
             
             # Get updated session to check status
             updated_session = db.query(AssessmentSession).filter_by(id=session_id).first()
@@ -376,19 +375,15 @@ class SessionService:
                 raise RuntimeError("Failed to reset session to new attempt")
             
             # Clear related data (PHQ responses, LLM conversations, etc.)
-            from ..model.assessment.sessions import PHQResponse, LLMConversation, LLMAnalysisResult, CameraCapture
+            from ..model.assessment.sessions import PHQResponse, LLMConversation, LLMAnalysisResult
             
-            # Get camera capture filenames BEFORE reset (tied to session_id)
-            camera_filenames = [filename for capture in db.query(CameraCapture).filter_by(session_id=session_id).all() for filename in capture.filenames]
-            
-            # Delete physical camera files
-            if camera_filenames:
-                from ..services.camera.cameraCaptureService import CameraCaptureService
-                for filename in camera_filenames:
-                    try:
-                        CameraCaptureService.delete_capture_file(filename)
-                    except Exception as e:
-                        print(f" Failed to delete camera capture file {filename}: {e}")
+            # Clean up camera captures using new incremental system
+            from ..services.camera.cameraStorageService import CameraStorageService
+            try:
+                deleted_files_count = CameraStorageService.cleanup_session_captures(session_id)
+                print(f"Reset cleanup: deleted {deleted_files_count} camera files")
+            except Exception as e:
+                print(f"Failed to cleanup camera captures during reset: {e}")
             
             # Delete PHQ responses for this session
             db.query(PHQResponse).filter_by(session_id=session_id).delete()
@@ -428,8 +423,8 @@ class SessionService:
             camera_count = len(session.camera_captures)
             
             # Clean up camera capture files first
-            from .camera.cameraCaptureService import CameraCaptureService
-            CameraCaptureService.cleanup_session_captures(session_id)
+            from app.services.camera.cameraStorageService import CameraStorageService
+            CameraStorageService.cleanup_session_captures(session_id)
             
             # Database cascading delete will handle all related records
             db.delete(session)

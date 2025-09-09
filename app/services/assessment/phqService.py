@@ -405,6 +405,31 @@ class PHQResponseService:
             return 0
 
     @staticmethod
+    def create_empty_assessment_record(session_id: str) -> PHQResponse:
+        """Create empty PHQ assessment record immediately on assessment start (assessment-first approach)"""
+        with get_session() as db:
+            # Get session for validation
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                raise ValueError(f"Session {session_id} not found")
+
+            # Check if PHQ record already exists
+            existing_record = db.query(PHQResponse).filter_by(session_id=session_id).first()
+            if existing_record:
+                return existing_record
+
+            # Create empty PHQ response record
+            phq_response_record = PHQResponse(
+                session_id=session_id,
+                responses={}  # Empty JSON, will be populated later
+            )
+            db.add(phq_response_record)
+            db.commit()
+            db.refresh(phq_response_record)
+            
+            return phq_response_record
+
+    @staticmethod
     def save_session_responses(session_id: str, responses_data: List[Dict[str, Any]]) -> PHQResponse:
         """Save all PHQ responses for a session in a single JSON structure"""
         with get_session() as db:
@@ -462,4 +487,7 @@ class PHQResponseService:
             phq_response_record.updated_at = datetime.utcnow()
 
             db.commit()
+            db.refresh(phq_response_record)
+
+            # No camera linking needed - assessment-first approach handles this automatically
             return phq_response_record

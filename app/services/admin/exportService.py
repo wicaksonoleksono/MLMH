@@ -132,7 +132,7 @@ class ExportService:
             captures = db.query(CameraCapture).filter_by(session_id=session_id).all()
             
             if not captures:
-                print(f"📷 No camera captures found for session {session_id}")
+                print(f" No camera captures found for session {session_id}")
                 return
             
             # Organize captures by assessment type
@@ -142,10 +142,10 @@ class ExportService:
             
             upload_path = current_app.media_save
             
-            print(f"📷 Found {len(captures)} camera captures for session {session_id}")
+            print(f" Found {len(captures)} camera captures for session {session_id}")
             
             for capture in captures:
-                print(f"📷 Processing capture: type={capture.capture_type}, assessment_id={capture.assessment_id}, filenames={capture.filenames}")
+                print(f" Processing capture: type={capture.capture_type}, assessment_id={capture.assessment_id}, filenames={capture.filenames}")
                 
                 # Determine assessment type using new model structure
                 if capture.capture_type == 'PHQ':
@@ -156,11 +156,9 @@ class ExportService:
                     # Add all image files to PHQ folder (new model uses JSON array)
                     for filename in capture.filenames:
                         image_path = os.path.join(upload_path, filename)
-                        print(f"📷 PHQ image path: {image_path}, exists: {os.path.exists(image_path)}")
                         if os.path.exists(image_path):
                             with open(image_path, 'rb') as img_file:
                                 zip_file.writestr(f'{folder_path}{filename}', img_file.read())
-                                print(f"📷 Added PHQ image: {filename}")
                                 
                 elif capture.capture_type == 'LLM':
                     assessment_type = "LLM"
@@ -170,11 +168,9 @@ class ExportService:
                     # Add all image files to LLM folder (new model uses JSON array)
                     for filename in capture.filenames:
                         image_path = os.path.join(upload_path, filename)
-                        print(f"📷 LLM image path: {image_path}, exists: {os.path.exists(image_path)}")
                         if os.path.exists(image_path):
                             with open(image_path, 'rb') as img_file:
                                 zip_file.writestr(f'{folder_path}{filename}', img_file.read())
-                                print(f"📷 Added LLM image: {filename}")
                 else:
                     # Skip general/unknown captures - don't add to ZIP
                     unknown_captures.append(capture)

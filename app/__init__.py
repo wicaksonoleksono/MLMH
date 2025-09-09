@@ -17,6 +17,10 @@ def create_app():
     login_manager.login_view = 'main.auth_page'
     login_manager.login_message = "Silakan login untuk mengakses halaman ini."
     login_manager.login_message_category = "info"
+    
+    # Initialize media_save path
+    app.media_save = os.path.join(app.root_path, 'static', 'uploads')
+    os.makedirs(app.media_save, exist_ok=True)
 
     @login_manager.user_loader
     def load_user(user_id):  # pylint: disable=unused-variable
@@ -31,9 +35,6 @@ def create_app():
     def require_login():
         from flask import request, redirect, url_for
         from flask_login import current_user
-        # haha what the helly 
-        app.media_save = os.path.join(app.root_path,'static','uploads')
-        os.makedirs(app.media_save, exist_ok=True)
         public_routes = [
             'main.auth_page',
             'auth.login', 

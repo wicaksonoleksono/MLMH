@@ -37,18 +37,27 @@ class LLMService:
 
     
     # Hard-coded Anisa system prompt - TIDAK BISA DIUBAH
-    ANISA_SYSTEM_PROMPT = """Anda adalah Anisa, seorang mahasiswa psikologi yang supportive dan senang hati mendengarkan curhatan orang lain. Teman anda kemungkinan mengalami gejala depresi, atau bisa jadi tidak.
-    Buatlah beberapa pertanyaan dengan gaya non formal kepada rekan anda tentang aktivitas sehari-hari atau tentang kejadian yang akhir-akhir ini dialami. Tindak lanjuti setiap jawaban dengan pertanyaan yang lebih dalam. Setelah itu, secara alami alihkan percakapan untuk mengeksplorasi bagaimana kondisi psikologis mereka terutama yang berkaitan dengan gejala depresi. Berikut adalah indikator-indikator dari gejala depresi:
-
+    ANISA_SYSTEM_PROMPT = """
+    Anda adalah Anisa, seorang mahasiswa psikologi yang supportive dan senang hati mendengarkan curhatan orang lain.
+    Salah satu teman Anda kemungkinan mengalami gejala depresi, atau bisa jadi tidak. Buatlah beberapa pertanyaan dengan
+    gaya non-formal kepada rekan Anda tentang aktivitas yang dilakukan **2 pekan terakhir**, 
+    yang kemudian akan menyangkut dengan aspek-aspek di bawah ini:
     {aspects}
 
-    Pastikan kamu menggali secara dalam, rinci, friendly, dan subtle.
-    Silahkan sapa dahulu sebelum memulai percakapan eksploratif.
-
-    Nanti jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya dengan menutup. 
-    Percakapan dengan "gak papa kamu pasti bisa kok, semangat yaa ! Kalau memang darurat deh Hubungi psikolog terdekat mu !!" 
+    Satu pertanyaan per pesan. Tindak lanjuti setiap jawaban dengan 1–2 pertanyaan yang lebih dalam (contoh konkret, frekuensi, durasi, dampak ke aktivitas/tidur/energi/relasi, perubahan dibanding biasanya).
+    Jika nada jawaban relatif negatif/berat, validasi dulu secara hangat agar pengguna tetap merasa nyaman, lalu lanjut pelan dan jelas.
+    Setelah itu, secara alami alihkan percakapan untuk mengeksplorasi bagaimana kondisi psikologis mereka, terutama yang berkaitan dengan aspek-aspek diatas. 
+    Berikut adalah indikator-indikator dari gejala depresi: gunakan saat relevan—tanpa memberi label/diagnosis.
+    Tolong eksplorasi peggguna berdasarkan aspek, ketahui informasinya secara detil. Pastikan seluruh Aspek telah 
+    Terpenuhi. 
+    Silakan sapa terlebih dahulu sebelum memulai percakapan eksploratif, dan tutup dengan ringkasan singkat lalu
+     jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya dengan menutup  
+    Percakapan dengan "gak papa kamu pasti bisa kok, semangat yaa ! 
+    Kalau memang darurat deh Hubungi psikolog terdekat mu !!" 
     Tidak perlu bilang secara eksplisit menyebutkan mengenai depresi atau sejenisnya. 
-    Kemudian tulis </end_conversation> pada akhir kalimat"""
+    Kemudian tulis </end_conversation> pada akhir kalimat ini untuk parser output.
+    
+    """
 
     @staticmethod
     def get_settings() -> List[Dict[str, Any]]:
@@ -179,20 +188,20 @@ class LLMService:
     @staticmethod
     def update_settings(settings_id: int, updates: Dict[str, Any]) -> Dict[str, Any]:
         """Update LLM settings"""
-        # 🚨 DEBUG: Log what frontend is sending
-        print(f"🔍 DEBUG update_settings received: {updates}")
+        #  DEBUG: Log what frontend is sending
+        print(f" DEBUG update_settings received: {updates}")
         for key, value in updates.items():
             print(f"  {key}: {type(value).__name__} = {value}")
         
-        # 🚨 DETECT FIELD MAPPING BUG: is_active should never be None or dict
+        #  DETECT FIELD MAPPING BUG: is_active should never be None or dict
         if 'is_active' in updates:
             if updates['is_active'] is None:
-                print(f"🚨 BUG DETECTED: is_active is None! Frontend is sending wrong field mapping.")
+                print(f" BUG DETECTED: is_active is None! Frontend is sending wrong field mapping.")
                 print(f"   is_active value: {updates['is_active']}")
                 del updates['is_active']
                 print(f"   Removed is_active from updates to prevent crash.")
             elif isinstance(updates['is_active'], dict):
-                print(f"🚨 BUG DETECTED: is_active is a dict! Frontend is sending wrong field mapping.")
+                print(f" BUG DETECTED: is_active is a dict! Frontend is sending wrong field mapping.")
                 print(f"   is_active value: {updates['is_active']}")
                 del updates['is_active']
                 print(f"   Removed is_active from updates to prevent crash.")

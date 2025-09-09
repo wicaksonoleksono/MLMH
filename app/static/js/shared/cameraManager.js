@@ -1,287 +1,252 @@
-// app/static/js/cameraManager.js
+// app/static/js/shared/cameraManager.js
 class CameraManager {
-    constructor(sessionId, assessmentType, cameraSettings) {
-        this.sessionId = sessionId;
-        this.assessmentType = assessmentType;
-        this.cameraSettings = cameraSettings || {};
-        this.captures = [];
-        this.videoElement = null;
-        this.canvasElement = null;
+  constructor(sessionId, assessmentType, cameraSettings, assessmentId = null) {
+    this.sessionId = sessionId;
+    this.assessmentId = assessmentId;  // For assessment-first approach
+    this.assessmentType = assessmentType;
+    this.cameraSettings = cameraSettings || {};
+    // Note: this.captures removed - using incremental backend approach
+    this.videoElement = null;
+    this.canvasElement = null;
+    this.stream = null;
+    this.isInitialized = false;
+    this.intervalTimer = null;
+    this.currentResponseId = null;
+
+    // Bind methods to preserve context
+    this.captureImage = this.captureImage.bind(this);
+    this.cleanup = this.cleanup.bind(this);
+  }
+
+  async initialize() {
+    try {
+      await this.createVideoElements();
+      await this.requestCameraAccess();
+      this.setupCaptureMode();
+      this.isInitialized = true;
+    } catch (error) {
+      // Camera initialization failed
+      throw error;
+    }
+  }
+
+  async createVideoElements() {
+    // Create hidden video element for webcam stream
+    this.videoElement = document.createElement("video");
+    this.videoElement.style.display = "none";
+    this.videoElement.autoplay = true;
+    this.videoElement.muted = true;
+    document.body.appendChild(this.videoElement);
+
+    // Create hidden canvas element for capturing frames
+    this.canvasElement = document.createElement("canvas");
+    this.canvasElement.style.display = "none";
+    document.body.appendChild(this.canvasElement);
+  }
+
+  async requestCameraAccess() {
+    try {
+      const constraints = {
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: "user",
+        },
+      };
+
+      // Apply resolution from settings if available
+      if (this.cameraSettings.resolution) {
+        const [width, height] = this.cameraSettings.resolution
+          .split("x")
+          .map(Number);
+        constraints.video.width = { ideal: width };
+        constraints.video.height = { ideal: height };
+      }
+
+      this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+      this.videoElement.srcObject = this.stream;
+    } catch (error) {
+      throw new Error("Camera access is required for assessment");
+    }
+  }
+
+  setupCaptureMode() {
+    if (!this.cameraSettings.recording_mode) {
+      // console.log("No recording mode configured - camera disabled");
+      return;
+    }
+
+    // console.log(
+    //   `Setting up ${this.cameraSettings.recording_mode} capture mode`
+    // );
+
+    if (this.cameraSettings.recording_mode === "INTERVAL") {
+      if (this.cameraSettings.interval_seconds) {
+        this.startIntervalCapture();
+      } else {
+        // console.log(
+        //   "INTERVAL mode requires interval_seconds - camera disabled"
+        // );
+      }
+    } else if (this.cameraSettings.recording_mode === "EVENT_DRIVEN") {
+      // console.log("EVENT_DRIVEN mode - triggers enabled:", {
+      //   button_click: this.cameraSettings.capture_on_button_click,
+      //   message_send: this.cameraSettings.capture_on_message_send,
+      //   question_start: this.cameraSettings.capture_on_question_start,
+      // });
+    }
+  }
+
+  startIntervalCapture() {
+    if (this.intervalTimer) {
+      clearInterval(this.intervalTimer);
+    }
+
+    const intervalMs = (this.cameraSettings.interval_seconds || 30) * 1000;
+    this.intervalTimer = setInterval(async () => {
+      if (this.isInitialized) {
+        await this.captureImage("interval");
+      }
+    }, intervalMs);
+  }
+
+  stopIntervalCapture() {
+    if (this.intervalTimer) {
+      clearInterval(this.intervalTimer);
+      this.intervalTimer = null;
+    }
+  }
+
+  async captureImage(trigger = "manual") {
+    try {
+      if (!this.isInitialized) {
+        throw new Error("Camera not initialized");
+      }
+
+      // Capture frame from video
+      const video = this.videoElement;
+      const canvas = this.canvasElement;
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      // Convert to JPEG blob
+      const blob = await new Promise((resolve) =>
+        canvas.toBlob(resolve, "image/jpeg", 0.8)
+      );
+
+      // Upload immediately to save file only (no DB record)
+      const formData = new FormData();
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = `capture_${timestamp}.jpg`;
+
+      formData.append("image", blob, filename);
+      formData.append("trigger", trigger);
+
+      const response = await fetch(
+        `/assessment/camera/upload-single/${this.sessionId}`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const result = await response.json();
+
+      if (result.status !== "OLKORECT") {
+        console.error("Upload failed:", result);
+        throw new Error(result.error || "Upload failed");
+      }
+
+      // console.log("Single upload successful - file processed by incremental backend");
+      
+      // No frontend storage needed - backend handles incremental JSON array building
+      return { success: true, message: "File uploaded and added to database incrementally" };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Smart trigger methods that only work if enabled in settings
+  async onButtonClick() {
+    if (
+      this.cameraSettings.recording_mode === "EVENT_DRIVEN" &&
+      this.cameraSettings.capture_on_button_click
+    ) {
+      return await this.captureImage("button_click");
+    }
+    return null;
+  }
+
+  async onMessageSend() {
+    if (
+      this.cameraSettings.recording_mode === "EVENT_DRIVEN" &&
+      this.cameraSettings.capture_on_message_send
+    ) {
+      return await this.captureImage("message_send");
+    }
+    return null;
+  }
+
+  async onQuestionStart() {
+    if (
+      this.cameraSettings.recording_mode === "EVENT_DRIVEN" &&
+      this.cameraSettings.capture_on_question_start
+    ) {
+      // console.log("Question start capture enabled - capturing");
+      return await this.captureImage("question_start");
+    }
+    // console.log("Question start capture disabled or wrong mode");
+    return null;
+  }
+
+  setCurrentResponseId(responseId) {
+    this.currentResponseId = responseId;
+  }
+
+  // Note: uploadBatch() removed - using incremental backend approach instead
+
+  async cleanup() {
+    try {
+      // console.log("Starting camera cleanup - incremental backend approach (no batch upload needed)");
+
+      this.stopIntervalCapture();
+
+      if (this.stream) {
+        this.stream.getTracks().forEach((track) => track.stop());
         this.stream = null;
-        this.isInitialized = false;
-        this.intervalTimer = null;
-        this.currentResponseId = null;
-        
-        console.log(`📸 CameraManager initialized: session=${sessionId}, type=${assessmentType}`);
-        
-        // Bind methods to preserve context
-        this.captureImage = this.captureImage.bind(this);
-        this.uploadBatch = this.uploadBatch.bind(this);
-        this.cleanup = this.cleanup.bind(this);
+      }
+
+      if (this.videoElement) {
+        document.body.removeChild(this.videoElement);
+        this.videoElement = null;
+      }
+
+      if (this.canvasElement) {
+        document.body.removeChild(this.canvasElement);
+        this.canvasElement = null;
+      }
+
+      this.isInitialized = false;
+      // console.log("Camera cleanup completed");
+    } catch (error) {
+      console.error("Camera cleanup error:", error);
     }
+  }
 
-    async initialize() {
-        try {
-            await this.createVideoElements();
-            await this.requestCameraAccess();
-            this.setupCaptureMode();
-            this.isInitialized = true;
-        } catch (error) {
-            // Camera initialization failed
-            throw error;
-        }
-    }
-
-    async createVideoElements() {
-        // Create hidden video element for webcam stream
-        this.videoElement = document.createElement('video');
-        this.videoElement.style.display = 'none';
-        this.videoElement.autoplay = true;
-        this.videoElement.muted = true;
-        document.body.appendChild(this.videoElement);
-
-        // Create hidden canvas element for capturing frames
-        this.canvasElement = document.createElement('canvas');
-        this.canvasElement.style.display = 'none';
-        document.body.appendChild(this.canvasElement);
-    }
-
-    async requestCameraAccess() {
-        try {
-            const constraints = {
-                video: {
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 },
-                    facingMode: 'user'
-                }
-            };
-
-            // Apply resolution from settings if available
-            if (this.cameraSettings.resolution) {
-                const [width, height] = this.cameraSettings.resolution.split('x').map(Number);
-                constraints.video.width = { ideal: width };
-                constraints.video.height = { ideal: height };
-            }
-
-            this.stream = await navigator.mediaDevices.getUserMedia(constraints);
-            this.videoElement.srcObject = this.stream;
-        } catch (error) {
-            throw new Error('Camera access is required for assessment');
-        }
-    }
-
-    setupCaptureMode() {
-        if (!this.cameraSettings.recording_mode) {
-            return;
-        }
-
-        if (this.cameraSettings.recording_mode === 'INTERVAL' && this.cameraSettings.interval_seconds) {
-            this.startIntervalCapture();
-        }
-    }
-
-    startIntervalCapture() {
-        if (this.intervalTimer) {
-            return;
-        }
-
-        const intervalMs = this.cameraSettings.interval_seconds * 1000;
-        this.intervalTimer = setInterval(() => {
-            this.captureImage('interval');
-        }, intervalMs);
-    }
-
-    stopIntervalCapture() {
-        if (this.intervalTimer) {
-            clearInterval(this.intervalTimer);
-            this.intervalTimer = null;
-        }
-    }
-
-    async captureImage(trigger = 'MANUAL') {
-        if (!this.isInitialized || !this.videoElement.videoWidth) {
-            return;
-        }
-
-        if (!this.shouldCapture(trigger)) {
-            return;
-        }
-
-        try {
-            // Set canvas dimensions to match video
-            this.canvasElement.width = this.videoElement.videoWidth;
-            this.canvasElement.height = this.videoElement.videoHeight;
-
-            // Draw current video frame to canvas
-            const ctx = this.canvasElement.getContext('2d');
-            ctx.drawImage(this.videoElement, 0, 0);
-
-            // Convert canvas to blob
-            const blob = await new Promise(resolve => {
-                this.canvasElement.toBlob(resolve, 'image/jpeg', 0.8);
-            });
-
-            if (!blob) {
-                throw new Error('Failed to create image blob');
-            }
-
-            // IMMEDIATELY upload file to disk
-            const formData = new FormData();
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const filename = `capture_${timestamp}.jpg`;
-            
-            formData.append('image', blob, filename);
-            formData.append('trigger', trigger);
-
-            const response = await fetch(`/assessment/camera/upload-single/${this.sessionId}`, {
-                method: 'POST',
-                body: formData
-            });
-
-            const result = await response.json();
-
-            if (result.status !== 'OLKORECT') {
-                throw new Error(result.error || 'Upload failed');
-            }
-
-            // Store only metadata for later DB writing
-            const captureMetadata = {
-                capture_id: result.data.capture_id,
-                filename: result.data.filename,
-                timestamp: result.data.timestamp,
-                trigger: result.data.trigger,
-                file_size: blob.size
-            };
-
-            this.captures.push(captureMetadata);
-            return captureMetadata;
-
-        } catch (error) {
-            throw error;
-        }
-    }
-
-    shouldCapture(trigger) {
-        if (!this.cameraSettings.recording_mode) {
-            return false;
-        }
-
-        if (this.cameraSettings.recording_mode === 'INTERVAL') {
-            return trigger === 'interval';
-        } else if (this.cameraSettings.recording_mode === 'EVENT_DRIVEN') {
-            const triggerMap = {
-                'button_click': this.cameraSettings.capture_on_button_click,
-                'message_send': this.cameraSettings.capture_on_message_send,
-                'question_start': this.cameraSettings.capture_on_question_start
-            };
-            return triggerMap[trigger] === true;
-        }
-
-        return false;
-    }
-
-    setCurrentResponseId(responseId) {
-        this.currentResponseId = responseId;
-    }
-
-    // Trigger methods for specific events
-    async onButtonClick() {
-        return await this.captureImage('button_click');
-    }
-
-    async onMessageSend() {
-        return await this.captureImage('message_send');
-    }
-
-    async onQuestionStart() {
-        return await this.captureImage('question_start');
-    }
-
-
-    async uploadBatch(responseIds = null) {
-        if (this.captures.length === 0) {
-            return;
-        }
-
-        try {
-            // For new JSON structure: link all captures to single assessment record ID
-            const assessmentRecordId = responseIds && responseIds.length > 0 ? responseIds[0] : null;
-            const captureIds = this.captures.map(capture => capture.capture_id);
-            
-            // Send linking data to backend
-            const linkData = {
-                capture_ids: captureIds,
-                assessment_record_id: assessmentRecordId,
-                assessment_type: this.assessmentType
-            };
-
-            console.log(`🔗 CameraManager uploadBatch: ${this.assessmentType} linking ${captureIds.length} captures to record ${assessmentRecordId}`, linkData);
-
-            const linkResponse = await fetch(`/assessment/camera/link-responses/${this.sessionId}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(linkData)
-            });
-
-            const linkResult = await linkResponse.json();
-            console.log('🔗 Link result:', linkResult);
-            
-            if (linkResult.status !== 'OLKORECT') {
-                throw new Error(linkResult.error || 'Failed to link captures');
-            }
-            
-            // Small delay to ensure database transaction commits before redirect
-            await new Promise(resolve => setTimeout(resolve, 100));
-
-            const processedCount = this.captures.length;
-            this.captures = [];
-            return { status: 'OLKORECT', processed_count: processedCount };
-
-        } catch (error) {
-            throw error;
-        }
-    }
-
-    async cleanup() {
-        try {
-            if (this.captures.length > 0) {
-                await this.uploadBatch();
-            }
-            
-            this.stopIntervalCapture();
-            
-            if (this.stream) {
-                this.stream.getTracks().forEach(track => track.stop());
-                this.stream = null;
-            }
-            
-            if (this.videoElement) {
-                document.body.removeChild(this.videoElement);
-                this.videoElement = null;
-            }
-            
-            if (this.canvasElement) {
-                document.body.removeChild(this.canvasElement);
-                this.canvasElement = null;
-            }
-            
-            this.isInitialized = false;
-        } catch (error) {
-            // Silent cleanup - errors here are not critical
-        }
-    }
-
-    // Utility method to get capture statistics
-    getCaptureStats() {
-        return {
-            queueLength: this.captures.length,
-            totalSize: this.captures.reduce((sum, capture) => sum + capture.file_size, 0),
-            isInitialized: this.isInitialized,
-            currentResponseId: this.currentResponseId,
-            cameraSettings: this.cameraSettings
-        };
-    }
+  // Utility method to get camera status (captures handled by backend incrementally)
+  getCameraStatus() {
+    return {
+      isInitialized: this.isInitialized,
+      currentResponseId: this.currentResponseId,
+      assessmentId: this.assessmentId,
+      sessionId: this.sessionId,
+      assessmentType: this.assessmentType,
+      cameraSettings: this.cameraSettings,
+    };
+  }
 }
-
-// Export for use in other scripts
 window.CameraManager = CameraManager;

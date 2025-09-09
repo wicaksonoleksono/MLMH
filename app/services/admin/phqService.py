@@ -220,9 +220,9 @@ class PHQService:
     @staticmethod
     def update_scale(scale_id: int, updates: Dict[str, Any]) -> Dict[str, Any]:
         """Update PHQ scale"""
-        # 🚨 DETECT FIELD MAPPING BUG: is_active should never be a dict
+        #  DETECT FIELD MAPPING BUG: is_active should never be a dict
         if 'is_active' in updates and isinstance(updates['is_active'], dict):
-            print(f"🚨 BUG DETECTED: is_active is a dict! Frontend is sending wrong field mapping.")
+            print(f" BUG DETECTED: is_active is a dict! Frontend is sending wrong field mapping.")
             print(f"   is_active value: {updates['is_active']}")
             print(f"   This looks like scale_labels data!")
             # Remove the incorrect field
@@ -371,15 +371,15 @@ class PHQService:
     @staticmethod
     def update_settings(settings_id: int, updates: Dict[str, Any]) -> Dict[str, Any]:
         """Update PHQ settings"""
-        # 🚨 DETECT FIELD MAPPING BUG: is_active should never be None or dict
+        #  DETECT FIELD MAPPING BUG: is_active should never be None or dict
         if 'is_active' in updates:
             if updates['is_active'] is None:
-                print(f"🚨 BUG DETECTED: is_active is None! Frontend is sending wrong field mapping.")
+                print(f" BUG DETECTED: is_active is None! Frontend is sending wrong field mapping.")
                 print(f"   is_active value: {updates['is_active']}")
                 del updates['is_active']
                 print(f"   Removed is_active from updates to prevent crash.")
             elif isinstance(updates['is_active'], dict):
-                print(f"🚨 BUG DETECTED: is_active is a dict! Frontend is sending wrong field mapping.")
+                print(f" BUG DETECTED: is_active is a dict! Frontend is sending wrong field mapping.")
                 print(f"   is_active value: {updates['is_active']}")
                 del updates['is_active']
                 print(f"   Removed is_active from updates to prevent crash.")

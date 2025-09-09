@@ -253,6 +253,19 @@ class LLMChatService:
             conversation_record = LLMConversationService.get_conversation_by_id(session_id)
             conversation_ids = [conversation_record.id] if conversation_record else []
             
+            # AUTO-LINK CAMERA CAPTURES: Link unlinked captures to LLM conversation (backend approach like PHQ)
+            if conversation_record:
+                from ..assessment.cameraAssessmentService import CameraAssessmentService
+                try:
+                    link_result = CameraAssessmentService.link_incremental_captures_to_assessment(
+                        session_id=session_id,
+                        assessment_id=conversation_record.id,
+                        assessment_type='LLM'
+                    )
+                    print(f"Auto-linked LLM camera captures: {link_result}")
+                except Exception as e:
+                    print(f"LLM camera auto-linking failed: {e}")
+            
             completion_result = SessionService.complete_llm_and_get_next_step(session_id)
             return {
                 'status': 'success',

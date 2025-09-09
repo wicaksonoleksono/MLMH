@@ -14,7 +14,7 @@ phq_assessment_bp = Blueprint('phq_assessment', __name__, url_prefix='/assessmen
 @user_required
 @api_response
 def get_phq_questions(session_id):
-    """Get randomized PHQ questions per category for assessment"""
+    """Get randomized PHQ questions per category for assessment - CREATE EMPTY ASSESSMENT RECORD IMMEDIATELY"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
     if not session or str(session.user_id) != str(current_user.id):
@@ -32,8 +32,12 @@ def get_phq_questions(session_id):
         except Exception as e:
             return {"message": f"Failed to initialize PHQ questions: {str(e)}"}, 500
     
+    # CREATE EMPTY PHQ ASSESSMENT RECORD IMMEDIATELY (assessment-first approach)
+    phq_assessment_record = PHQResponseService.create_empty_assessment_record(session_id)
+    
     return {
         "session_id": session_id,
+        "assessment_id": phq_assessment_record.id,  # Return assessment_id for camera to use
         "questions": questions,
         "total_questions": len(questions),
         "instructions": questions[0]["instructions"] if questions else None
@@ -57,7 +61,7 @@ def submit_phq_responses(session_id):
         return {"message": "No responses provided"}, 400
     
     try:
-        # Save all responses at once in a single JSON structure
+        # Save all responses at once - no camera linking needed (assessment-first approach)
         phq_response_record = PHQResponseService.save_session_responses(
             session_id=session_id,
             responses_data=responses

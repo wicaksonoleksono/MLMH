@@ -4,6 +4,8 @@ from flask_login import current_user
 from ...decorators import api_response, user_required
 from ...services.sessionService import SessionService
 from ...services.assessment.cameraAssessmentService import CameraAssessmentService
+from ...db import get_session
+from ...model.assessment.sessions import CameraCapture
 
 camera_assessment_bp = Blueprint('camera_assessment', __name__, url_prefix='/assessment/camera')
 
@@ -23,24 +25,69 @@ def get_camera_settings(session_id):
 @user_required
 @api_response
 def upload_single_image(session_id):
-    """Upload single image immediately - hybrid approach"""
+    """Upload single image immediately - CLEAN BATCH APPROACH"""
     if not SessionService.validate_user_session(session_id, current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     return CameraAssessmentService.process_single_upload(session_id, request)
 
 
-@camera_assessment_bp.route('/link-responses/<session_id>', methods=['POST'])
+@camera_assessment_bp.route('/create-batch/<assessment_id>', methods=['POST'])
 @user_required
 @api_response
-def link_capture_responses(session_id):
-    """Link capture IDs to PHQ/LLM response IDs - hybrid approach"""
+def create_batch_capture(assessment_id):
+    """Create batch capture with assessment_id directly - ASSESSMENT-FIRST APPROACH"""
+    # Validate assessment belongs to current user (via session)
+    if not CameraAssessmentService.validate_assessment_access(assessment_id, current_user.id):
+        return {"message": "Assessment not found or access denied"}, 403
+    
+    data = request.get_json()
+    filenames = data.get('filenames', [])
+    capture_type = data.get('capture_type', 'PHQ')
+    capture_metadata = data.get('capture_metadata', {})
+    
+    # DEBUG: Log what we're receiving from frontend
+    print(f"BATCH ROUTE DEBUG:")
+    print(f"   assessment_id: {assessment_id}")
+    print(f"   raw data: {data}")
+    print(f"   filenames: {filenames} (type: {type(filenames)}, length: {len(filenames) if filenames else 0})")
+    print(f"   capture_type: {capture_type}")
+    print(f"   capture_metadata keys: {list(capture_metadata.keys()) if capture_metadata else []}")
+    
+    if not filenames:
+        return {"status": "SNAFU", "error": "No filenames provided"}, 400
+    
+    return CameraAssessmentService.create_batch_capture_with_assessment_id(
+        assessment_id=assessment_id,
+        filenames=filenames,
+        capture_type=capture_type,
+        capture_metadata=capture_metadata
+    )
+
+
+@camera_assessment_bp.route('/link-to-assessment/<session_id>', methods=['POST'])
+@user_required
+@api_response
+def link_captures_to_assessment(session_id):
+    """Link existing camera captures to assessment - INCREMENTAL APPROACH"""
     if not SessionService.validate_user_session(session_id, current_user.id):
         return {"message": "Session not found or access denied"}, 403
-    data = request.get_json()
-    print(f"CAMERA LINK REQUEST: session={session_id}, data={data}")
     
-    return CameraAssessmentService.link_captures_to_responses(session_id, request)
+    data = request.get_json()
+    assessment_id = data.get('assessment_id')
+    assessment_type = data.get('assessment_type')
+    
+    if not assessment_id or not assessment_type:
+        return {"status": "SNAFU", "error": "assessment_id and assessment_type required"}, 400
+        
+    if assessment_type not in ['PHQ', 'LLM']:
+        return {"status": "SNAFU", "error": "Invalid assessment type"}, 400
+    
+    return CameraAssessmentService.link_incremental_captures_to_assessment(
+        session_id=session_id,
+        assessment_id=assessment_id,
+        assessment_type=assessment_type
+    )
 
 
 @camera_assessment_bp.route('/captures/<session_id>', methods=['GET'])

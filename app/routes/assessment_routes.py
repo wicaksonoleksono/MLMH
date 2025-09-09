@@ -43,7 +43,7 @@ def start_assessment():
 
         # Create new session with improved system
         session = SessionService.create_session(current_user.id)
-        print(f"✅ Created new session {session.id}")
+        print(f"Created new session {session.id}")
         
         flash('Assessment baru berhasil dibuat!', 'success')
         return redirect(url_for('assessment.assessment_dashboard'))
@@ -57,7 +57,7 @@ def start_assessment():
             flash(error_message, 'error')
             return redirect(url_for('main.serve_index'))
     except Exception as e:
-        print(f"❌ Error creating session: {str(e)}")
+        print(f"Error creating session: {str(e)}")
         flash(str(e), 'error')
         return redirect(url_for('main.serve_index'))
 
@@ -91,8 +91,6 @@ def assessment_dashboard():
         except Exception as e:
             flash(f"Gagal mereset session: {str(e)}", "error")
             return redirect(url_for('assessment.assessment_dashboard'))
-
-    print(f"🏠 Dashboard - session_id={session.id}, status={session.status}, phq_completed={session.phq_completed_at}, llm_completed={session.llm_completed_at}, is_first={session.is_first}")
 
     # Direct redirect logic based on session flow
     if not session.consent_completed_at:
@@ -700,7 +698,7 @@ def upload_camera_captures():
         })
 
     except Exception as e:
-        print(f"❌ Error uploading captures: {str(e)}")
+        print(f"Error uploading captures: {str(e)}")
         return jsonify({"status": "SNAFU", "error": str(e)}), 500
 
 
@@ -733,7 +731,7 @@ def serve_camera_capture(filename):
         return send_from_directory(upload_path, filename)
         
     except Exception as e:
-        print(f"❌ Error serving capture: {str(e)}")
+        print(f"Error serving capture: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 

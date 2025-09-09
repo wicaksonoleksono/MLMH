@@ -25,16 +25,13 @@ class LLMSettings(BaseModel, StatusMixin):
             self.openai_api_key = EncryptionService.encrypt_api_key(plain_api_key)
         else:
             self.openai_api_key = ""
-    
     def get_api_key(self) -> str:
         """Decrypt and return API key for use"""
         if not self.openai_api_key:
             return ""
-        # If it's already a plain text key (migration scenario), return as-is
         if EncryptionService.is_encrypted(self.openai_api_key):
             return EncryptionService.decrypt_api_key(self.openai_api_key)
         else:
-            # Legacy plain text key - encrypt it on next save
             return self.openai_api_key
     
     def get_masked_api_key(self) -> str:
@@ -46,7 +43,6 @@ class LLMSettings(BaseModel, StatusMixin):
             plain_key = self.get_api_key()
             return EncryptionService.mask_api_key(plain_key)
         except:
-            # If decrypion fails, return a generic mask
             return "••••••••••••[encrypted]"
     def __repr__(self) -> str:
         masked_key = self.get_masked_api_key()[:12] + "..." if self.openai_api_key else "None"

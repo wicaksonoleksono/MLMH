@@ -15,13 +15,14 @@ from langchain_core.runnables import ConfigurableFieldSpec
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI
 from langchain_openai.chat_models.base import ChatOpenAI
-from pydantic import BaseModel, Field
 from typing import List
 
 
-class InMemoryHistory(BaseChatMessageHistory, BaseModel):
+class InMemoryHistory(BaseChatMessageHistory):
     """In memory implementation of chat message history."""
-    messages: List[BaseMessage] = Field(default_factory=list)
+    
+    def __init__(self):
+        self.messages: List[BaseMessage] = []
 
     def add_messages(self, messages: List[BaseMessage]) -> None:
         """Add a list of messages to the store"""

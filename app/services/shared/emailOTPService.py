@@ -95,6 +95,9 @@ class EmailOTPService:
             user.email_otp_code = None
             user.email_otp_expires_at = None
             
+            # Cancel scheduled deletion since email is now verified
+            user.deletion_scheduled_at = None
+            
             db.commit()
             
             return {

@@ -98,4 +98,20 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     register_commands(app)
+    
+    # Initialize APScheduler for background tasks
+    from .services.schedulerService import init_scheduler
+    init_scheduler(app)
+    
+    # Error handlers
+    @app.errorhandler(403)
+    def forbidden_error(error):
+        from flask import render_template
+        return render_template('errors/403.html'), 403
+    
+    @app.errorhandler(404)
+    def not_found_error(error):
+        from flask import render_template
+        return render_template('errors/404.html'), 404
+    
     return app

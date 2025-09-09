@@ -140,6 +140,16 @@ def register():
             emergency_contact=data.get('emergency_contact') or None
         )
         
+        # Schedule user for deletion in 12 hours if email not verified
+        if user.email:
+            from datetime import datetime, timedelta
+            from ..db import get_session
+            with get_session() as db:
+                # Refresh user object in current session
+                user = db.merge(user)
+                user.deletion_scheduled_at = datetime.utcnow() + timedelta(hours=12)
+                db.commit()
+        
         # Send OTP email if user provided email
         if user.email:
             try:

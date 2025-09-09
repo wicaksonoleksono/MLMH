@@ -31,6 +31,7 @@ class User(BaseModel, UserMixin, StatusMixin):
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     email_otp_code: Mapped[Optional[str]] = mapped_column(String(6))
     email_otp_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    deletion_scheduled_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     
     # Foreign key to UserType
     user_type_id: Mapped[int] = mapped_column(ForeignKey("user_type.id"), nullable=False)

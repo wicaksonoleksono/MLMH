@@ -75,6 +75,11 @@ document.addEventListener('DOMContentLoaded', function() {
   function updateRegistrationButton() {
     const submitBtn = document.querySelector('button[type="submit"]');
     const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+    const confirmPassword = document.getElementById('confirm_password').value;
+    
+    // Check if passwords match
+    const passwordsMatch = password === confirmPassword && password.length > 0;
     
     // Check if all required fields are filled
     const requiredFields = ['username', 'email', 'phone', 'password', 'confirm_password', 'age', 'gender', 'educational_level', 'cultural_background'];
@@ -88,8 +93,8 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }
     
-    // Button is enabled only when username is valid AND all fields are filled
-    if (username.length >= 3 && isUsernameAvailable && allFieldsFilled) {
+    // Button is enabled only when username is valid AND all fields are filled AND passwords match
+    if (username.length >= 3 && isUsernameAvailable && allFieldsFilled && passwordsMatch) {
       submitBtn.disabled = false;
       submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
     } else {
@@ -141,6 +146,49 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Initialize reusable OTP component
   new OTPComponent();
+
+  // Password confirmation validation
+  const passwordField = document.getElementById('password');
+  const confirmPasswordField = document.getElementById('confirm_password');
+  
+  function validatePasswordMatch() {
+    const password = passwordField.value;
+    const confirmPassword = confirmPasswordField.value;
+    const confirmPasswordDiv = confirmPasswordField.parentNode;
+    
+    // Remove existing status messages
+    const existingStatus = confirmPasswordDiv.querySelector('.password-status');
+    if (existingStatus) {
+      existingStatus.remove();
+    }
+    
+    if (confirmPassword.length > 0) {
+      const statusDiv = document.createElement('div');
+      statusDiv.className = 'password-status mt-1 text-xs';
+      
+      if (password === confirmPassword) {
+        statusDiv.className += ' text-green-600';
+        statusDiv.textContent = '✓ Kata sandi cocok';
+        confirmPasswordField.className = confirmPasswordField.className.replace(/(border-red-300|border-gray-300)/, 'border-green-300');
+      } else {
+        statusDiv.className += ' text-red-600';
+        statusDiv.textContent = '✗ Kata sandi tidak cocok';
+        confirmPasswordField.className = confirmPasswordField.className.replace(/(border-green-300|border-gray-300)/, 'border-red-300');
+      }
+      
+      confirmPasswordDiv.appendChild(statusDiv);
+    } else {
+      // Reset border when field is empty
+      confirmPasswordField.className = confirmPasswordField.className.replace(/(border-green-300|border-red-300)/, 'border-gray-300');
+    }
+    
+    updateRegistrationButton();
+  }
+  
+  if (passwordField && confirmPasswordField) {
+    passwordField.addEventListener('input', validatePasswordMatch);
+    confirmPasswordField.addEventListener('input', validatePasswordMatch);
+  }
 
   // Add event listeners to all required fields to update button state
   const requiredFields = ['username', 'email', 'phone', 'password', 'confirm_password', 'age', 'gender', 'educational_level', 'cultural_background'];

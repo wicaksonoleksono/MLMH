@@ -31,6 +31,12 @@ class Config:
     RESCHEDULE_URL: str = os.getenv('RESCHEDULE_URL', 'google.com') 
     CANCEL_URL: str = os.getenv('CANCEL_URL', 'google.com')
     SESSION_2_URL: str = os.getenv('SESSION_2_URL')
+    
+    # APScheduler Configuration
+    OTP_CLEANUP_INTERVAL_HOURS: int = int(os.getenv('OTP_CLEANUP_INTERVAL_HOURS', '1'))
+    SESMAN_ELI_DAYS: int = int(os.getenv('SESMAN_ELI_DAYS', '14'))
+    SESMAN_NOTIFICATION_HOUR: int = int(os.getenv('SESMAN_NOTIFICATION_HOUR', '9'))
+    SCHEDULER_TIMEZONE: str = os.getenv('SCHEDULER_TIMEZONE', 'Asia/Jakarta')
     SQLALCHEMY_DATABASE_URI = (
         os.getenv('SQLALCHEMY_DATABASE_URI') or
         f"postgresql://{os.getenv('DB_USERNAME') or os.getenv('POSTGRES_USER')}:"

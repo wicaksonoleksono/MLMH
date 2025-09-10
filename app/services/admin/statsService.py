@@ -58,15 +58,27 @@ class StatsService:
             }
     
     @staticmethod
-    def get_user_sessions_preview():
-        """Get user sessions preview: UserID | Username | Session1 | Session2 | PHQ-Sum"""
+    def get_user_sessions_preview(page=1, per_page=20):
+        """Get paginated user sessions preview: UserID | Username | Session1 | Session2 | PHQ-Sum"""
         try:
             with get_session() as db:
-                # Get regular users only
-                users = db.query(User).join(UserType).filter(UserType.name == 'user').all()
+                # Build query with pagination
+                users_query = db.query(User).join(UserType).filter(UserType.name == 'user').order_by(User.id)
+                
+                # Get total count and users for this page
+                total_users = users_query.count()
+                offset = (page - 1) * per_page
+                users_on_page = users_query.offset(offset).limit(per_page).all()
+                
+                # Calculate pagination info
+                has_prev = page > 1
+                has_next = offset + per_page < total_users
+                pages = (total_users + per_page - 1) // per_page  # Ceiling division
+                prev_num = page - 1 if has_prev else None
+                next_num = page + 1 if has_next else None
                 
                 preview_data = []
-                for user in users:
+                for user in users_on_page:
                     # Get user's sessions
                     sessions = db.query(AssessmentSession).filter(
                         AssessmentSession.user_id == user.id
@@ -97,7 +109,7 @@ class StatsService:
                                 response_data.get('response_value', 0) 
                                 for response_data in session2_response_record.responses.values()
                             )
-                    
+                
                     # Just rawdog the backend status values
                     session1_status = sessions[0].status if len(sessions) >= 1 else "Not done"
                     session2_status = sessions[1].status if len(sessions) >= 2 else "Not done"
@@ -113,10 +125,78 @@ class StatsService:
                         'session2_id': sessions[1].id if len(sessions) >= 2 else None
                     })
                 
-                return preview_data
+                # Create pagination object manually
+                from collections import namedtuple
+                PageObj = namedtuple('PageObj', ['items', 'page', 'pages', 'per_page', 'total', 'has_prev', 'has_next', 'prev_num', 'next_num'])
+                page_obj = PageObj(
+                    items=preview_data,
+                    page=page,
+                    pages=pages,
+                    per_page=per_page,
+                    total=total_users,
+                    has_prev=has_prev,
+                    has_next=has_next,
+                    prev_num=prev_num,
+                    next_num=next_num
+                )
+                
+                return page_obj
         except Exception as e:
-            # Return empty list if there's an error
-            return []
+            # Log the error and return empty pagination object
+            print(f"[ERROR] StatsService.get_user_sessions_preview failed: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            from collections import namedtuple
+            EmptyPage = namedtuple('EmptyPage', ['items', 'page', 'pages', 'per_page', 'total', 'has_prev', 'has_next', 'prev_num', 'next_num'])
+            return EmptyPage([], 1, 0, per_page, 0, False, False, None, None)
+    
+    @staticmethod
+    def get_all_user_sessions_for_export():
+        """Get ALL user sessions for bulk export (no pagination)"""
+        try:
+            with get_session() as db:
+                # Get regular users only
+                users = db.query(User).join(UserType).filter(UserType.name == 'user').all()
+                
+                completed_users = []  # Both sessions completed
+                incomplete_users = []  # Only session 1 completed
+                
+                for user in users:
+                    # Get user's sessions
+                    sessions = db.query(AssessmentSession).filter(
+                        AssessmentSession.user_id == user.id
+                    ).order_by(AssessmentSession.created_at).all()
+                    
+                    # Check completion status
+                    session1_complete = len(sessions) >= 1 and sessions[0].status == 'COMPLETED'
+                    session2_complete = len(sessions) >= 2 and sessions[1].status == 'COMPLETED'
+                    
+                    if session1_complete and session2_complete:
+                        completed_users.append({
+                            'user': user,
+                            'sessions': sessions,
+                            'type': 'completed'
+                        })
+                    elif session1_complete:
+                        incomplete_users.append({
+                            'user': user,
+                            'sessions': sessions,
+                            'type': 'incomplete'
+                        })
+                
+                return {
+                    'completed': completed_users,
+                    'incomplete': incomplete_users,
+                    'total_completed': len(completed_users),
+                    'total_incomplete': len(incomplete_users)
+                }
+        except Exception as e:
+            return {
+                'completed': [],
+                'incomplete': [],
+                'total_completed': 0,
+                'total_incomplete': 0
+            }
     
     @staticmethod
     def get_phq_statistics():

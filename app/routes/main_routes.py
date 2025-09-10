@@ -13,12 +13,7 @@ def serve_index():
     """Main dashboard - admin or user based on role."""
     if current_user.is_authenticated:
         if current_user.is_admin():
-            stats = StatsService.get_dashboard_stats()
-            user_sessions = StatsService.get_user_sessions_preview()
-            phq_stats = StatsService.get_phq_statistics()
-            session_stats = StatsService.get_session_statistics()
-            user_stats = StatsService.get_user_statistics()
-            return render_template("admin/dashboard.html", user=current_user, stats=stats, user_sessions=user_sessions, phq_stats=phq_stats, session_stats=session_stats, user_stats=user_stats)
+            return redirect(url_for('admin.dashboard'))
         else:
             return render_template("user/dashboard.html", user=current_user)
     return redirect(url_for('main.auth_page'))

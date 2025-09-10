@@ -8,114 +8,223 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width" />
     <meta http-equiv="x-ua-compatible" content="ie=edge" />
-    <title>Kode Verifikasi Email</title>
-
-    <style>
-      body {
-        font-family: Arial, sans-serif;
-        margin: 0;
-        padding: 0;
-        background-color: #f4f4f4;
-      }
-      .container {
-        max-width: 600px;
-        margin: 0 auto;
-        background-color: #ffffff;
-      }
-      .header {
-        background-color: #0f766e;
-        color: white;
-        text-align: center;
-        padding: 30px 20px;
-      }
-      .content {
-        padding: 40px 30px;
-      }
-      .otp-box {
-        background-color: #f8f9fa;
-        border: 2px dashed #0f766e;
-        border-radius: 8px;
-        text-align: center;
-        padding: 30px;
-        margin: 30px 0;
-      }
-      .otp-code {
-        font-size: 32px;
-        font-weight: bold;
-        color: #0f766e;
-        letter-spacing: 4px;
-        margin: 10px 0;
-      }
-      .footer {
-        background-color: #f8f9fa;
-        text-align: center;
-        padding: 20px;
-        color: #666;
-        font-size: 12px;
-      }
-      .warning {
-        background-color: #fff3cd;
-        border-left: 4px solid #ffc107;
-        padding: 15px;
-        margin: 20px 0;
-      }
-    </style>
+    <title>Kode Verifikasi Email - Mental Health Assessment</title>
+    <!--[if mso]>
+      <xml>
+        <o:OfficeDocumentSettings>
+          <o:AllowPNG />
+          <o:PixelsPerInch>96</o:PixelsPerInch>
+        </o:OfficeDocumentSettings>
+      </xml>
+    <![endif]-->
   </head>
-
-  <body>
-    <div class="container">
-      <!-- Header -->
-      <div class="header">
-        <h1>Mental Health Assessment</h1>
-        <p>Verifikasi Email Anda</p>
-      </div>
-
-      <!-- Content -->
-      <div class="content">
-        <h2>Halo {{ user_name }}!</h2>
-
-        <p>
-          Terima kasih telah mendaftar di platform Mental Health Assessment.
-          Untuk melengkapi pendaftaran Anda, masukkan kode verifikasi berikut:
-        </p>
-
-        <!-- OTP Box -->
-        <div class="otp-box">
-          <p style="margin: 0; color: #666; font-size: 14px">
-            Kode Verifikasi Anda:
-          </p>
-          <div class="otp-code">{{ otp_code }}</div>
-          <p style="margin: 0; color: #666; font-size: 12px">
-            Masukkan kode ini di halaman verifikasi
-          </p>
-        </div>
-
-        <!-- Warning -->
-        <div class="warning">
-          <strong>Penting:</strong>
-          <ul style="margin: 10px 0; padding-left: 20px">
-            <li>Kode ini akan kedaluwarsa dalam {{ expiry_hours }} jam</li>
-            <li>Kode hanya dapat digunakan sekali</li>
-            <li>Jangan bagikan kode ini kepada siapa pun</li>
-          </ul>
-        </div>
-
-        <p>
-          Jika Anda tidak mendaftar akun di platform kami, silakan abaikan email
-          ini.
-        </p>
-
-        <p style="margin-top: 30px">
-          Salam,<br />
-          <strong>Anisa Kesehatan Mental.</strong>
-        </p>
-      </div>
-
-      <!-- Footer -->
-      <div class="footer">
-        <p>Email ini dikirim otomatis, mohon jangan membalas email ini.</p>
-        <p>&copy; 2025 Anisa Kesehatan Mental. All rights reserved.</p>
-      </div>
+  <body
+    style="
+      margin: 0;
+      padding: 0;
+      background: #fdfaf3;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #333333;
+    "
+  >
+    <!-- Preheader (hidden) -->
+    <div
+      style="
+        display: none;
+        max-height: 0;
+        overflow: hidden;
+        opacity: 0;
+        mso-hide: all;
+      "
+    >
+      Kode verifikasi email untuk akun Mental Health Assessment Anda.
     </div>
+
+    <table
+      role="presentation"
+      width="100%"
+      cellpadding="0"
+      cellspacing="0"
+      border="0"
+    >
+      <tr>
+        <td align="center" style="padding: 24px">
+          <table
+            role="presentation"
+            width="600"
+            cellpadding="0"
+            cellspacing="0"
+            border="0"
+            style="
+              width: 600px;
+              max-width: 100%;
+              background: #ffffff;
+              border: 1px solid #e6e2d3;
+              border-radius: 8px;
+            "
+          >
+            <!-- Header -->
+            <tr>
+              <td
+                style="
+                  background: #f5f1e6;
+                  border-bottom: 1px solid #e6e2d3;
+                  padding: 20px;
+                  text-align: center;
+                "
+              >
+                <div
+                  style="
+                    font-size: 20px;
+                    line-height: 26px;
+                    font-weight: 700;
+                    color: #4a3f35;
+                  "
+                >
+                  🧠 Mental Health Assessment
+                </div>
+                <div
+                  style="
+                    font-size: 16px;
+                    line-height: 22px;
+                    color: #6b6156;
+                    margin-top: 6px;
+                    font-weight: 600;
+                  "
+                >
+                  Verifikasi Email Anda
+                </div>
+              </td>
+            </tr>
+
+            <!-- Body -->
+            <tr>
+              <td style="padding: 24px">
+                <div style="text-align: center; margin-bottom: 18px">
+                  <div
+                    style="
+                      font-size: 18px;
+                      line-height: 24px;
+                      font-weight: 700;
+                      color: #333333;
+                    "
+                  >
+                    Selamat Datang, {{ user_name }}!
+                  </div>
+                  <div
+                    style="
+                      font-size: 14px;
+                      line-height: 20px;
+                      color: #555555;
+                      margin-top: 6px;
+                    "
+                  >
+                    Terima kasih telah mendaftar di platform Mental Health Assessment.
+                    Untuk melengkapi pendaftaran Anda, masukkan kode verifikasi berikut:
+                  </div>
+                </div>
+
+                <!-- OTP Box -->
+                <div
+                  style="
+                    background: #f5f1e6;
+                    border: 2px dashed #d4a373;
+                    border-radius: 8px;
+                    text-align: center;
+                    padding: 30px;
+                    margin: 30px 0;
+                  "
+                >
+                  <div style="font-size: 14px; color: #6b6156; margin-bottom: 8px">
+                    Kode Verifikasi Anda:
+                  </div>
+                  <div
+                    style="
+                      font-size: 36px;
+                      font-weight: bold;
+                      color: #d4a373;
+                      letter-spacing: 6px;
+                      margin: 10px 0;
+                      font-family: 'Courier New', monospace;
+                    "
+                  >
+                    {{ otp_code }}
+                  </div>
+                  <div style="font-size: 12px; color: #6b6156">
+                    Masukkan kode ini di halaman verifikasi
+                  </div>
+                </div>
+
+                <!-- Warning Box -->
+                <div
+                  style="
+                    margin: 20px 0;
+                    padding: 16px;
+                    background: #fdfaf3;
+                    border: 1px solid #e6e2d3;
+                    border-radius: 6px;
+                    font-size: 14px;
+                    line-height: 20px;
+                    color: #444444;
+                  "
+                >
+                  <div style="font-weight: 700; color: #333333; margin-bottom: 8px">
+                    ⏰ Penting:
+                  </div>
+                  <ul style="margin: 0; padding-left: 16px">
+                    <li>Kode ini akan kedaluwarsa dalam <strong>{{ expiry_hours }} jam</strong></li>
+                    <li>Kode hanya dapat digunakan sekali</li>
+                    <li>Jangan bagikan kode ini kepada siapa pun</li>
+                  </ul>
+                </div>
+
+                <div
+                  style="
+                    text-align: center;
+                    font-size: 13px;
+                    color: #555555;
+                    margin-top: 24px;
+                  "
+                >
+                  <p>
+                    Jika Anda tidak mendaftar akun di platform kami, silakan abaikan email ini.
+                  </p>
+                </div>
+
+                <div
+                  style="
+                    text-align: center;
+                    margin-top: 30px;
+                    font-size: 14px;
+                    color: #444444;
+                  "
+                >
+                  Salam,<br />
+                  <strong style="color: #4a3f35;">Tim Mental Health Assessment</strong>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td
+                style="
+                  background: #f5f1e6;
+                  border-top: 1px solid #e6e2d3;
+                  padding: 16px;
+                  text-align: center;
+                  font-size: 12px;
+                  line-height: 18px;
+                  color: #777777;
+                "
+              >
+                Email ini dikirim otomatis, mohon jangan membalas email ini.<br />
+                © 2024 Mental Health Assessment System. Semua hak dilindungi.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
   </body>
 </html>

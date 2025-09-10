@@ -368,77 +368,122 @@ Note: This export contains sensitive mental health data. Handle with appropriate
 
     @staticmethod
     def export_sessions_by_session_number() -> BytesIO:
-        """Export all sessions organized by session number into folders"""
+        """Export all sessions organized by completion status (completed/incomplete users)"""
         zip_buffer = BytesIO()
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-            # Get all completed sessions
-            with get_session() as db:
-                sessions = db.query(AssessmentSession).filter_by(status='COMPLETED').all()
+            # Use StatsService to get organized user data
+            from .statsService import StatsService
+            user_data = StatsService.get_all_user_sessions_for_export()
+            
+            session_info_list = []
+            completed_count = 0
+            incomplete_count = 0
+            
+            # Process completed users (both sessions completed)
+            for user_info in user_data['completed']:
+                user = user_info['user']
+                sessions = user_info['sessions']
                 
-                session_info_list = []
-                session1_count = 0
-                session2_count = 0
-                
-                for session in sessions:
-                    try:
+                try:
+                    username = user.uname
+                    user_id = user.id
+                    clean_username = "".join(c for c in username if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                    clean_username = clean_username.replace(' ', '_')
+                    
+                    # Export each session for this completed user
+                    for session in sessions:
                         session_zip = ExportService.export_session(session.id)
-                        # Get user info
-                        if session.user:
-                            username = session.user.uname
-                            user_id = session.user_id
-                            session_number = session.session_number
-                            # Create a clean filename-safe version of the username
-                            clean_username = "".join(c for c in username if c.isalnum() or c in (' ', '-', '_')).rstrip()
-                            clean_username = clean_username.replace(' ', '_')
-                            filename = f'user_{user_id}_{clean_username}_session{session_number}_{session.id}_{timestamp}.zip'
-                            
-                            # Organize by session number
-                            if session_number == 1:
-                                folder_path = f'session_1/{filename}'
-                                session1_count += 1
-                            elif session_number == 2:
-                                folder_path = f'session_2/{filename}'
-                                session2_count += 1
-                            else:
-                                folder_path = filename  # Fallback
+                        filename = f'user_{user_id}_{clean_username}_session{session.session_number}_{session.id}_{timestamp}.zip'
+                        folder_path = f'completed/{filename}'
+                        
+                        session_info_list.append({
+                            'user_id': user_id,
+                            'username': username,
+                            'session_id': session.id,
+                            'session_number': session.session_number,
+                            'filename': filename,
+                            'folder_path': folder_path,
+                            'completion_status': 'completed'
+                        })
+                        
+                        zip_file.writestr(folder_path, session_zip.getvalue())
+                    
+                    completed_count += 1
+                    
+                except Exception as e:
+                    error_msg = f"Failed to export completed user {user.id} sessions: {str(e)}"
+                    zip_file.writestr(f'completed/ERROR_user_{user.id}.txt', error_msg)
+            
+            # Process incomplete users (only session 1 completed)
+            for user_info in user_data['incomplete']:
+                user = user_info['user']
+                sessions = user_info['sessions']
+                
+                try:
+                    username = user.uname
+                    user_id = user.id
+                    clean_username = "".join(c for c in username if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                    clean_username = clean_username.replace(' ', '_')
+                    
+                    # Export session 1 for this incomplete user
+                    for session in sessions:
+                        if session.status == 'COMPLETED':  # Only export completed sessions
+                            session_zip = ExportService.export_session(session.id)
+                            filename = f'user_{user_id}_{clean_username}_session{session.session_number}_{session.id}_{timestamp}.zip'
+                            folder_path = f'incomplete/{filename}'
                             
                             session_info_list.append({
                                 'user_id': user_id,
                                 'username': username,
                                 'session_id': session.id,
-                                'session_number': session_number,
+                                'session_number': session.session_number,
                                 'filename': filename,
-                                'folder_path': folder_path
+                                'folder_path': folder_path,
+                                'completion_status': 'incomplete'
                             })
                             
                             zip_file.writestr(folder_path, session_zip.getvalue())
-                        else:
-                            # Handle sessions without user info
-                            filename = f'session_{session.id}_{timestamp}.zip'
-                            folder_path = f'unknown_user/{filename}'
-                            session_info_list.append({
-                                'user_id': 'Unknown',
-                                'username': 'Unknown',
-                                'session_id': session.id,
-                                'session_number': 'Unknown',
-                                'filename': filename,
-                                'folder_path': folder_path
-                            })
-                            zip_file.writestr(folder_path, session_zip.getvalue())
-                            
-                    except Exception as e:
-                        # Add error log for failed exports
-                        error_msg = f"Failed to export session {session.id}: {str(e)}"
-                        zip_file.writestr(f'ERROR_session_{session.id}.txt', error_msg)
-                
-                # Add summary
-                summary = f"All Sessions Export Summary\n========================\nExported: {len(sessions)} sessions\nGenerated: {datetime.now().isoformat()}\n\nSession 1: {session1_count} sessions\nSession 2: {session2_count} sessions\n\nSession Details:\n"
-                for info in session_info_list:
-                    summary += f"- User {info['user_id']} ({info['username']}) - Session {info['session_number']} - File: {info['folder_path']}\n"
-                
-                zip_file.writestr('all_sessions_summary.txt', summary)
+                    
+                    incomplete_count += 1
+                    
+                except Exception as e:
+                    error_msg = f"Failed to export incomplete user {user.id} sessions: {str(e)}"
+                    zip_file.writestr(f'incomplete/ERROR_user_{user.id}.txt', error_msg)
+            
+            # Add comprehensive summary
+            summary = f"""All Sessions Export Summary (Completion-Based)
+=============================================
+Exported: {len(session_info_list)} sessions from {completed_count + incomplete_count} users
+Generated: {datetime.now().isoformat()}
+
+Organization:
+- Completed Users: {completed_count} users (both Session 1 & 2 completed)
+- Incomplete Users: {incomplete_count} users (only Session 1 completed)
+
+Total Sessions by Number:
+- Session 1: {len([s for s in session_info_list if s['session_number'] == 1])} sessions
+- Session 2: {len([s for s in session_info_list if s['session_number'] == 2])} sessions
+
+Session Details:
+"""
+            
+            # Group by completion status for better readability
+            completed_sessions = [s for s in session_info_list if s['completion_status'] == 'completed']
+            incomplete_sessions = [s for s in session_info_list if s['completion_status'] == 'incomplete']
+            
+            if completed_sessions:
+                summary += "\nCOMPLETED USERS (Both Sessions):\n" + "-" * 35 + "\n"
+                for info in completed_sessions:
+                    summary += f"- User {info['user_id']} ({info['username']}) - Session {info['session_number']} - {info['filename']}\n"
+            
+            if incomplete_sessions:
+                summary += "\nINCOMPLETE USERS (Session 1 Only):\n" + "-" * 36 + "\n"
+                for info in incomplete_sessions:
+                    summary += f"- User {info['user_id']} ({info['username']}) - Session {info['session_number']} - {info['filename']}\n"
+            
+            zip_file.writestr('export_summary.txt', summary)
         
         zip_buffer.seek(0)
         return zip_buffer
@@ -469,6 +514,6 @@ Note: This export contains sensitive mental health data. Handle with appropriate
 
     @staticmethod
     def get_all_sessions_export_filename() -> str:
-        """Generate all sessions export filename"""
+        """Generate filename for all sessions export (completion-based organization)"""
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        return f'all_sessions_export_{timestamp}.zip'
+        return f'sessions_by_completion_status_{timestamp}.zip'

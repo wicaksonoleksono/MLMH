@@ -11,11 +11,20 @@ admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 @admin_required
 @raw_response
 def dashboard():
-    """Admin dashboard"""
+    """Admin dashboard with pagination"""
+    from flask import request
     from ..services.admin.statsService import StatsService
     
+    # Get pagination parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 15, type=int)  # Default 15 per page
+    
+    # Limit per_page options
+    if per_page not in [10, 15, 20]:
+        per_page = 15
+    
     stats = StatsService.get_dashboard_stats()
-    user_sessions = StatsService.get_user_sessions_preview()
+    user_sessions_page = StatsService.get_user_sessions_preview(page=page, per_page=per_page)
     phq_stats = StatsService.get_phq_statistics()
     session_stats = StatsService.get_session_statistics()
     user_stats = StatsService.get_user_statistics()
@@ -23,7 +32,7 @@ def dashboard():
     return render_template('admin/dashboard.html', 
                          user=current_user,
                          stats=stats,
-                         user_sessions=user_sessions,
+                         user_sessions_page=user_sessions_page,
                          phq_stats=phq_stats,
                          session_stats=session_stats,
                          user_stats=user_stats)

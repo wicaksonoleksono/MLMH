@@ -2,6 +2,8 @@ from flask import Blueprint, request, redirect, url_for, jsonify, render_templat
 from flask_login import login_user, logout_user, login_required, current_user
 from ..services.shared.usManService import UserManagerService
 from ..services.shared.emailOTPService import EmailOTPService
+from ..services.shared.passwordResetService import PasswordResetService
+from ..services.shared.autoLoginService import AutoLoginService
 from ..decorators import raw_response, api_response
 from ..utils.jwt_utils import JWTManager
 
@@ -346,3 +348,173 @@ def cleanup_expired_users():
         "deleted_users": result['deleted_users'],
         "cleaned_otps": result['cleaned_otps']
     }
+
+
+@auth_bp.route('/forgot-password', methods=['GET', 'POST'])
+@raw_response
+def forgot_password():
+    """Request password reset magic link."""
+    if request.method == 'GET':
+        if current_user.is_authenticated:
+            return redirect(url_for('main.serve_index'))
+        return render_template('auth/forgot_password.html')
+    
+    # Handle POST request
+    if request.is_json:
+        data = request.get_json()
+        email = data.get('email', '').strip().lower()
+    else:
+        email = request.form.get('email', '').strip().lower()
+    
+    if not email:
+        message = "Email harus diisi."
+        if request.is_json:
+            return {"status": "error", "message": message}, 400
+        flash(message, 'error')
+        return render_template('auth/forgot_password.html'), 400
+    
+    # Check rate limiting
+    if not PasswordResetService.can_request_reset(email):
+        message = "Silakan tunggu 5 menit sebelum meminta reset password lagi."
+        if request.is_json:
+            return {"status": "error", "message": message}, 429
+        flash(message, 'error')
+        return render_template('auth/forgot_password.html'), 429
+    
+    # Send reset email (always returns success for security)
+    result = PasswordResetService.send_password_reset_email(email)
+    
+    success_message = "Jika email terdaftar, link reset password telah dikirim. Silakan cek inbox Anda."
+    
+    if request.is_json:
+        return {"status": "success", "message": success_message}
+    
+    flash(success_message, 'success')
+    return render_template('auth/forgot_password.html')
+
+
+@auth_bp.route('/reset-password', methods=['GET', 'POST'])
+@raw_response
+def reset_password():
+    """Reset password using magic link token."""
+    token = request.args.get('token') or request.form.get('token')
+    
+    if not token:
+        flash('Invalid atau missing reset token.', 'error')
+        return redirect(url_for('auth.forgot_password'))
+    
+    if request.method == 'GET':
+        # Validate token and show reset form
+        result = PasswordResetService.validate_reset_token(token)
+        
+        if result['status'] == 'error':
+            flash(result['message'], 'error')
+            return redirect(url_for('auth.forgot_password'))
+        
+        return render_template('auth/reset_password.html', 
+                             token=token, 
+                             username=result['username'])
+    
+    # Handle POST request
+    if request.is_json:
+        data = request.get_json()
+        new_password = data.get('new_password')
+        confirm_password = data.get('confirm_password')
+    else:
+        new_password = request.form.get('new_password')
+        confirm_password = request.form.get('confirm_password')
+    
+    if not new_password or not confirm_password:
+        message = "Semua field harus diisi."
+        if request.is_json:
+            return {"status": "error", "message": message}, 400
+        flash(message, 'error')
+        return render_template('auth/reset_password.html', token=token), 400
+    
+    if new_password != confirm_password:
+        message = "Password dan konfirmasi password tidak cocok."
+        if request.is_json:
+            return {"status": "error", "message": message}, 400
+        flash(message, 'error')
+        return render_template('auth/reset_password.html', token=token), 400
+    
+    if len(new_password) < 6:
+        message = "Password harus minimal 6 karakter."
+        if request.is_json:
+            return {"status": "error", "message": message}, 400
+        flash(message, 'error')
+        return render_template('auth/reset_password.html', token=token), 400
+    
+    # Reset password
+    result = PasswordResetService.reset_password(token, new_password)
+    
+    if result['status'] == 'success':
+        # Check if auto-login URL was generated
+        auto_login_url = result.get('auto_login_url')
+        
+        if request.is_json:
+            return {
+                "status": "success", 
+                "message": "Password berhasil direset!",
+                "auto_login_url": auto_login_url
+            }
+        
+        # For web requests, show success page with auto-login option
+        if auto_login_url:
+            return render_template('auth/password_reset_success.html', 
+                                 username=result['username'],
+                                 auto_login_url=auto_login_url)
+        else:
+            flash("Password berhasil direset! Silakan login dengan password baru Anda.", 'success')
+            return redirect(url_for('auth.login'))
+    else:
+        if request.is_json:
+            return {"status": "error", "message": result['message']}, 400
+        flash(result['message'], 'error')
+        return redirect(url_for('auth.forgot_password'))
+
+
+@auth_bp.route('/auto-login')
+@raw_response
+def auto_login():
+    """Auto-login using JWT token from email links."""
+    token = request.args.get('token')
+    custom_redirect = request.args.get('redirect')
+    
+    if not token:
+        flash('Link auto-login tidak valid atau sudah expired.', 'error')
+        return redirect(url_for('auth.login'))
+    
+    # Validate auto-login token
+    validation_result = AutoLoginService.validate_auto_login_token(token)
+    
+    if not validation_result['valid']:
+        flash(f'Auto-login gagal: {validation_result["error"]}', 'error')
+        return redirect(url_for('auth.login'))
+    
+    user_data = validation_result['user_data']
+    
+    # Create SimpleUser for Flask-Login session support
+    from ..utils.auth_models import SimpleUser
+    simple_user = SimpleUser(user_data)
+    login_user(simple_user)
+    
+    # Determine redirect URL
+    redirect_to = custom_redirect or validation_result['redirect_to']
+    if not redirect_to:
+        redirect_to = AutoLoginService.get_redirect_url_for_user(user_data)
+    
+    # Add success flash message based on purpose
+    purpose = validation_result.get('purpose', '')
+    if 'session2' in purpose:
+        flash(f'Selamat datang kembali, {user_data["uname"]}! Anda siap untuk melanjutkan Sesi 2.', 'success')
+    elif 'password_reset' in purpose:
+        flash(f'Login berhasil, {user_data["uname"]}! Password Anda telah berhasil direset.', 'success')
+    else:
+        flash(f'Selamat datang, {user_data["uname"]}!', 'success')
+    
+    # Invalidate single-use token after successful login
+    if validation_result.get('single_use') and validation_result.get('jti'):
+        AutoLoginService.invalidate_auto_login_token(validation_result['jti'])
+    
+    return redirect(redirect_to)

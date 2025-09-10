@@ -7,13 +7,14 @@ from ...model.assessment.sessions import AssessmentSession, EmailNotification
 from ...db import get_session
 from .emailNotificationService import EmailNotificationService
 from ...config import Config
+from ..shared.autoLoginService import AutoLoginService
 
 
 class Session2NotificationService:
     """Service for handling Session 2 notifications"""
     
     @staticmethod
-    def get_all_users_with_eligibility() -> List[Dict[str, Any]]:
+    def get_all_users_with_eligibility(page=None, per_page=None):
         """
         Get ALL users with Session 1 and their Session 2 eligibility status
         Returns all users who completed Session 1, with status indicating if they're eligible for Session 2
@@ -24,8 +25,8 @@ class Session2NotificationService:
             Session1 = aliased(AssessmentSession)
             Session2 = aliased(AssessmentSession)
             
-            # Get all users who completed Session 1 (regardless of eligibility for Session 2)
-            all_users = db.query(
+            # Build query for users who completed Session 1
+            query = db.query(
                 User.id,
                 User.uname,
                 User.email,
@@ -45,7 +46,32 @@ class Session2NotificationService:
                     Session2.user_id == User.id,
                     Session2.session_number == 2
                 )
-            ).order_by(Session1.end_time.desc()).all()
+            ).order_by(Session1.end_time.desc())
+            
+            # If pagination requested, implement manual pagination
+            if page and per_page:
+                # Get total count and paginated results
+                total_users = query.count()
+                offset = (page - 1) * per_page
+                all_users = query.offset(offset).limit(per_page).all()
+                
+                # Calculate pagination info
+                has_prev = page > 1
+                has_next = offset + per_page < total_users
+                pages = (total_users + per_page - 1) // per_page  # Ceiling division
+                prev_num = page - 1 if has_prev else None
+                next_num = page + 1 if has_next else None
+            else:
+                all_users = query.all()
+                # Set default pagination values for non-paginated case
+                total_users = len(all_users)
+                has_prev = False
+                has_next = False
+                pages = 1
+                prev_num = None
+                next_num = None
+                page = 1
+                per_page = total_users
             
             # Process results to add calculated fields and eligibility status
             result = []
@@ -84,7 +110,25 @@ class Session2NotificationService:
                         'has_session_2': user.session_2_id is not None
                     })
             
-            return result
+            # Return data with pagination info if requested
+            if page and per_page:
+                # Create pagination object manually
+                from collections import namedtuple
+                PageObj = namedtuple('PageObj', ['items', 'page', 'pages', 'per_page', 'total', 'has_prev', 'has_next', 'prev_num', 'next_num'])
+                page_obj = PageObj(
+                    items=result,
+                    page=page,
+                    pages=pages,
+                    per_page=per_page,
+                    total=total_users,
+                    has_prev=has_prev,
+                    has_next=has_next,
+                    prev_num=prev_num,
+                    next_num=next_num
+                )
+                return page_obj
+            else:
+                return result
     
     
     @staticmethod
@@ -135,6 +179,19 @@ class Session2NotificationService:
                             session1.end_time
                         )
                         
+                        # Generate auto-login URL for Session 2
+                        try:
+                            from flask import current_app
+                            with current_app.app_context():
+                                auto_login_url = AutoLoginService.generate_session2_auto_login_url(user_data['user_id'])
+                                session_2_url = current_app.config.get('SESSION_2_URL', '/session/2')
+                        except Exception as e:
+                            # Fallback if auto-login URL generation fails
+                            print(f"Warning: Could not generate auto-login URL: {e}")
+                            base_url = Config.BASE_URL
+                            auto_login_url = f"{base_url}/auth/login"
+                            session_2_url = Config.SESSION_2_URL
+                        
                         # Create notification with proper scheduled time
                         notification = EmailNotification(
                             session_id=session1.id,
@@ -149,7 +206,10 @@ class Session2NotificationService:
                                 'session_1_completion_date': user_data['session_1_completion_date'],
                                 'days_since_session_1': user_data['days_since_session_1'],
                                 'user_email': user_data['email'],
-                                'user_phone': user_data['phone'] if user_data['phone'] else ''
+                                'user_phone': user_data['phone'] if user_data['phone'] else '',
+                                'auto_login_url': auto_login_url,
+                                'session_2_url': session_2_url,
+                                'base_url': Config.BASE_URL
                             }
                         )
                         
@@ -187,13 +247,29 @@ class Session2NotificationService:
             # Calculate days since Session 1
             days_since = (datetime.utcnow() - session1.end_time).days
             
+            # Generate auto-login URL for Session 2
+            try:
+                from flask import current_app
+                with current_app.app_context():
+                    auto_login_url = AutoLoginService.generate_session2_auto_login_url(user_id)
+                    session_2_url = current_app.config.get('SESSION_2_URL', '/session/2')
+            except Exception as e:
+                # Fallback if auto-login URL generation fails
+                print(f"Warning: Could not generate auto-login URL: {e}")
+                base_url = Config.BASE_URL
+                auto_login_url = f"{base_url}/auth/login"
+                session_2_url = Config.SESSION_2_URL
+            
             # Create notification data
             notification_data = {
                 'username': user.uname,
                 'session_1_completion_date': session1.end_time.strftime('%d %B %Y'),
                 'days_since_session_1': str(days_since),
                 'user_email': user.email,
-                'user_phone': user.phone if user.phone else ''
+                'user_phone': user.phone if user.phone else '',
+                'auto_login_url': auto_login_url,
+                'session_2_url': session_2_url,
+                'base_url': Config.BASE_URL
             }
             
             # Create immediate notification

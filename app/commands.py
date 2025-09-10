@@ -62,10 +62,13 @@ def register_commands(app):
                     admin_user = User.create_user(
                         uname="admin",
                         password="admin",
-                        user_type_id=admin_type.id
+                        user_type_id=admin_type.id,
+                        email="admin@example.com"  # Give admin an email too
                     )
+                    # For testing purposes, mark email as verified
+                    admin_user.email_verified = True
                     db.add(admin_user)
-                    click.echo("  - Default admin user created (admin/admin)")
+                    click.echo("  - Default admin user created (admin/admin) with verified email")
 
         with get_session() as db:
             user_type = db.query(UserType).filter_by(name="user").first()
@@ -78,8 +81,10 @@ def register_commands(app):
                         user_type_id=user_type.id,
                         email="wicaksonolxn@gmail.com"
                     )
+                    # For testing purposes, mark email as verified
+                    regular_user.email_verified = True
                     db.add(regular_user)
-                    click.echo("  - Default regular user created (user/user)")
+                    click.echo("  - Default regular user created (user/user) with verified email")
 
         # Seed default admin settings
         click.echo("  - Creating default admin settings...")
@@ -276,8 +281,10 @@ def register_commands(app):
                     user_type_id=admin_type.id,
                     email=email
                 )
+                # Admin users created via server commands are automatically verified
+                admin_user.email_verified = True
                 db.add(admin_user)
-                click.echo(f"[OLKORECT] Admin user '{username}' created successfully!")
+                click.echo(f"[OLKORECT] Admin user '{username}' created successfully with verified email!")
             except Exception as e:
                 click.echo(f"[SNAFU] Error creating admin user: {str(e)}")
 
@@ -309,8 +316,10 @@ def register_commands(app):
                     password=password,
                     user_type_id=admin_type.id
                 )
+                # Admin users created via server commands are automatically verified
+                admin_user.email_verified = True
                 db.add(admin_user)
-                click.echo(f"[OLKORECT] Admin user '{username}' created successfully!")
+                click.echo(f"[OLKORECT] Admin user '{username}' created successfully with verified email!")
                 click.echo(f"[OLKORECT] Generated password: {password}")
             except Exception as e:
                 click.echo(f"[SNAFU] Error creating admin user: {str(e)}")
@@ -358,9 +367,11 @@ def register_commands(app):
                         password=password,
                         user_type_id=admin_type.id
                     )
+                    # Admin users created via server commands are automatically verified
+                    admin_user.email_verified = True
                     db.add(admin_user)
                     created_users.append((username, password))
-                    click.echo(f"[OLKORECT] Admin user '{username}' created successfully!")
+                    click.echo(f"[OLKORECT] Admin user '{username}' created successfully with verified email!")
                 except Exception as e:
                     click.echo(f"[SNAFU] Error creating admin user '{username}': {str(e)}")
             
@@ -578,21 +589,6 @@ def register_commands(app):
                 
         except Exception as e:
             click.echo(f"[SNAFU] Error sending Session 2 test email: {str(e)}")
-            
-            success = SMTPService.send_template_email(
-                to_email=email,
-                subject='🌟 Waktunya Melanjutkan Perjalanan Anda - Sesi 2 Menanti!',
-                template_path=template_path,
-                template_data=template_data
-            )
-            
-            if success:
-                click.echo(f"[OLKORECT] Session 2 test email sent successfully to {email}!")
-            else:
-                click.echo(f"[SNAFU] Failed to send Session 2 test email!")
-                
-        except Exception as e:
-            click.echo(f"[SNAFU] Error sending Session 2 test email: {str(e)}")
     @app.cli.command("process-session2-notifications")
     def process_session2_notifications():
         """Automatically process Session 2 notifications (for cron job)"""
@@ -661,4 +657,480 @@ def register_commands(app):
 
         except Exception as e:
             click.echo(f"[SNAFU] Error getting Session 2 stats: {str(e)}")
+
+    # OTP/EMAIL TESTING PIPELINE COMMANDS
+    @app.cli.command("test-otp-pipeline")
+    @click.option('--email', default='wicaksonolxn@gmail.com', help='Test email address')
+    @click.option('--username', default=None, help='Test username (auto-generated if not provided)')
+    def test_otp_pipeline(email, username):
+        """Test complete OTP pipeline: create user -> send OTP -> verify -> cleanup"""
+        import random
+        from datetime import datetime, timedelta
+        from ..services.shared.usManService import UserManagerService
+        from ..services.shared.emailOTPService import EmailOTPService
+        
+        if not username:
+            username = f"test_otp_{random.randint(1000, 9999)}"
+        
+        click.echo(f"[OLKORECT] Starting OTP pipeline test for {username} ({email})...")
+        
+        try:
+            # Step 1: Create test user
+            click.echo("  Step 1: Creating test user...")
+            user = UserManagerService.create_user(
+                uname=username,
+                password="testpass123",
+                user_type_name='user',
+                email=email,
+                age=25,
+                gender="other"
+            )
+            
+            # Schedule deletion for testing
+            with get_session() as db:
+                user = db.merge(user)
+                user.deletion_scheduled_at = datetime.utcnow() + timedelta(hours=12)
+                db.commit()
+            
+            click.echo(f"  ✓ Test user created: {username} (ID: {user.id})")
+            
+            # Step 2: Send OTP email
+            click.echo("  Step 2: Sending OTP email...")
+            otp_result = EmailOTPService.send_otp_email(user.id)
+            
+            if otp_result["status"] == "success":
+                click.echo(f"  ✓ OTP email sent to {email}")
+                
+                # Get the actual OTP from database for testing
+                with get_session() as db:
+                    fresh_user = db.query(User).filter_by(id=user.id).first()
+                    actual_otp = fresh_user.email_otp_code
+                    otp_expiry = fresh_user.email_otp_expires_at
+                
+                click.echo(f"  📧 OTP Code: {actual_otp}")
+                click.echo(f"  ⏰ Expires: {otp_expiry}")
+                
+                # Step 3: Test OTP verification
+                click.echo("  Step 3: Testing OTP verification...")
+                verify_result = EmailOTPService.verify_otp(user.id, actual_otp)
+                
+                if verify_result["status"] == "success":
+                    click.echo(f"  ✓ OTP verified successfully!")
+                    click.echo(f"  ✓ User email verified: {verify_result.get('username')}")
+                    
+                    # Check deletion was cancelled
+                    with get_session() as db:
+                        verified_user = db.query(User).filter_by(id=user.id).first()
+                        if not verified_user.deletion_scheduled_at:
+                            click.echo("  ✓ Deletion schedule cancelled after verification")
+                        else:
+                            click.echo("  ❗ Warning: Deletion still scheduled")
+                    
+                else:
+                    click.echo(f"  ❌ OTP verification failed: {verify_result['message']}")
+                    
+            else:
+                click.echo(f"  ❌ Failed to send OTP: {otp_result['message']}")
+                
+            click.echo(f"[OLKORECT] OTP pipeline test completed!")
+            click.echo(f"Test user '{username}' can be cleaned up manually if needed")
+                
+        except Exception as e:
+            click.echo(f"[SNAFU] OTP pipeline test failed: {str(e)}")
+
+    @app.cli.command("test-scheduler-cleanup")
+    def test_scheduler_cleanup():
+        """Test scheduler OTP cleanup functionality"""
+        click.echo("[OLKORECT] Testing scheduler OTP cleanup...")
+        
+        try:
+            from app.services.schedulerService import SchedulerService
+            
+            scheduler_service = SchedulerService()
+            result = scheduler_service._execute_otp_cleanup(current_app._get_current_object())
+            
+            click.echo(f"[OLKORECT] Cleanup executed:")
+            click.echo(f"  - Users deleted: {result.get('deleted_users', 0)}")
+            click.echo(f"  - OTPs cleaned: {result.get('cleaned_otps', 0)}")
+            
+        except Exception as e:
+            click.echo(f"[SNAFU] Scheduler cleanup test failed: {str(e)}")
+
+    @app.cli.command("test-scheduler-sesman")  
+    def test_scheduler_sesman():
+        """Test scheduler SESMAN notifications functionality"""
+        click.echo("[OLKORECT] Testing scheduler SESMAN notifications...")
+        
+        try:
+            from app.services.schedulerService import SchedulerService
+            
+            scheduler_service = SchedulerService()
+            result = scheduler_service._execute_sesman_notifications(current_app._get_current_object())
+            
+            click.echo(f"[OLKORECT] SESMAN notifications executed:")
+            click.echo(f"  - Notifications sent: {result.get('notifications_sent', 0)}")
+            click.echo(f"  - Sessions processed: {result.get('sessions_processed', 0)}")
+            
+        except Exception as e:
+            click.echo(f"[SNAFU] Scheduler SESMAN test failed: {str(e)}")
+
+    @app.cli.command("create-expired-test-user")
+    @click.option('--hours-ago', default=1, help='Hours ago to set deletion time')
+    @click.option('--seconds-ago', default=None, help='Seconds ago to set deletion time (overrides hours)')
+    @click.option('--email', default=None, help='Specific email address to use')
+    def create_expired_test_user(hours_ago, seconds_ago, email):
+        """Create test user with past deletion time for cleanup testing"""
+        import random
+        from datetime import datetime, timedelta
+        
+        username = f"expired_test_{random.randint(1000, 9999)}"
+        
+        if not email:
+            email = f"expired_{random.randint(1000, 9999)}@example.com"
+        
+        # Use seconds if provided, otherwise hours
+        if seconds_ago is not None:
+            time_delta = timedelta(seconds=int(seconds_ago))
+            time_desc = f"{seconds_ago} seconds ago"
+        else:
+            time_delta = timedelta(hours=int(hours_ago))
+            time_desc = f"{hours_ago} hours ago"
+        
+        click.echo(f"[OLKORECT] Creating expired test user: {username}")
+        
+        try:
+            from app.services.shared.usManService import UserManagerService
+            
+            user = UserManagerService.create_user(
+                uname=username,
+                password="expired123",
+                user_type_name='user',
+                email=email
+            )
+            
+            # Set deletion time in the past
+            with get_session() as db:
+                user = db.merge(user)
+                user.deletion_scheduled_at = datetime.utcnow() - time_delta
+                user.email_otp_code = "999999"  # Fake expired OTP
+                user.email_otp_expires_at = datetime.utcnow() - time_delta
+                user.email_verified = False
+                db.commit()
+            
+            click.echo(f"  ✓ Expired test user created:")
+            click.echo(f"  - Username: {username}")
+            click.echo(f"  - Email: {email}")
+            click.echo(f"  - Deletion scheduled: {time_desc}")
+            click.echo(f"  - Should be cleaned up by: flask test-scheduler-cleanup")
+            
+        except Exception as e:
+            click.echo(f"[SNAFU] Failed to create expired test user: {str(e)}")
+
+    @app.cli.command("quick-test-cleanup")
+    @click.option('--email', default='wicaksonolxn@gmail.com', help='Email for test user')
+    def quick_test_cleanup(email):
+        """Quick test: create expired user (1 sec ago) -> cleanup -> verify deletion"""
+        import random
+        from datetime import datetime, timedelta
+        
+        click.echo(f"[OLKORECT] Quick cleanup test with {email}...")
+        
+        try:
+            # Step 1: Create expired user
+            click.echo("  Step 1: Creating expired user (1 second ago)...")
+            from app.services.shared.usManService import UserManagerService
+            
+            username = f"quick_test_{random.randint(1000, 9999)}"
+            
+            user = UserManagerService.create_user(
+                uname=username,
+                password="quick123",
+                user_type_name='user',
+                email=email
+            )
+            
+            # Set deletion 1 second ago
+            with get_session() as db:
+                user = db.merge(user)
+                user.deletion_scheduled_at = datetime.utcnow() - timedelta(seconds=1)
+                user.email_otp_code = "111111"
+                user.email_otp_expires_at = datetime.utcnow() - timedelta(seconds=1)
+                user.email_verified = False
+                db.commit()
+                user_id = user.id
+            
+            click.echo(f"  ✓ Created user: {username} (ID: {user_id}) - scheduled for deletion 1 sec ago")
+            
+            # Step 2: Run cleanup
+            click.echo("  Step 2: Running scheduler cleanup...")
+            from app.services.schedulerService import SchedulerService
+            
+            scheduler_service = SchedulerService()
+            result = scheduler_service._execute_otp_cleanup(current_app._get_current_object())
+            
+            click.echo(f"  ✓ Cleanup result: {result.get('deleted_users', 0)} deleted, {result.get('cleaned_otps', 0)} cleaned")
+            
+            # Step 3: Verify user was deleted
+            click.echo("  Step 3: Verifying user deletion...")
+            with get_session() as db:
+                deleted_user = db.query(User).filter_by(id=user_id).first()
+                if deleted_user:
+                    click.echo(f"  ❌ User still exists! Something went wrong.")
+                else:
+                    click.echo(f"  ✓ User successfully deleted from database")
+            
+            click.echo("[OLKORECT] Quick cleanup test completed!")
+            
+        except Exception as e:
+            click.echo(f"[SNAFU] Quick cleanup test failed: {str(e)}")
+
+    @app.cli.command("test-otp-no-email")
+    @click.option('--username', default=None, help='Test username (auto-generated if not provided)')
+    def test_otp_no_email(username):
+        """Test OTP generation without sending email - just get OTP from database"""
+        import random
+        from datetime import datetime, timedelta
+        
+        if not username:
+            username = f"test_noemail_{random.randint(1000, 9999)}"
+            
+        click.echo(f"[OLKORECT] Testing OTP generation (no email) for {username}...")
+        
+        try:
+            # Step 1: Create user without sending OTP email
+            click.echo("  Step 1: Creating test user...")
+            from app.services.shared.usManService import UserManagerService
+            from app.services.shared.emailOTPService import EmailOTPService
+            
+            user = UserManagerService.create_user(
+                uname=username,
+                password="testpass123",
+                user_type_name='user',
+                email="fake@example.com",  # Won't actually send to this
+                age=25,
+                gender="other"
+            )
+            
+            click.echo(f"  ✓ User created: {username} (ID: {user.id})")
+            
+            # Step 2: Generate OTP but capture the code before it tries to send
+            click.echo("  Step 2: Generating OTP code...")
+            
+            # Manually generate and save OTP without sending email
+            otp_code = EmailOTPService.generate_otp_code()
+            with get_session() as db:
+                user = db.merge(user)
+                user.email_otp_code = otp_code
+                user.email_otp_expires_at = datetime.utcnow() + timedelta(hours=12)
+                user.deletion_scheduled_at = datetime.utcnow() + timedelta(hours=12)
+                db.commit()
+            
+            click.echo(f"  📧 Generated OTP Code: {otp_code}")
+            click.echo(f"  ⏰ Expires: {user.email_otp_expires_at}")
+            
+            # Step 3: Test verification with the generated OTP
+            click.echo("  Step 3: Testing OTP verification...")
+            verify_result = EmailOTPService.verify_otp(user.id, otp_code)
+            
+            if verify_result["status"] == "success":
+                click.echo(f"  ✓ OTP verified successfully!")
+                click.echo(f"  ✓ Username: {verify_result.get('username')}")
+                
+                # Check deletion was cancelled
+                with get_session() as db:
+                    verified_user = db.query(User).filter_by(id=user.id).first()
+                    if not verified_user.deletion_scheduled_at:
+                        click.echo("  ✓ Deletion schedule cancelled after verification")
+                    else:
+                        click.echo("  ❗ Warning: Deletion still scheduled")
+            else:
+                click.echo(f"  ❌ OTP verification failed: {verify_result['message']}")
+            
+            click.echo("[OLKORECT] OTP no-email test completed!")
+            click.echo(f"Test user '{username}' created and verified")
+            
+        except Exception as e:
+            click.echo(f"[SNAFU] OTP no-email test failed: {str(e)}")
+
+    @app.cli.command("test-smtp-direct")
+    @click.option('--email', default='wicaksonolxn@gmail.com', help='Test email recipient')
+    def test_smtp_direct(email):
+        """Test SMTP service directly with simple email"""
+        click.echo(f"[OLKORECT] Testing direct SMTP to {email}...")
+        
+        try:
+            from app.services.SMTP.smtpService import SMTPService
+            import os
+            
+            # Test simple email
+            template_path = os.path.join(
+                os.path.dirname(__file__), 
+                'services', 'SMTP', 'otp_template.html'
+            )
+            
+            template_data = {
+                'user_name': 'Test User',
+                'otp_code': '123456',
+                'expiry_hours': '12'
+            }
+            
+            success = SMTPService.send_template_email(
+                to_email=email,
+                subject="TEST - SMTP Direct Test Email",
+                template_path=template_path,
+                template_data=template_data
+            )
+            
+            if success:
+                click.echo(f"[OLKORECT] Direct SMTP test successful! Check {email}")
+            else:
+                click.echo("[SNAFU] Direct SMTP test failed")
+                
+        except Exception as e:
+            click.echo(f"[SNAFU] SMTP direct test error: {str(e)}")
+
+    @app.cli.command("test-full-pipeline")
+    @click.option('--email', default='wicaksonolxn@gmail.com', help='Test email address')
+    def test_full_pipeline(email):
+        """Complete end-to-end test: user -> OTP -> cleanup -> scheduler"""
+        click.echo(f"[OLKORECT] Starting FULL pipeline test with {email}...")
+        
+        try:
+            # Test 1: OTP Pipeline
+            click.echo("\n=== TEST 1: OTP PIPELINE ===")
+            from flask.cli import with_appcontext
+            ctx = app.app_context()
+            ctx.push()
+            try:
+                test_otp_pipeline.callback(email=email, username=None)
+            finally:
+                ctx.pop()
+            
+            # Test 2: Create expired user
+            click.echo("\n=== TEST 2: EXPIRED USER ===")
+            ctx = app.app_context()
+            ctx.push()
+            try:
+                create_expired_test_user.callback(hours_ago=2)
+            finally:
+                ctx.pop()
+            
+            # Test 3: Cleanup
+            click.echo("\n=== TEST 3: SCHEDULER CLEANUP ===")
+            ctx = app.app_context()
+            ctx.push()
+            try:
+                test_scheduler_cleanup.callback()
+            finally:
+                ctx.pop()
+            
+            # Test 4: SMTP Direct
+            click.echo("\n=== TEST 4: DIRECT SMTP ===")
+            ctx = app.app_context()
+            ctx.push()
+            try:
+                test_smtp_direct.callback(email=email)
+            finally:
+                ctx.pop()
+            
+            click.echo("\n[OLKORECT] FULL PIPELINE TEST COMPLETED!")
+            click.echo("Check your email and console output above for results")
+            
+        except Exception as e:
+            click.echo(f"[SNAFU] Full pipeline test failed: {str(e)}")
+
+    @app.cli.command("test-pagination")
+    @click.option('--count', default=50, help='Number of dummy users to create')
+    def create_test_pagination_users(count):
+        """Create verified dummy users for testing pagination"""
+        import random
+        from datetime import datetime
+        
+        click.echo(f"[OLKORECT] Creating {count} verified dummy users for pagination testing...")
+        
+        try:
+            from app.services.shared.usManService import UserManagerService
+            
+            # Sample data for realistic test users
+            first_names = [
+                "Ahmad", "Budi", "Citra", "Dewi", "Eko", "Fitri", "Gilang", "Hana", "Indra", "Jasmin",
+                "Kurnia", "Lestari", "Maya", "Nina", "Oscar", "Putri", "Qori", "Rika", "Sari", "Tari",
+                "Ulfa", "Vina", "Wawan", "Xenia", "Yanto", "Zara", "Agus", "Bella", "Chandra", "Dian"
+            ]
+            
+            last_names = [
+                "Pratama", "Sari", "Wijaya", "Putri", "Santoso", "Rahayu", "Kusuma", "Dewi", "Putra", "Lestari",
+                "Handoko", "Maharani", "Setiawan", "Anggraini", "Hidayat", "Permatasari", "Nugroho", "Wulandari",
+                "Saputra", "Fitria", "Rahman", "Safitri", "Gunawan", "Nuraini", "Utomo", "Kartika", "Susanto", "Indira"
+            ]
+            
+            genders = ["male", "female", "other"]
+            education_levels = [
+                "SD", "SMP", "SMA", "D3", "S1", "S2", "S3", "Tidak Sekolah"
+            ]
+            
+            created_count = 0
+            skipped_count = 0
+            
+            with get_session() as db:
+                user_type = db.query(UserType).filter_by(name="user").first()
+                if not user_type:
+                    click.echo("[SNAFU] User type 'user' not found. Run 'seed-db' first.")
+                    return
+                
+                for i in range(count):
+                    # Generate realistic username and email
+                    first_name = random.choice(first_names)
+                    last_name = random.choice(last_names)
+                    username = f"{first_name.lower()}_{last_name.lower()}_{random.randint(100, 999)}"
+                    email = f"{username}@test.example.com"
+                    
+                    # Check if user already exists
+                    existing = db.query(User).filter_by(uname=username).first()
+                    if existing:
+                        skipped_count += 1
+                        continue
+                    
+                    try:
+                        # Create user with realistic profile data
+                        user = UserManagerService.create_user(
+                            uname=username,
+                            password="testuser123",  # Standard test password
+                            user_type_name='user',
+                            email=email,
+                            phone=f"08{random.randint(10000000, 99999999)}",  # Indonesian phone format
+                            age=random.randint(18, 65),
+                            gender=random.choice(genders),
+                            educational_level=random.choice(education_levels),
+                            cultural_background="Indonesia",
+                            medical_conditions="None" if random.random() > 0.3 else "Mild anxiety",
+                            medications="None" if random.random() > 0.2 else "Multivitamin",
+                            emergency_contact=f"Emergency contact for {first_name} {last_name}"
+                        )
+                        
+                        # Mark email as verified for testing purposes
+                        with get_session() as update_db:
+                            user = update_db.merge(user)
+                            user.email_verified = True
+                            update_db.commit()
+                        
+                        created_count += 1
+                        
+                        if created_count % 10 == 0:
+                            click.echo(f"  ✓ Created {created_count} users...")
+                        
+                    except Exception as e:
+                        click.echo(f"  ❌ Failed to create user {username}: {str(e)}")
+                        skipped_count += 1
+                        continue
+            
+            click.echo(f"[OLKORECT] Pagination test users created successfully!")
+            click.echo(f"  - Created: {created_count} new users")
+            click.echo(f"  - Skipped: {skipped_count} (already existed or errors)")
+            click.echo(f"  - Total users now available for pagination testing")
+            click.echo(f"  - All users have verified emails and realistic profiles")
+            click.echo(f"  - Standard password: testuser123")
+            
+        except Exception as e:
+            click.echo(f"[SNAFU] Failed to create pagination test users: {str(e)}")
 

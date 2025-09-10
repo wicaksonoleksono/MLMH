@@ -20,23 +20,36 @@ def index():
 @admin_required
 @raw_response
 def get_eligible_users():
-    """Get users who completed Session 1 and are eligible for Session 2"""
+    """Get users who completed Session 1 and are eligible for Session 2 with pagination"""
     try:
-        # Get all users with eligibility status
-        all_users = Session2NotificationService.get_all_users_with_eligibility()
+        # Get pagination parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 15, type=int)
+        
+        # Limit per_page options
+        if per_page not in [10, 15, 20]:
+            per_page = 15
+        
+        # Get all users with eligibility status (paginated)
+        all_users_page = Session2NotificationService.get_all_users_with_eligibility(page=page, per_page=per_page)
         
         # Get pending notifications count
         pending_count = Session2NotificationService.get_pending_notifications_count()
         
         return render_template('admin/session_management/eligible_users.html',
                              user=current_user,
-                             all_users=all_users,
+                             all_users_page=all_users_page,
                              pending_count=pending_count)
     except Exception as e:
         current_app.logger.error(f"Error fetching eligible users: {str(e)}")
+        # Create empty pagination object for error case
+        from collections import namedtuple
+        EmptyPage = namedtuple('EmptyPage', ['items', 'page', 'pages', 'per_page', 'total', 'has_prev', 'has_next', 'prev_num', 'next_num'])
+        empty_page = EmptyPage([], 1, 0, 15, 0, False, False, None, None)
+        
         return render_template('admin/session_management/eligible_users.html',
                              user=current_user,
-                             all_users=[],
+                             all_users_page=empty_page,
                              pending_count=0,
                              error="Failed to fetch eligible users")
 

@@ -26,11 +26,14 @@ class Config:
     EMAIL_FROM_ADDRESS: str = os.getenv('EMAIL_FROM_ADDRESS')
     EMAIL_FROM_NAME: str = os.getenv('EMAIL_FROM_NAME', 'Mental Health App')
     
-    # Landing page URLs for email notifications  
-    LANDING_PAGE_URL: str = os.getenv('LANDING_PAGE_URL', 'google.com')
-    RESCHEDULE_URL: str = os.getenv('RESCHEDULE_URL', 'google.com') 
-    CANCEL_URL: str = os.getenv('CANCEL_URL', 'google.com')
-    SESSION_2_URL: str = os.getenv('SESSION_2_URL')
+    # Base URL for magic links and external URLs - NO FALLBACKS
+    BASE_URL: str = os.getenv('BASE_URL')
+    
+    # Everything routes to BASE_URL - NO specific paths
+    LANDING_PAGE_URL: str = BASE_URL if BASE_URL else '/'
+    RESCHEDULE_URL: str = BASE_URL if BASE_URL else '/'
+    CANCEL_URL: str = BASE_URL if BASE_URL else '/'
+    SESSION_2_URL: str = BASE_URL if BASE_URL else '/'
     
     # APScheduler Configuration
     OTP_CLEANUP_INTERVAL_HOURS: int = int(os.getenv('OTP_CLEANUP_INTERVAL_HOURS', '1'))

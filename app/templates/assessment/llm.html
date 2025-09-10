@@ -1,5 +1,26 @@
 {% extends "base.html" %} {% block title %}Open Question Assessment - Chat
-dengan Anisa{% endblock %} {% block content %}
+dengan Anisa{% endblock %} 
+
+{% block extra_head %}
+<style>
+.typing-cursor {
+  animation: blink 1s infinite;
+  font-weight: bold;
+  color: #059669;
+}
+
+@keyframes blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+</style>
+{% endblock %}
+
+{% block content %}
 <div class="min-h-screen bg-gray-50" x-data="chatInterface('{{ session.id }}')" x-init="init()">
   <!-- Navigation -->
   <nav class="bg-white shadow-sm border-b border-gray-200">
@@ -98,10 +119,10 @@ dengan Anisa{% endblock %} {% block content %}
                             'bg-blue-600 text-white rounded-2xl px-6 py-4 max-w-xl border border-blue-200' : 
                             'bg-gray-50 rounded-2xl px-6 py-4 max-w-2xl border border-gray-200'"
             >
-              <p
+              <div
                 :class="message.type === 'user' ? 'text-white' : 'text-gray-900'"
-                x-text="message.content"
-              ></p>
+                x-html="message.type === 'ai' ? message.content : message.content"
+              ></div>
 
               <!-- Typing indicator only when content is empty -->
               <div

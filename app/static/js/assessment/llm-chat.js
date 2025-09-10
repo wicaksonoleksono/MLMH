@@ -17,7 +17,7 @@ function chatInterface(sessionId) {
 
     // Session data
     sessionId: sessionId,
-    conversationId: null,  // For assessment-first camera approach
+    conversationId: null, // For assessment-first camera approach
     exchangeCount: 0,
     messageId: 1,
     cameraManager: null,
@@ -112,7 +112,7 @@ function chatInterface(sessionId) {
         } else {
           // Get conversation_id for assessment-first camera approach
           this.conversationId = result.conversation_id;
-          
+
           // Update camera manager with conversation_id
           if (this.cameraManager) {
             this.cameraManager.assessmentId = this.conversationId;
@@ -171,7 +171,7 @@ function chatInterface(sessionId) {
 
       // Add immediate visual feedback when sending message
       const botMessage = this.messages[this.messages.length - 1];
-      botMessage.content = "Mengirim pesan...";
+      botMessage.content = '<span class="typing-cursor">|</span>';
       this.scrollToBottom();
 
       try {
@@ -221,19 +221,24 @@ function chatInterface(sessionId) {
 
           if (data.type === "chunk") {
             // Clear typing indicator on first chunk
-            if (botMessage.content.includes("Anisa sedang mengetik...")) {
+            if (botMessage.content.includes('<span class="typing-cursor">')) {
               botMessage.content = "";
             }
             botMessage.content += data.data;
             this.scrollToBottom();
-            
-            // Check for end_conversation tag immediately during streaming
-            const normalizedContent = botMessage.content.toLowerCase();
-            if (normalizedContent.includes("<end_conversation>") || normalizedContent.includes("</end_conversation>")) {
-              // Delay slightly to let the streaming complete, then check status
-              setTimeout(() => {
-                this.checkConversationStatus();
-              }, 1000);
+
+            // Check for end_conversation tag immediately - no delay!
+            if (
+              data.data.toLowerCase().includes("<end_conversation>") ||
+              data.data.toLowerCase().includes("</end_conversation>")
+            ) {
+              // End conversation immediately when tag is detected in this chunk
+              this.conversationEnded = true;
+              // Don't wait - finish conversation right now
+              eventSource.close();
+              this.isTyping = false;
+              botMessage.streaming = false;
+              this.finishConversation();
             }
           } else if (data.type === "complete") {
             clearTimeout(timeoutId);
@@ -252,7 +257,7 @@ function chatInterface(sessionId) {
             eventSource.close();
           } else if (data.type === "stream_start") {
             // Stream started - clear loading message and show AI is typing
-            botMessage.content = "Anisa sedang mengetik...";
+            botMessage.content = '<span class="typing-cursor">|</span>';
             this.scrollToBottom();
           }
         };
@@ -391,17 +396,20 @@ function chatInterface(sessionId) {
         if (conversation_ids.length > 0) {
           const linkData = {
             assessment_id: conversation_ids[0],
-            assessment_type: "LLM"
+            assessment_type: "LLM",
           };
 
-          const response = await fetch(`/assessment/camera/link-batch/${capture_id}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(linkData)
-          });
+          const response = await fetch(
+            `/assessment/camera/link-batch/${capture_id}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(linkData),
+            }
+          );
 
           const result = await response.json();
-          if (result.status === 'OLKORECT') {
+          if (result.status === "OLKORECT") {
             // console.log("Camera batch linked to conversations successfully");
           } else {
             console.error("Failed to link camera batch:", result);

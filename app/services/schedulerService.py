@@ -119,10 +119,20 @@ class SchedulerService:
                         logger.info(f"OTP cleanup completed: {deleted_count} unverified users deleted")
                     else:
                         logger.info("OTP cleanup completed: No users scheduled for deletion")
+                    
+                    return {
+                        'deleted_users': deleted_count,
+                        'cleaned_otps': 0  # We delete users entirely, not just clean OTPs
+                    }
                         
             except Exception as e:
                 logger.error(f"OTP cleanup task failed: {e}")
                 # Don't re-raise to prevent scheduler from stopping
+                return {
+                    'deleted_users': 0,
+                    'cleaned_otps': 0,
+                    'error': str(e)
+                }
     
     def _execute_sesman_notifications(self, app):
         """Execute SESMAN notification task within Flask app context"""
@@ -153,12 +163,25 @@ class SchedulerService:
                             logger.error(f"Failed to send notification to user {user_data.get('id')}: {e}")
                     
                     logger.info(f"SESMAN notifications completed: {success_count}/{len(eligible_users)} emails sent successfully")
+                    return {
+                        'notifications_sent': success_count,
+                        'sessions_processed': len(eligible_users)
+                    }
                 else:
                     logger.info("No users eligible for Session 2 notification today")
+                    return {
+                        'notifications_sent': 0,
+                        'sessions_processed': 0
+                    }
                     
             except Exception as e:
                 logger.error(f"SESMAN notification task failed: {e}")
                 # Don't re-raise to prevent scheduler from stopping
+                return {
+                    'notifications_sent': 0,
+                    'sessions_processed': 0,
+                    'error': str(e)
+                }
     
     def _shutdown_scheduler(self):
         """Gracefully shutdown the scheduler"""

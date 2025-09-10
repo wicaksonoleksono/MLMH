@@ -85,7 +85,10 @@
         </button>
       </div>
       
-      <div class="text-center">
+      <div class="flex justify-between items-center text-center">
+        <a href="{{ url_for('auth.forgot_password') }}" class="text-sm text-indigo-600 hover:text-indigo-500">
+          Lupa password?
+        </a>
         <a href="{{ url_for('auth.register') }}" class="text-sm text-indigo-600 hover:text-indigo-500">
           Belum punya akun? Daftar
         </a>

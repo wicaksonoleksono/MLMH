@@ -33,6 +33,10 @@ class User(BaseModel, UserMixin, StatusMixin):
     email_otp_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     deletion_scheduled_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     
+    # Password reset magic link fields
+    password_reset_token: Mapped[Optional[str]] = mapped_column(String(255))
+    password_reset_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    
     # Foreign key to UserType
     user_type_id: Mapped[int] = mapped_column(ForeignKey("user_type.id"), nullable=False)
     

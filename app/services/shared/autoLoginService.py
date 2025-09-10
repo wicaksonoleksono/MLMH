@@ -115,7 +115,7 @@ class AutoLoginService:
                         'redirect_to': None
                     }
             
-            # Check if user still exists
+            # Check if user still exists and build user data within session
             user_id = payload.get('user_id')
             with get_session() as db:
                 user = db.query(User).filter(User.id == user_id).first()
@@ -126,19 +126,23 @@ class AutoLoginService:
                         'user_data': None,
                         'redirect_to': None
                     }
+                
+                # Build user data while session is still active
+                user_data = {
+                    'id': user.id,
+                    'uname': user.uname,
+                    'user_type_name': user.user_type.name,
+                    'is_admin': user.is_admin(),
+                    'is_active': user.is_active,
+                    'email': user.email,
+                    'email_verified': user.email_verified
+                }
             
             # Return validation result
             return {
                 'valid': True,
                 'error': None,
-                'user_data': {
-                    'id': user.id,
-                    'uname': user.uname,
-                    'user_type_name': user.user_type.name,
-                    'is_admin': user.is_admin(),
-                    'email': user.email,
-                    'email_verified': user.email_verified
-                },
+                'user_data': user_data,
                 'redirect_to': payload.get('redirect_to'),
                 'purpose': purpose,
                 'single_use': single_use,
@@ -181,7 +185,7 @@ class AutoLoginService:
         """
         # Get Session 2 path from config if not provided
         if not session2_path:
-            session2_path = current_app.config.get('SESSION_2_URL', '/session/2')
+            session2_path = '/'  # Just go to BASE_URL
         
         # Generate auto-login token
         token = AutoLoginService.generate_auto_login_token(

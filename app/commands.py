@@ -564,7 +564,7 @@ def register_commands(app):
                 'username': 'Airlangga',
                 'session_1_completion_date': '15 Januari 2025',
                 'days_since_session_1': '14',
-                'session_2_url': current_app.config['SESSION_2_URL'],  # NO FALLBACK
+                'session_2_url': current_app.config['BASE_URL'],  # NO FALLBACK
                 'support_email': current_app.config['EMAIL_FROM_ADDRESS'],  # NO FALLBACK
                 'brand_name': 'Assessment Kesehatan Mental',
                 'current_year': '2025'

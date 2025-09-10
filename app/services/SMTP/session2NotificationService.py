@@ -179,18 +179,26 @@ class Session2NotificationService:
                             session1.end_time
                         )
                         
-                        # Generate auto-login URL for Session 2
-                        try:
-                            from flask import current_app
-                            with current_app.app_context():
-                                auto_login_url = AutoLoginService.generate_session2_auto_login_url(user_data['user_id'])
-                                session_2_url = current_app.config.get('SESSION_2_URL', '/session/2')
-                        except Exception as e:
-                            # Fallback if auto-login URL generation fails
-                            print(f"Warning: Could not generate auto-login URL: {e}")
-                            base_url = Config.BASE_URL
-                            auto_login_url = f"{base_url}/auth/login"
-                            session_2_url = Config.SESSION_2_URL
+                        # Check if user already has valid auto-login token for Session 2
+                        from ...model.shared.auto_login_tokens import AutoLoginToken
+                        existing_token = db.query(AutoLoginToken).filter(
+                            and_(
+                                AutoLoginToken.user_id == user_data['user_id'],
+                                AutoLoginToken.purpose == 'auto_login_session2',
+                                AutoLoginToken.used == False,
+                                AutoLoginToken.expires_at > datetime.utcnow()
+                            )
+                        ).first()
+                        
+                        if existing_token:
+                            print(f"User {user_data['user_id']} already has valid Session 2 auto-login token. Skipping automatic notification creation.")
+                            continue  # Skip this user
+                        
+                        # Generate auto-login URL for Session 2 - NO FALLBACKS
+                        from flask import current_app
+                        with current_app.app_context():
+                            auto_login_url = AutoLoginService.generate_session2_auto_login_url(user_data['user_id'])
+                            session_2_url = Config.BASE_URL
                         
                         # Create notification with proper scheduled time
                         notification = EmailNotification(
@@ -247,18 +255,42 @@ class Session2NotificationService:
             # Calculate days since Session 1
             days_since = (datetime.utcnow() - session1.end_time).days
             
-            # Generate auto-login URL for Session 2
-            try:
-                from flask import current_app
-                with current_app.app_context():
+            # Check if user already has valid auto-login token for Session 2
+            from ...model.shared.auto_login_tokens import AutoLoginToken
+            existing_token = db.query(AutoLoginToken).filter(
+                and_(
+                    AutoLoginToken.user_id == user_id,
+                    AutoLoginToken.purpose == 'auto_login_session2',
+                    AutoLoginToken.used == False,
+                    AutoLoginToken.expires_at > datetime.utcnow()
+                )
+            ).first()
+            
+            # Generate auto-login URL for Session 2 - NO FALLBACKS
+            from flask import current_app
+            with current_app.app_context():
+                if existing_token:
+                    print(f"User {user_id} has valid Session 2 token. Reusing existing token for email.")
+                    # Regenerate JWT with same JTI to reuse the database record
+                    import jwt
+                    payload = {
+                        'user_id': user_id,
+                        'username': user.uname,
+                        'purpose': 'auto_login_session2',
+                        'redirect_to': '/',
+                        'single_use': True,
+                        'jti': existing_token.token_jti,  # Use existing JTI
+                        'exp': existing_token.expires_at,
+                        'iat': existing_token.created_at,
+                        'iss': 'mental-health-app-autologin'
+                    }
+                    secret = current_app.config['SECRET_KEY']
+                    jwt_token = jwt.encode(payload, secret, algorithm='HS256')
+                    auto_login_url = f"{Config.BASE_URL.rstrip('/')}/auth/auto-login?token={jwt_token}"
+                else:
+                    # Generate new token as usual
                     auto_login_url = AutoLoginService.generate_session2_auto_login_url(user_id)
-                    session_2_url = current_app.config.get('SESSION_2_URL', '/session/2')
-            except Exception as e:
-                # Fallback if auto-login URL generation fails
-                print(f"Warning: Could not generate auto-login URL: {e}")
-                base_url = Config.BASE_URL
-                auto_login_url = f"{base_url}/auth/login"
-                session_2_url = Config.SESSION_2_URL
+                session_2_url = Config.BASE_URL
             
             # Create notification data
             notification_data = {

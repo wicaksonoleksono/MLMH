@@ -33,7 +33,6 @@ class Config:
     LANDING_PAGE_URL: str = BASE_URL if BASE_URL else '/'
     RESCHEDULE_URL: str = BASE_URL if BASE_URL else '/'
     CANCEL_URL: str = BASE_URL if BASE_URL else '/'
-    SESSION_2_URL: str = BASE_URL if BASE_URL else '/'
     
     # APScheduler Configuration
     OTP_CLEANUP_INTERVAL_HOURS: int = int(os.getenv('OTP_CLEANUP_INTERVAL_HOURS', '1'))

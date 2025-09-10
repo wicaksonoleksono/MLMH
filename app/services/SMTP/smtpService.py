@@ -65,8 +65,8 @@ class SMTPService:
             'session_date': session_date,
             'session_time': session_time,
             'join_url': join_url,
-            'reschedule_url': reschedule_url or 'google.com',
-            'cancel_url': cancel_url or 'google.com',
+            'reschedule_url': reschedule_url,
+            'cancel_url': cancel_url,
             'brand_name': 'Mental Health App',
             'support_email': config.EMAIL_FROM_ADDRESS,
             'primary_color': '#0F766E'

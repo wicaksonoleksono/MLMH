@@ -234,17 +234,20 @@ class EmailNotificationService:
             user_email = notification.notification_data.get('user_email', user.email) if notification.notification_data else user.email
             user_phone = notification.notification_data.get('user_phone', user.phone if user.phone else '')
             
-            # Prepare template data using real user data
+            # Use template data from notification (includes JWT URLs) and supplement with additional data
             from flask import current_app
-            template_data = {
-                'username': user_name,  # Use 'username' as requested
+            template_data = notification.notification_data.copy() if notification.notification_data else {}
+            
+            # Add or override with additional template data - NO FALLBACKS
+            template_data.update({
+                'username': user_name,
                 'session_1_completion_date': session_1_date,
                 'days_since_session_1': days_since,
-                'session_2_url': current_app.config['SESSION_2_URL'],  # From config, no fallback
-                'support_email': current_app.config['EMAIL_FROM_ADDRESS'],  # From config, no fallback
+                'session_2_url': current_app.config['BASE_URL'],
+                'support_email': current_app.config['EMAIL_FROM_ADDRESS'],
                 'brand_name': 'Assessment Kesehatan Mental',
                 'current_year': datetime.utcnow().year
-            }
+            })
             
             # Use the session2_template.html
             template_path = os.path.join(

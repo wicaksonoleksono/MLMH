@@ -8,7 +8,19 @@ login_manager = LoginManager()
 
 def create_app():
     """Application factory pattern."""
-    app = Flask(__name__, instance_relative_config=True)
+    # Configure static folder for production deployment
+    if os.path.exists('/var/www/MLMH'):
+        # Production: explicit static folder path
+        static_folder = '/var/www/MLMH/app/static'
+        template_folder = '/var/www/MLMH/app/templates'
+        app = Flask(__name__, 
+                   static_folder=static_folder,
+                   template_folder=template_folder,
+                   instance_relative_config=True)
+    else:
+        # Development: default relative paths
+        app = Flask(__name__, instance_relative_config=True)
+    
     app.config.from_object(Config)
     with app.app_context():
         init_database(app.config['SQLALCHEMY_DATABASE_URI'])
@@ -107,6 +119,13 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     register_commands(app)
+    
+    # Add explicit static file serving for production
+    if os.path.exists('/var/www/MLMH'):
+        @app.route('/static/<path:filename>')
+        def static_files(filename):
+            from flask import send_from_directory
+            return send_from_directory('/var/www/MLMH/app/static', filename)
     
     # Initialize APScheduler for background tasks
     from .services.schedulerService import init_scheduler

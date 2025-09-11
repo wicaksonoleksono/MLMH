@@ -70,21 +70,6 @@ def register_commands(app):
                     db.add(admin_user)
                     click.echo("  - Default admin user created (admin/admin) with verified email")
 
-        with get_session() as db:
-            user_type = db.query(UserType).filter_by(name="user").first()
-            if user_type:
-                existing_user = db.query(User).filter_by(uname="user").first()
-                if not existing_user:
-                    regular_user = User.create_user(
-                        uname="user",
-                        password="user",
-                        user_type_id=user_type.id,
-                        email="wicaksonolxn@gmail.com"
-                    )
-                    # For testing purposes, mark email as verified
-                    regular_user.email_verified = True
-                    db.add(regular_user)
-                    click.echo("  - Default regular user created (user/user) with verified email")
 
         # Seed default admin settings
         click.echo("  - Creating default admin settings...")

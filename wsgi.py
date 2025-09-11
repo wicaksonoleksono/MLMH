@@ -29,10 +29,8 @@ application = flask_app
 
 # For development server
 if __name__ == "__main__":
-    # Development server configuration
     flask_app.run(
-        host='0.0.0.0',  # Allow external connections in dev
+        host='127.0.0.1',
         port=Config.FLASK_PORT,
-        debug=Config.DEBUG,
-        threaded=True
+        debug=Config.DEBUG
     )

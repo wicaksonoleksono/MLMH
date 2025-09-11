@@ -1031,7 +1031,7 @@ def register_commands(app):
             click.echo(f"[SNAFU] Full pipeline test failed: {str(e)}")
 
     @app.cli.command("test-pagination")
-    @click.option('--count', default=50, help='Number of dummy users to create')
+    @click.option('--count', default=100, help='Number of dummy users to create')
     def create_test_pagination_users(count):
         """Create verified dummy users for testing pagination"""
         import random

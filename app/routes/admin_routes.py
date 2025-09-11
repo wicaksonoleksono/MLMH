@@ -39,6 +39,52 @@ def dashboard():
                          user_stats=user_stats,
                          search_query=search_query)
 
+@admin_bp.route('/ajax-data')
+@login_required
+@admin_required
+@api_response
+def dashboard_ajax_data():
+    """AJAX endpoint for both pagination and search - returns same data structure"""
+    from flask import request
+    from ..services.admin.statsService import StatsService
+    
+    # Get pagination and search parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 15, type=int)
+    search_query = request.args.get('q', '').strip()
+    
+    print(f"[DEBUG] AJAX Data called: q='{search_query}', page={page}, per_page={per_page}")
+    
+    # Limit per_page options
+    if per_page not in [10, 15, 20]:
+        per_page = 15
+    
+    # Get paginated results (works for both search and regular pagination)
+    user_sessions_page = StatsService.get_user_sessions_preview(
+        page=page, 
+        per_page=per_page, 
+        search_query=search_query
+    )
+    
+    # Return JSON response in same format as search endpoint
+    return {
+        'status': 'success',
+        'data': {
+            'items': user_sessions_page.items,
+            'pagination': {
+                'page': user_sessions_page.page,
+                'pages': user_sessions_page.pages,
+                'per_page': user_sessions_page.per_page,
+                'total': user_sessions_page.total,
+                'has_prev': user_sessions_page.has_prev,
+                'has_next': user_sessions_page.has_next,
+                'prev_num': user_sessions_page.prev_num,
+                'next_num': user_sessions_page.next_num
+            },
+            'search_query': search_query
+        }
+    }
+
 
 @admin_bp.route('/search-users')
 @login_required
@@ -53,6 +99,8 @@ def search_users_ajax():
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 15, type=int)
     search_query = request.args.get('q', '').strip()
+    
+    print(f"[DEBUG] Search API called: q='{search_query}', page={page}, per_page={per_page}")
     
     # Limit per_page options
     if per_page not in [10, 15, 20]:

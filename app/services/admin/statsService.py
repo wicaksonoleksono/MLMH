@@ -71,13 +71,27 @@ class StatsService:
                 
                 # Add search filter if query provided
                 if search_query:
-                    base_query = base_query.filter(User.uname.ilike(f'%{search_query}%'))
-                
-                # Order by user ID for consistent pagination
-                base_query = base_query.order_by(User.id)
+                    search_filter = User.uname.ilike(f'%{search_query}%')
+                    base_query = base_query.filter(search_filter)
+                    print(f"[DEBUG] Applied search filter: User.uname ILIKE '%{search_query}%'")
+                    
+                    # Order by relevance when searching: exact matches first, then partial matches
+                    from sqlalchemy import case
+                    base_query = base_query.order_by(
+                        case(
+                            (User.uname.ilike(f'{search_query}%'), 1),  # Starts with query
+                            (User.uname.ilike(f'%{search_query}'), 2),  # Ends with query  
+                            else_=3  # Contains query
+                        ),
+                        User.uname  # Then alphabetically within each relevance group
+                    )
+                else:
+                    # Order by user ID for consistent pagination when not searching
+                    base_query = base_query.order_by(User.id)
                 
                 # Get total count for pagination
                 total_users = base_query.count()
+                print(f"[DEBUG] Search results count: {total_users}")
                 
                 # Apply pagination
                 offset = (page - 1) * per_page

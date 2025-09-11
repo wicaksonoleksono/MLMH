@@ -18,8 +18,14 @@ def create_app():
     login_manager.login_message = "Silakan login untuk mengakses halaman ini."
     login_manager.login_message_category = "info"
     
-    # Initialize media_save path
-    app.media_save = os.path.join(app.root_path, 'static', 'uploads')
+    # Initialize media_save path for production deployment
+    if os.path.exists('/var/www/MLMH'):
+        # Production path
+        app.media_save = '/var/www/MLMH/app/static/uploads'
+    else:
+        # Development path
+        app.media_save = os.path.join(app.root_path, 'static', 'uploads')
+    
     os.makedirs(app.media_save, exist_ok=True)
 
     @login_manager.user_loader

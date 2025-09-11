@@ -207,8 +207,14 @@ def register_commands(app):
         with get_session() as db:
             existing_camera_settings = db.query(CameraSettings).filter_by(is_default=True).first()
             if not existing_camera_settings:
-                # Compute media save path same way as in __init__.py
-                media_save_path = os.path.join(current_app.root_path, 'static', 'uploads')
+                # Compute media save path for production deployment
+                if os.path.exists('/var/www/MLMH'):
+                    # Production path
+                    media_save_path = '/var/www/MLMH/app/static/uploads'
+                else:
+                    # Development path
+                    media_save_path = os.path.join(current_app.root_path, 'static', 'uploads')
+                
                 os.makedirs(media_save_path, exist_ok=True)
                 
                 default_camera_settings = CameraSettings(

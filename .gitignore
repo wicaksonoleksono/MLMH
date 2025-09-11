@@ -234,3 +234,4 @@ venv/
 uploads
 app/static/uploads
 manage.sh
+.qwen

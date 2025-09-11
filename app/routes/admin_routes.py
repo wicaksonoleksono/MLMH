@@ -1,7 +1,7 @@
 # app/routes/admin_routes.py
-from flask import Blueprint, render_template, redirect, url_for
+from flask import Blueprint, render_template, redirect, url_for, request, jsonify
 from flask_login import current_user, login_required
-from ..decorators import raw_response, admin_required
+from ..decorators import raw_response, admin_required, api_response
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
@@ -11,20 +11,21 @@ admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 @admin_required
 @raw_response
 def dashboard():
-    """Admin dashboard with pagination"""
+    """Admin dashboard with pagination and search"""
     from flask import request
     from ..services.admin.statsService import StatsService
     
-    # Get pagination parameters
+    # Get pagination and search parameters
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 15, type=int)  # Default 15 per page
+    search_query = request.args.get('q', '').strip()  # Search query
     
     # Limit per_page options
     if per_page not in [10, 15, 20]:
         per_page = 15
     
     stats = StatsService.get_dashboard_stats()
-    user_sessions_page = StatsService.get_user_sessions_preview(page=page, per_page=per_page)
+    user_sessions_page = StatsService.get_user_sessions_preview(page=page, per_page=per_page, search_query=search_query)
     phq_stats = StatsService.get_phq_statistics()
     session_stats = StatsService.get_session_statistics()
     user_stats = StatsService.get_user_statistics()
@@ -35,7 +36,54 @@ def dashboard():
                          user_sessions_page=user_sessions_page,
                          phq_stats=phq_stats,
                          session_stats=session_stats,
-                         user_stats=user_stats)
+                         user_stats=user_stats,
+                         search_query=search_query)
+
+
+@admin_bp.route('/search-users')
+@login_required
+@admin_required
+@api_response
+def search_users_ajax():
+    """AJAX endpoint for searching users with pagination"""
+    from flask import request
+    from ..services.admin.statsService import StatsService
+    
+    # Get pagination and search parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 15, type=int)
+    search_query = request.args.get('q', '').strip()
+    
+    # Limit per_page options
+    if per_page not in [10, 15, 20]:
+        per_page = 15
+    
+    # Get paginated search results
+    user_sessions_page = StatsService.get_user_sessions_preview(
+        page=page, 
+        per_page=per_page, 
+        search_query=search_query
+    )
+    
+    # Return JSON response for AJAX
+    return {
+        'status': 'success',
+        'data': {
+            'items': user_sessions_page.items,
+            'pagination': {
+                'page': user_sessions_page.page,
+                'pages': user_sessions_page.pages,
+                'per_page': user_sessions_page.per_page,
+                'total': user_sessions_page.total,
+                'has_prev': user_sessions_page.has_prev,
+                'has_next': user_sessions_page.has_next,
+                'prev_num': user_sessions_page.prev_num,
+                'next_num': user_sessions_page.next_num
+            },
+            'search_query': search_query
+        }
+    }
+
 
 
 @admin_bp.route('/phq')

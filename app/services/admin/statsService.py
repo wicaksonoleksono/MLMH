@@ -58,52 +58,78 @@ class StatsService:
             }
     
     @staticmethod
-    def get_user_sessions_preview(page=1, per_page=20):
+    def get_user_sessions_preview(page=1, per_page=20, search_query=None):
         """Get paginated user sessions preview: UserID | Username | Session1 | Session2 | PHQ-Sum"""
         try:
             with get_session() as db:
-                # Build query with pagination
-                users_query = db.query(User).join(UserType).filter(UserType.name == 'user').order_by(User.id)
+                # Build base query with JOINs to avoid N+1 queries
+                from sqlalchemy.orm import joinedload
+                from sqlalchemy import func, and_
                 
-                # Get total count and users for this page
-                total_users = users_query.count()
+                # Base query with user type filter
+                base_query = db.query(User).join(UserType).filter(UserType.name == 'user')
+                
+                # Add search filter if query provided
+                if search_query:
+                    base_query = base_query.filter(User.uname.ilike(f'%{search_query}%'))
+                
+                # Order by user ID for consistent pagination
+                base_query = base_query.order_by(User.id)
+                
+                # Get total count for pagination
+                total_users = base_query.count()
+                
+                # Apply pagination
                 offset = (page - 1) * per_page
-                users_on_page = users_query.offset(offset).limit(per_page).all()
+                users_on_page = base_query.offset(offset).limit(per_page).all()
                 
-                # Calculate pagination info
-                has_prev = page > 1
-                has_next = offset + per_page < total_users
-                pages = (total_users + per_page - 1) // per_page  # Ceiling division
-                prev_num = page - 1 if has_prev else None
-                next_num = page + 1 if has_next else None
+                # Pre-fetch all related data in bulk to avoid N+1 queries
+                user_ids = [user.id for user in users_on_page]
+                if user_ids:
+                    # Get all sessions for these users in one query
+                    all_sessions = db.query(AssessmentSession).filter(
+                        AssessmentSession.user_id.in_(user_ids)
+                    ).order_by(AssessmentSession.user_id, AssessmentSession.created_at).all()
+                    
+                    # Group sessions by user_id for easier access
+                    sessions_by_user = {}
+                    for session in all_sessions:
+                        if session.user_id not in sessions_by_user:
+                            sessions_by_user[session.user_id] = []
+                        sessions_by_user[session.user_id].append(session)
+                    
+                    # Get all PHQ responses for these sessions in one query
+                    session_ids = [session.id for session in all_sessions]
+                    all_phq_responses = {}
+                    if session_ids:
+                        phq_responses = db.query(PHQResponse).filter(
+                            PHQResponse.session_id.in_(session_ids)
+                        ).all()
+                        all_phq_responses = {resp.session_id: resp for resp in phq_responses}
+                else:
+                    sessions_by_user = {}
+                    all_phq_responses = {}
                 
+                # Process data for preview
                 preview_data = []
                 for user in users_on_page:
-                    # Get user's sessions
-                    sessions = db.query(AssessmentSession).filter(
-                        AssessmentSession.user_id == user.id
-                    ).order_by(AssessmentSession.created_at).all()
+                    # Get user's sessions from pre-fetched data
+                    user_sessions = sessions_by_user.get(user.id, [])
                     
-                    # Get PHQ scores for each session using new JSON structure
+                    # Get PHQ scores for each session using pre-fetched data
                     session1_phq_score = None
                     session2_phq_score = None
                     
-                    if len(sessions) >= 1:
-                        # Calculate PHQ sum for session 1 from JSON responses
-                        session1_response_record = db.query(PHQResponse).filter(
-                            PHQResponse.session_id == sessions[0].id
-                        ).first()
+                    if len(user_sessions) >= 1:
+                        session1_response_record = all_phq_responses.get(user_sessions[0].id)
                         if session1_response_record and session1_response_record.responses:
                             session1_phq_score = sum(
                                 response_data.get('response_value', 0) 
                                 for response_data in session1_response_record.responses.values()
                             )
                     
-                    if len(sessions) >= 2:
-                        # Calculate PHQ sum for session 2 from JSON responses
-                        session2_response_record = db.query(PHQResponse).filter(
-                            PHQResponse.session_id == sessions[1].id
-                        ).first()
+                    if len(user_sessions) >= 2:
+                        session2_response_record = all_phq_responses.get(user_sessions[1].id)
                         if session2_response_record and session2_response_record.responses:
                             session2_phq_score = sum(
                                 response_data.get('response_value', 0) 
@@ -111,8 +137,8 @@ class StatsService:
                             )
                 
                     # Just rawdog the backend status values
-                    session1_status = sessions[0].status if len(sessions) >= 1 else "Not done"
-                    session2_status = sessions[1].status if len(sessions) >= 2 else "Not done"
+                    session1_status = user_sessions[0].status if len(user_sessions) >= 1 else "Not done"
+                    session2_status = user_sessions[1].status if len(user_sessions) >= 2 else "Not done"
 
                     preview_data.append({
                         'user_id': user.id,
@@ -121,9 +147,16 @@ class StatsService:
                         'session2': session2_status,
                         'session1_phq_score': session1_phq_score,
                         'session2_phq_score': session2_phq_score,
-                        'session1_id': sessions[0].id if len(sessions) >= 1 else None,
-                        'session2_id': sessions[1].id if len(sessions) >= 2 else None
+                        'session1_id': user_sessions[0].id if len(user_sessions) >= 1 else None,
+                        'session2_id': user_sessions[1].id if len(user_sessions) >= 2 else None
                     })
+                
+                # Calculate pagination info
+                has_prev = page > 1
+                has_next = offset + per_page < total_users
+                pages = (total_users + per_page - 1) // per_page  # Ceiling division
+                prev_num = page - 1 if has_prev else None
+                next_num = page + 1 if has_next else None
                 
                 # Create pagination object manually
                 from collections import namedtuple

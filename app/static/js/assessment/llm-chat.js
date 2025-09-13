@@ -301,7 +301,7 @@ function chatInterface(sessionId) {
         const actualResult =
           result.status === "OLKORECT" ? result.data : result;
 
-        if (actualResult.status === "success" && actualResult.next_redirect) {
+        if (result.status === "OLKORECT" && actualResult.next_redirect) {
           this.markAsCompleted();
 
           // console.log("LLM finish result:", actualResult);

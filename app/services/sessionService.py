@@ -294,7 +294,7 @@ class SessionService:
                 message = "PHQ selesai! Lanjut ke LLM assessment..."
                 print(f" PHQ → LLM: Redirecting to {next_redirect}")
             elif updated_session.status == 'COMPLETED':
-                next_redirect = '/assessment/'
+                next_redirect = '/assessment/thank-you'  # Redirect to thank you page
                 message = "Semua assessment selesai!"
                 print(f" Both Complete: Redirecting to {next_redirect}")
             else:
@@ -338,7 +338,7 @@ class SessionService:
                 message = "LLM selesai! Lanjut ke PHQ assessment..."
                 print(f" LLM → PHQ: Redirecting to {next_redirect}")
             elif updated_session.status == 'COMPLETED':
-                next_redirect = '/assessment/'
+                next_redirect = '/assessment/thank-you'  # Redirect to thank you page
                 message = "Semua assessment selesai! "
                 print(f" Both Complete: Redirecting to {next_redirect}")
             else:

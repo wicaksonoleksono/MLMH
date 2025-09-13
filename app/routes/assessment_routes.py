@@ -899,7 +899,23 @@ def get_stream_token(session_id):
         'expires_in': 300,  # 5 minutes
         'session_id': session_id
     }
-
+@assessment_bp.route('/thank-you')
+@login_required
+@raw_response
+def thank_you():
+    """Thank you page after assessment completion - no validation needed"""
+    # Get user's most recent session for the summary
+    user_sessions = SessionService.get_user_sessions_with_status(current_user.id)
+    last_session = user_sessions[0] if user_sessions else None
+    
+    # Invalidate the current session in background (token cleanup)
+    from flask_login import logout_user
+    logout_user()
+    
+    # Show thank you page with last completed session info
+    return render_template('assessment/thank_you.html', 
+                         user=current_user,
+                         session=last_session)
 
 @assessment_bp.route('/stream/', methods=['GET'])  # This matches nginx /assessment/stream/
 def stream_sse_optimized():

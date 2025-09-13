@@ -1,20 +1,21 @@
-{% extends "base.html" %}
-{% block title %}Instruksi LLM Chat Assessment{% endblock %}
-{% block content %}
+{% extends "base.html" %} {% block title %}Instruksi LLM Chat Assessment{%
+endblock %} {% block content %}
 
 <div class="min-h-screen bg-gray-50">
   <!-- Navigation -->
   <nav class="bg-white shadow-sm border-b border-gray-200">
     <div class="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
       <div class="flex items-center space-x-4">
-        <h1 class="text-xl font-semibold text-gray-900">Instruksi Chat Assessment</h1>
+        <h1 class="text-xl font-semibold text-gray-900">
+          Instruksi Chat Assessment
+        </h1>
         <div class="bg-green-600 rounded-lg px-3 py-1">
           <span class="text-white font-medium text-sm">Panduan</span>
         </div>
       </div>
       <div class="flex items-center space-x-4">
-        <a 
-          href="{{ url_for('main.serve_index') }}" 
+        <a
+          href="{{ url_for('main.serve_index') }}"
           class="text-gray-500 hover:text-green-600 font-medium transition-colors"
         >
           Kembali ke Dashboard
@@ -34,32 +35,53 @@
     <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
       <!-- Header -->
       <div class="text-center mb-8">
-        <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+        <div
+          class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4"
+        >
+          <svg
+            class="w-8 h-8 text-green-600"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+            ></path>
           </svg>
         </div>
-        <h2 class="text-2xl font-bold text-gray-900 mb-2">Cara Melakukan Chat Assessment</h2>
-        <p class="text-gray-600">Baca instruksi berikut dengan seksama sebelum memulai chat dengan AI</p>
+        <h2 class="text-2xl font-bold text-gray-900 mb-2">
+          Cara Melakukan Chat Assessment
+        </h2>
+        <p class="text-gray-600">
+          Baca instruksi berikut dengan seksama sebelum memulai chat dengan AI
+        </p>
       </div>
 
       <!-- Instructions from Database -->
       <div class="prose max-w-none mb-8">
         {% if instructions %}
-          <div class="bg-blue-50 border-l-4 border-blue-400 p-6 mb-6">
-            <div class="text-gray-800 whitespace-pre-line">{{ instructions }}</div>
+        <div class="bg-blue-50 border-l-4 border-blue-400 p-6 mb-6">
+          <div class="text-gray-800 whitespace-pre-line">
+            {{ instructions }}
           </div>
+        </div>
         {% else %}
-          <div class="bg-yellow-50 border-l-4 border-yellow-400 p-6 mb-6">
-            <p class="text-yellow-800">Instruksi belum dikonfigurasi. Silakan hubungi administrator.</p>
-          </div>
+        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-6 mb-6">
+          <p class="text-yellow-800">
+            Instruksi belum dikonfigurasi. Silakan hubungi administrator.
+          </p>
+        </div>
         {% endif %}
       </div>
 
-
-      <!-- Chat Tips -->
+      <!-- Chat Tips
       <div class="border-t border-gray-200 pt-8 mt-8">
-        <h3 class="text-lg font-semibold text-gray-900 mb-4">Tips Percakapan</h3>
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">
+          Tips Percakapan
+        </h3>
         <div class="grid md:grid-cols-2 gap-4">
           <div class="p-4 bg-green-50 rounded-lg">
             <h4 class="font-medium text-green-900 mb-2">✅ Lakukan</h4>
@@ -80,17 +102,19 @@
             </ul>
           </div>
         </div>
-      </div>
+      </div> -->
 
       <!-- Action Buttons -->
-      <div class="flex justify-center space-x-4 mt-8 pt-8 border-t border-gray-200">
-        <a 
-          href="{{ url_for('assessment.assessment_dashboard') }}" 
+      <div
+        class="flex justify-center space-x-4 mt-8 pt-8 border-t border-gray-200"
+      >
+        <a
+          href="{{ url_for('assessment.assessment_dashboard') }}"
           class="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
         >
           Kembali
         </a>
-        <a 
+        <a
           href="{{ url_for('assessment.llm_assessment_start') }}"
           class="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
         >

@@ -49,6 +49,83 @@
       </div>
     </div>
 
+    <!-- LLM Instructions Section -->
+    <div class="bg-white rounded-lg p-6 border border-indigo-200">
+      <div class="flex items-center mb-4">
+        <div
+          class="w-8 h-8 bg-purple-500 rounded-lg flex items-center justify-center mr-3"
+        >
+          <svg
+            class="w-5 h-5 text-white"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z"
+            />
+          </svg>
+        </div>
+        <h4 class="font-medium text-gray-900">Instruksi LLM</h4>
+        <span
+          class="ml-2 bg-purple-100 text-purple-800 text-xs font-medium px-2.5 py-0.5 rounded"
+          >Custom System Prompt</span
+        >
+      </div>
+      
+      <div class="mb-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
+        <p class="text-sm text-gray-700">
+          <strong>Keterangan:</strong> Pada assessment pertanyaan terbuka akan dilakukan percakapan melalui LLM. 
+          Anda dapat memasukkan instruksi secara umum untuk personalisasi agen percakapan. 
+          Kemudian yang kemudian akan dilakukan oleh LLM, anda dapat memilih model yang anda inginkan untuk analisa.
+        </p>
+      </div>
+      
+      <p class="text-gray-600 mb-4">
+        Instruksi sistem custom untuk LLM. Kosongkan untuk menggunakan prompt default Anisa.
+      </p>
+
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2"
+          >Custom System Prompt (Opsional)</label
+        >
+        <textarea
+          x-model="settings.llm_instructions"
+          rows="8"
+          class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 resize-vertical font-mono text-sm"
+          placeholder="Masukkan instruksi sistem custom untuk LLM. Harus mengandung placeholder {aspects}. Contoh:&#10;&#10;Anda adalah AI assistant yang membantu analisis mental health...&#10;Aspek yang perlu dieksplorasi:&#10;{aspects}&#10;&#10;Kosongkan untuk menggunakan prompt default Anisa."
+        ></textarea>
+        <div class="flex items-start gap-2 mt-2">
+          <div class="flex-shrink-0">
+            <svg class="w-4 h-4 text-amber-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+            </svg>
+          </div>
+          <p class="text-xs text-amber-600">
+            <strong>Wajib:</strong> Harus mengandung placeholder <code class="bg-amber-100 px-1 rounded">{aspects}</code>. 
+            Parser <code class="bg-amber-100 px-1 rounded">&lt;/end_conversation&gt;</code> akan ditambahkan otomatis.
+          </p>
+        </div>
+        <div class="flex items-start gap-2 mt-3">
+          <div class="flex-shrink-0">
+            <svg class="w-4 h-4 text-indigo-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+              <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
+            </svg>
+          </div>
+          <button
+            @click="viewSystemPrompt()"
+            class="text-indigo-600 hover:text-indigo-800 font-medium text-sm underline"
+          >
+            Lihat System Prompt (Preview Final Prompt)
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Analysis Scale Section (PHQ Style) -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
       <div class="flex items-center space-x-2 mb-4">
@@ -71,12 +148,6 @@
         </div>
         <h2 class="text-lg font-bold text-gray-800">Skala Analisis LLM</h2>
         <div class="ml-auto flex gap-2">
-          <button
-            @click="previewAnalysisPrompt()"
-            class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
-          >
-            📄 Preview
-          </button>
           <button
             @click="testAnalysis()"
             class="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"

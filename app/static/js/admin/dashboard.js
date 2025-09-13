@@ -545,14 +545,43 @@ function loadPage(pageNum) {
   const searchQuery = urlParams.get('q') || '';
   const perPage = urlParams.get('per_page') || 15;
   
-  if (searchQuery) {
-    // If we have a search query, use the search function
-    performSearchAjax(searchQuery, pageNum);
-  } else {
-    // Otherwise reload page with new page number
-    urlParams.set('page', pageNum);
-    window.location.search = urlParams.toString();
-  }
+  // Always use AJAX for pagination, regardless of search state
+  const ajaxUrl = `/admin/ajax-data?page=${pageNum}&per_page=${perPage}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ''}`;
+  
+  fetch(ajaxUrl)
+    .then(response => response.json())
+    .then(data => {
+      const actualData = data.status === "OLKORECT" ? data.data : data;
+      
+      if (actualData.status === "success" || actualData.data) {
+        const responseData = actualData.data || actualData;
+        
+        // Update table content
+        updateUserTable(responseData);
+        
+        // Update pagination controls
+        updatePaginationControls(responseData.pagination, searchQuery);
+        
+        // Update URL without refresh
+        urlParams.set('page', pageNum);
+        window.history.replaceState({}, '', `?${urlParams.toString()}`);
+        
+        // Update user count
+        const userCount = document.getElementById('userCount');
+        if (userCount) {
+          const countText = searchQuery
+            ? `${responseData.pagination.total} users found for "${searchQuery}"`
+            : `${responseData.pagination.total} total users`;
+          userCount.textContent = countText;
+        }
+      }
+    })
+    .catch(error => {
+      console.error('Error loading page:', error);
+      // Fallback to page reload if AJAX fails
+      urlParams.set('page', pageNum);
+      window.location.search = urlParams.toString();
+    });
 }
 
 // Initialize dashboard when DOM is loaded

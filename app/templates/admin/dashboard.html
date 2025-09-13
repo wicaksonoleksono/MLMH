@@ -470,12 +470,51 @@
 
 {% block scripts %}
 <script>
-  // Handle per page change - simple page reload for now
+  // Handle per page change with AJAX
   function changePerPage(perPage) {
     const urlParams = new URLSearchParams(window.location.search);
-    urlParams.set('per_page', perPage);
-    urlParams.set('page', 1);
-    window.location.search = urlParams.toString();
+    const currentQuery = urlParams.get('q') || '';
+    
+    // Make AJAX request with new per_page and reset to page 1
+    const ajaxUrl = `/admin/ajax-data?page=1&per_page=${perPage}${currentQuery ? `&q=${encodeURIComponent(currentQuery)}` : ''}`;
+    
+    fetch(ajaxUrl)
+      .then(response => response.json())
+      .then(data => {
+        const actualData = data.status === "OLKORECT" ? data.data : data;
+        
+        if (actualData.status === "success" || actualData.data) {
+          const responseData = actualData.data || actualData;
+          
+          // Update table content
+          updateUserTable(responseData);
+          
+          // Update pagination controls
+          updatePaginationControls(responseData.pagination, currentQuery);
+          
+          // Update URL without refresh
+          urlParams.set('per_page', perPage);
+          urlParams.set('page', 1);
+          window.history.replaceState({}, '', `?${urlParams.toString()}`);
+          
+          // Update user count
+          const userCount = document.getElementById('userCount');
+          if (userCount) {
+            const countText = currentQuery
+              ? `${responseData.pagination.total} users found for "${currentQuery}"`
+              : `${responseData.pagination.total} total users`;
+            userCount.textContent = countText;
+          }
+        }
+      })
+      .catch(error => {
+        console.error('Error changing per page:', error);
+        // Fallback to page reload if AJAX fails
+        const urlParams = new URLSearchParams(window.location.search);
+        urlParams.set('per_page', perPage);
+        urlParams.set('page', 1);
+        window.location.search = urlParams.toString();
+      });
   }
   
   // Add bulk download class on DOM ready

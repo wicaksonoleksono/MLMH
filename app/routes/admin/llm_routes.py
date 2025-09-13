@@ -58,6 +58,7 @@ def create_settings():
             depression_aspects=data.get('depression_aspects'),
             analysis_scale=data.get('analysis_scale'),
             instructions=data.get('instructions'),
+            llm_instructions=data.get('llm_instructions'),
             is_default=True
         )
         return jsonify({"status": "OLKORECT", "data": result})
@@ -132,15 +133,16 @@ def test_model(model_id):
 @llm_bp.route('/prompt/build', methods=['POST'])
 @raw_response  
 def build_prompt():
-    """Build system prompt from hard-coded template and aspects"""
+    """Build system prompt from template (custom or default) and aspects"""
     if not current_user.is_authenticated or not current_user.is_admin():
         return {"status": "SNAFU", "error": "Admin access required"}, 403
     
     data = request.get_json()
     aspects = data.get('aspects', [])
+    custom_instructions = data.get('llm_instructions')
     
     try:
-        prompt = LLMService.build_system_prompt(aspects)
+        prompt = LLMService.build_system_prompt(aspects, custom_instructions)
         return jsonify({"prompt": prompt})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

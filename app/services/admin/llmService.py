@@ -54,9 +54,7 @@ class LLMService:
      jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya dengan menutup  
     Percakapan dengan "gak papa kamu pasti bisa kok, semangat yaa ! 
     Kalau memang darurat deh Hubungi psikolog terdekat mu !!" 
-    Tidak perlu bilang secara eksplisit menyebutkan mengenai depresi atau sejenisnya. 
-    Kemudian tulis </end_conversation> pada akhir kalimat ini untuk parser output.
-    
+    Tidak perlu bilang secara eksplisit menyebutkan mengenai depresi atau sejenisnya.
     """
 
     @staticmethod
@@ -69,6 +67,7 @@ class LLMService:
             return [{
                 'id': setting.id,
                 'instructions': setting.instructions,
+                'llm_instructions': setting.llm_instructions,
                 'openai_api_key': setting.get_masked_api_key(),  # Return masked API key for security
                 'openai_api_key_unmasked': setting.get_api_key(),  # Return unmasked API key for frontend use
                 'chat_model': setting.chat_model,
@@ -84,6 +83,7 @@ class LLMService:
                        depression_aspects: Optional[List[Dict]] = None,
                        analysis_scale: Optional[List[Dict]] = None,
                        instructions: str = None,
+                       llm_instructions: str = None,
                        is_default: bool = False) -> Dict[str, Any]:
         """Create or update LLM settings - no streaming validation"""
         with get_session() as db:
@@ -104,8 +104,15 @@ class LLMService:
             if analysis_scale is not None and len(analysis_scale) > 0:
                 scale_json = {"scale": analysis_scale}
             
-            # Null handling for instructions - don't save if null/empty
+            # Null handling for instructions - don't save if null/empty  
             final_instructions = instructions if instructions and instructions.strip() else None
+            
+            # Null handling for llm_instructions - don't save if null/empty
+            final_llm_instructions = llm_instructions if llm_instructions and llm_instructions.strip() else None
+            
+            # Validate {aspects} placeholder exists in custom llm_instructions
+            if final_llm_instructions and '{aspects}' not in final_llm_instructions:
+                raise ValueError("LLM instructions must contain {aspects} placeholder")
             
             # Look for existing settings (assume only one set of settings for now)
             existing = db.query(LLMSettings).filter(LLMSettings.is_active == True).first()
@@ -120,6 +127,7 @@ class LLMService:
                 
                 # Update existing settings
                 existing.instructions = final_instructions
+                existing.llm_instructions = final_llm_instructions
                 if openai_api_key is not None:  # Only update if new API key provided
                     existing.set_api_key(openai_api_key)  # Use encryption method
                 existing.chat_model = chat_model
@@ -147,6 +155,7 @@ class LLMService:
                 # Create new settings
                 settings = LLMSettings(
                     instructions=final_instructions,
+                    llm_instructions=final_llm_instructions,
                     chat_model=chat_model,
                     analysis_model=analysis_model,
                     depression_aspects=aspects_json,
@@ -177,6 +186,7 @@ class LLMService:
                 "status": "OLKORECT",
                 'id': settings.id,
                 'instructions': settings.instructions or '',
+                'llm_instructions': settings.llm_instructions or '',
                 'openai_api_key': openai_api_key or '',  # Always return string, even if empty
                 'chat_model': settings.chat_model,
                 'analysis_model': settings.analysis_model,
@@ -233,6 +243,13 @@ class LLMService:
                     elif key == 'instructions':
                         final_value = value if value and value.strip() else None
                         setattr(settings, key, final_value)
+                    # Null handling for llm_instructions
+                    elif key == 'llm_instructions':
+                        final_value = value if value and value.strip() else None
+                        # Validate {aspects} placeholder exists in custom llm_instructions
+                        if final_value and '{aspects}' not in final_value:
+                            raise ValueError("LLM instructions must contain {aspects} placeholder")
+                        setattr(settings, key, final_value)
                     else:
                         setattr(settings, key, value)
             
@@ -271,6 +288,7 @@ class LLMService:
         """Get hardcoded default LLM settings for 'Muat Default' button"""
         return {
             "instructions": "",
+            "llm_instructions": LLMService.ANISA_SYSTEM_PROMPT.strip(),  # Load actual Anisa prompt
             "openai_api_key": "",
             "chat_model": "gpt-4o",
             "analysis_model": "gpt-4o-mini",
@@ -280,10 +298,26 @@ class LLMService:
         }
 
     @staticmethod
-    def build_system_prompt(aspects: List[dict]) -> str:
-        """Build final system prompt by combining hard-coded template with aspects"""
+    def build_system_prompt(aspects: List[dict], custom_instructions: str = None) -> str:
+        """Build final system prompt by combining template with aspects"""
         aspects_text = "\n".join(f"- {aspect['name']}: {aspect['description']}" for aspect in aspects)
-        return LLMService.ANISA_SYSTEM_PROMPT.format(aspects=aspects_text)
+        
+        # Use custom instructions if provided, otherwise use default
+        base_prompt = custom_instructions if custom_instructions else LLMService.ANISA_SYSTEM_PROMPT
+        
+        # Validate that {aspects} placeholder exists
+        if '{aspects}' not in base_prompt:
+            raise ValueError("Prompt template must contain {aspects} placeholder")
+        
+        # Format the prompt with aspects
+        formatted_prompt = base_prompt.format(aspects=aspects_text)
+        
+        # Always append the end conversation parser if not already there
+        if not formatted_prompt.strip().endswith('</end_conversation>'):
+            if not formatted_prompt.strip().endswith('Kemudian tulis </end_conversation> pada akhir kalimat ini untuk parser output.'):
+                formatted_prompt += "\n\nKemudian tulis </end_conversation> pada akhir kalimat ini untuk parser output."
+        
+        return formatted_prompt
     
 
     @staticmethod

@@ -87,7 +87,8 @@ class LLMChatService:
             
             # Build system prompt from settings
             aspects = settings['depression_aspects']
-            system_prompt = LLMService.build_system_prompt(aspects)
+            custom_instructions = settings.get('llm_instructions')
+            system_prompt = LLMService.build_system_prompt(aspects, custom_instructions)
             
             # Create prompt template with system prompt from database
             self.prompt = ChatPromptTemplate.from_messages([

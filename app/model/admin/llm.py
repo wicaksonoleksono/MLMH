@@ -11,6 +11,7 @@ from ...services.shared.encryptionService import EncryptionService
 class LLMSettings(BaseModel, StatusMixin):
     __tablename__ = 'llm_settings'
     instructions: Mapped[Optional[str]] = mapped_column(Text)
+    llm_instructions: Mapped[Optional[str]] = mapped_column(Text)
     openai_api_key: Mapped[str] = mapped_column(Text, nullable=False)  # Stores encrypted API key
     chat_model: Mapped[str] = mapped_column(String(50), default="gpt-4o", nullable=False)
     analysis_model: Mapped[str] = mapped_column(String(50), default="gpt-4o-mini", nullable=False)

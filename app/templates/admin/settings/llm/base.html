@@ -42,6 +42,7 @@ endblock %} {% block content %}
   </div>
 
   {% include "components/modal.html" %}
+  {% include "components/preview_modal.html" %}
 
   <!-- Loading -->
   <div
@@ -66,6 +67,7 @@ endblock %} {% block content %}
 
       settings: {
         instructions: "",
+        llm_instructions: "",
         openai_api_key: "",
         chat_model: "gpt-4o",
         analysis_model: "gpt-4o-mini",
@@ -131,6 +133,11 @@ endblock %} {% block content %}
       modalMessage: "",
       modalConfirm: () => {},
 
+      // Preview Modal state (for system prompt preview)
+      showPreviewModal: false,
+      previewModalTitle: "",
+      previewModalContent: "",
+
       loadDataFromTemplate() {
         // Load data from Jinja template context (passed via window.llmData)
         const llmData = window.llmData || {};
@@ -142,6 +149,7 @@ endblock %} {% block content %}
             this.settings = {
               id: setting.id,
               instructions: setting.instructions || "",
+              llm_instructions: setting.llm_instructions || "",
               openai_api_key: setting.openai_api_key || "", // This will be the masked version
               openai_api_key_unmasked: setting.openai_api_key_unmasked || "", // This is the real key
               chat_model: setting.chat_model || "gpt-4o",
@@ -230,6 +238,7 @@ endblock %} {% block content %}
             if (defaults) {
               this.settings = {
                 instructions: defaults.instructions || "",
+                llm_instructions: defaults.llm_instructions || "",
                 openai_api_key: defaults.openai_api_key || "",
                 openai_api_key_unmasked: "", // No unmasked key for defaults
                 chat_model: defaults.chat_model || "gpt-4o",
@@ -290,6 +299,7 @@ endblock %} {% block content %}
             } else {
               this.settings = {
                 instructions: "",
+                llm_instructions: "",
                 openai_api_key: "",
                 openai_api_key_unmasked: "", // No unmasked key
                 chat_model: "gpt-4o",
@@ -354,6 +364,7 @@ endblock %} {% block content %}
           } catch (error) {
             this.settings = {
               instructions: "",
+              llm_instructions: "",
               openai_api_key: "",
               openai_api_key_unmasked: "", // No unmasked key
               chat_model: "gpt-4o",
@@ -439,6 +450,7 @@ endblock %} {% block content %}
             this.settings = {
               id: null,
               instructions: "",
+              llm_instructions: "",
               openai_api_key: "",
               openai_api_key_unmasked: "",
               chat_model: "",
@@ -473,6 +485,7 @@ endblock %} {% block content %}
         try {
           const settingsData = {
             instructions: this.settings.instructions,
+            llm_instructions: this.settings.llm_instructions,
             chat_model: this.settings.chat_model,
             analysis_model: this.settings.analysis_model,
           };
@@ -547,6 +560,7 @@ endblock %} {% block content %}
         try {
           const settingsData = {
             instructions: this.settings.instructions,
+            llm_instructions: this.settings.llm_instructions,
             chat_model: this.settings.chat_model,
             analysis_model: this.settings.analysis_model,
           };
@@ -795,6 +809,31 @@ endblock %} {% block content %}
         .catch(error => {
           alert("Error generating analysis: " + error.message);
         });
+      },
+
+      async viewSystemPrompt() {
+        try {
+          const result = await apiCall('/admin/llm/prompt/build', 'POST', {
+            aspects: this.settings.depression_aspects,
+            llm_instructions: this.settings.llm_instructions
+          });
+
+          if (result.prompt) {
+            this.showPreviewModal = true;
+            this.previewModalTitle = "System Prompt Preview";
+            this.previewModalContent = `
+              <h4 style="margin-bottom: 15px; color: #4F46E5; font-size: 16px;">Final System Prompt (dengan Aspects):</h4>
+              <pre style="background: #F3F4F6; padding: 20px; border-radius: 8px; white-space: pre-wrap; font-size: 13px; line-height: 1.5; border: 1px solid #D1D5DB;">${result.prompt}</pre>
+              <div style="margin-top: 20px; padding: 15px; background: #EEF2FF; border-radius: 8px; font-size: 12px; border: 1px solid #C7D2FE;">
+                <strong>ℹ️ Info:</strong> ${this.settings.llm_instructions ? 'Menggunakan Custom Instructions' : 'Menggunakan Default Anisa Prompt'}
+              </div>
+            `;
+          } else {
+            alert('Error: ' + (result.error || 'Failed to build prompt'));
+          }
+        } catch (error) {
+          alert('Error building prompt: ' + error.message);
+        }
       },
     };
   }

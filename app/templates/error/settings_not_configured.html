@@ -1,31 +1,40 @@
-{% extends "base.html" %}
+{% extends "base.html" %} {% block title %}Pengaturan Belum Dikonfigurasi{%
+endblock %} {% block content %}
+<div
+  class="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8"
+>
+  <div class="max-w-md w-full space-y-8">
+    <div class="text-center">
+      <!-- Warning Icon -->
+      <div
+        class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-6"
+      >
+        <svg
+          class="h-8 w-8 text-red-600"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.082 16.5c-.77.833.192 2.5 1.732 2.5z"
+          />
+        </svg>
+      </div>
 
-{% block title %}Pengaturan Belum Dikonfigurasi{% endblock %}
+      <h2 class="text-3xl font-bold text-gray-900 mb-4">Mohon Maaf</h2>
 
-{% block content %}
-<div class="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-    <div class="max-w-md w-full space-y-8">
-        <div class="text-center">
-            <!-- Warning Icon -->
-            <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-6">
-                <svg class="h-8 w-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
-                </svg>
-            </div>
-            
-            <h2 class="text-3xl font-bold text-gray-900 mb-4">
-                Mohon Maaf
-            </h2>
-            
-            <div class="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
-                <h3 class="text-lg font-semibold text-red-800 mb-2">
-                    Pengaturan Assessment Belum Dibuat
-                </h3>
-                <p class="text-red-700 text-sm">
-                    Silakan menghubungi penyelenggara untuk mengonfigurasi pengaturan assessment sebelum memulai.
-                </p>
-                {% if missing_settings %}
+      <div class="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
+        <h3 class="text-lg font-semibold text-red-800 mb-2">
+          Pengaturan Assessment Belum Dibuat
+        </h3>
+        <p class="text-red-700 text-sm">
+          Silakan menghubungi penyelenggara untuk mengonfigurasi pengaturan
+          assessment sebelum memulai.
+        </p>
+        <!-- {% if missing_settings %}
                 <div class="mt-4">
                     <p class="text-red-800 font-medium text-sm mb-2">Pengaturan yang belum dikonfigurasi:</p>
                     <ul class="text-red-700 text-sm space-y-1">
@@ -39,29 +48,34 @@
                         {% endfor %}
                     </ul>
                 </div>
-                {% endif %}
-            </div>
-            
-            <div class="space-y-4">
-                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <p class="text-blue-800 text-sm">
-                        <strong>Untuk Administrator:</strong> Silakan konfigurasi pengaturan assessment di panel admin.
-                    </p>
-                </div>
-                
-                <div class="flex flex-col space-y-3">
-                    <a href="{{ url_for('main.serve_index') }}" 
-                       class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-lg transition-colors text-center">
-                        Kembali ke Dashboard
-                    </a>
-                    
-                    <a href="{{ url_for('auth.logout') }}" 
-                       class="w-full bg-gray-300 hover:bg-gray-400 text-gray-700 font-medium py-3 px-4 rounded-lg transition-colors text-center">
-                        Keluar
-                    </a>
-                </div>
-            </div>
+                {% endif %} -->
+      </div>
+
+      <div class="space-y-4">
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p class="text-blue-800 text-sm">
+            <strong>Untuk Administrator:</strong> Silakan konfigurasi pengaturan
+            assessment di panel admin.
+          </p>
         </div>
+
+        <div class="flex flex-col space-y-3">
+          <a
+            href="{{ url_for('main.serve_index') }}"
+            class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-lg transition-colors text-center"
+          >
+            Kembali ke Dashboard
+          </a>
+
+          <a
+            href="{{ url_for('auth.logout') }}"
+            class="w-full bg-gray-300 hover:bg-gray-400 text-gray-700 font-medium py-3 px-4 rounded-lg transition-colors text-center"
+          >
+            Keluar
+          </a>
+        </div>
+      </div>
     </div>
+  </div>
 </div>
 {% endblock %}

@@ -116,7 +116,7 @@ class LLMChatService:
             # Don't hide the error - show the raw error message
             raise e
     
-    def stream_ai_response(self, session_id: str, user_message: str) -> Generator[str, None, None]:
+    def stream_ai_response(self, session_id: str, user_message: str) -> Generator[dict, None, None]:
         """
         Stream AI response using session's system prompt from database settings
         """
@@ -129,6 +129,7 @@ class LLMChatService:
             
             response_content = ""
             config = {"configurable": {"session_id": session_id}}
+            conversation_ended = False
             
             # Stream directly without timeout/retry interference
             chunk_count = 0
@@ -137,15 +138,31 @@ class LLMChatService:
                 config=config
             ):
                 chunk_count += 1
+                content = ""
+                
                 # Handle None or empty chunks properly
                 if chunk is not None and hasattr(chunk, 'content') and chunk.content:
                     content = chunk.content
-                    response_content += content
-                    yield content
                 # Also handle the case where chunk might be a string directly
                 elif isinstance(chunk, str) and chunk:
-                    response_content += chunk
-                    yield chunk
+                    content = chunk
+                
+                if content:
+                    response_content += content
+                    
+                    # Check for end conversation tag in this chunk
+                    content_lower = content.lower()
+                    if "</end_conversation>" in content_lower or "<end_conversation>" in content_lower:
+                        conversation_ended = True
+                    
+                    yield {
+                        'content': content,
+                        'conversation_ended': conversation_ended
+                    }
+                    
+                    # If conversation ended, break the streaming loop immediately
+                    if conversation_ended:
+                        break
             
             if chunk_count == 0:
                 raise ValueError("No response received from OpenAI")

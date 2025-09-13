@@ -227,12 +227,9 @@ function chatInterface(sessionId) {
             botMessage.content += data.data;
             this.scrollToBottom();
 
-            // Check for end_conversation tag immediately - no delay!
-            if (
-              data.data.toLowerCase().includes("<end_conversation>") ||
-              data.data.toLowerCase().includes("</end_conversation>")
-            ) {
-              // End conversation immediately when tag is detected in this chunk
+            // Check conversation_ended flag from backend (immediate detection)
+            if (data.conversation_ended) {
+              // End conversation immediately when backend detects the tag
               this.conversationEnded = true;
               // Don't wait - finish conversation right now
               eventSource.close();

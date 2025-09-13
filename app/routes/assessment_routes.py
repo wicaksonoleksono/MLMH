@@ -948,9 +948,18 @@ def stream_sse_optimized():
             last_beat = time.time()
             chunk_count = 0
             
-            for chunk in chat_service.stream_ai_response(session_id, message):
+            for chunk_data in chat_service.stream_ai_response(session_id, message):
                 chunk_count += 1
-                yield sse({'type': 'chunk', 'data': chunk})
+                chunk_payload = {
+                    'type': 'chunk', 
+                    'data': chunk_data['content'],
+                    'conversation_ended': chunk_data['conversation_ended']
+                }
+                yield sse(chunk_payload)
+                
+                # If conversation ended, stop streaming immediately
+                if chunk_data['conversation_ended']:
+                    break
                 
                 if time.time() - last_beat > 20:
                     yield ": ping\n\n"  

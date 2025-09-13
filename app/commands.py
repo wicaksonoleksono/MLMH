@@ -13,8 +13,9 @@ def register_commands(app):
     """Register all custom CLI commands with the Flask app."""
 
     @app.cli.command("seed-db")
+    @click.option('-d', '--dev', is_flag=True, help='Create additional test user for development')
     @click.confirmation_option(prompt="This will drop all tables and recreate them. Are you sure?")
-    def seed_db_combined():
+    def seed_db_combined(dev):
         """Reset database and seed with fresh data."""
         click.echo("[OLKORECT] Resetting and seeding database...")
         
@@ -29,7 +30,7 @@ def register_commands(app):
         
         # Then initialize with fresh data
         click.echo("  - Seeding with fresh data...")
-        _seed_database()
+        _seed_database(dev_mode=dev)
         
         click.echo("[OLKORECT] Database reset and seeding completed successfully!")
 
@@ -38,7 +39,7 @@ def register_commands(app):
         """Initialize database with essential data (no reset)."""
         _seed_database()
 
-    def _seed_database():
+    def _seed_database(dev_mode=False):
         """Internal function to seed database with essential data."""
         click.echo("[OLKORECT] Seeding database with essential data...")
         create_all_tables()
@@ -70,6 +71,22 @@ def register_commands(app):
                     db.add(admin_user)
                     click.echo("  - Default admin user created (admin/admin) with verified email")
 
+        # Create test user if dev mode is enabled
+        if dev_mode:
+            with get_session() as db:
+                user_type = db.query(UserType).filter_by(name="user").first()
+                if user_type:
+                    existing_test_user = db.query(User).filter_by(uname="testuser").first()
+                    if not existing_test_user:
+                        test_user = User.create_user(
+                            uname="testuser",
+                            password="testpass",
+                            user_type_id=user_type.id,
+                            email="test@example.com"
+                        )
+                        test_user.email_verified = True
+                        db.add(test_user)
+                        click.echo("  - Test user created (testuser/testpass) with verified email")
 
         # Seed default admin settings
         click.echo("  - Creating default admin settings...")

@@ -13,17 +13,17 @@ class LLMService:
     
     # Default depression aspects with name and description
     DEFAULT_ASPECTS = [
-        {"name": "Anhedonia", "description": "kehilangan minat/kenikmatan"},
-        {"name": "Bias kognitif negatif", "description": "hopelessness & negative thinking patterns"},
-        {"name": "Rumination", "description": "pikiran berputar tanpa solusi"},
-        {"name": "Psikomotor retardation", "description": "perlambatan gerakan dan bicara"},
-        {"name": "Gangguan tidur", "description": "insomnia, kualitas tidur jelek"},
-        {"name": "Iritabilitas", "description": "ledakan marah & mudah tersinggung"},
-        {"name": "Rasa bersalah berlebih", "description": "self-blame & worthlessness"},
-        {"name": "Gangguan kognitif", "description": "concentration & executive function issues"},
-        {"name": "Penarikan diri sosial", "description": "isolasi & withdrawal"},
-        {"name": "Alexithymia", "description": "sulit mengenali & mengungkap emosi"},
-        {"name": "Defisit regulasi emosi", "description": "kesulitan mengatur emosi"}
+        {"name": "Anhedonia", "description": "Apakah pasien kehilangan minat atau kesenangan dalam aktivitas sehari-hari?"},
+        {"name": "Bias Kognitif Negatif", "description": "Apakah pasien menunjukkan pola pikir negatif dan perasaan putus asa?"},
+        {"name": "Ruminasi", "description": "Apakah pasien terjebak dalam pikiran berulang tanpa menemukan solusi?"},
+        {"name": "Retardasi Psikomotor", "description": "Apakah terdapat perlambatan dalam gerakan dan bicara pasien?"},
+        {"name": "Gangguan Tidur", "description": "Apakah pasien mengalami masalah tidur seperti insomnia atau kualitas tidur yang buruk?"},
+        {"name": "Iritabilitas", "description": "Apakah pasien mudah marah atau tersinggung dalam situasi sehari-hari?"},
+        {"name": "Rasa Bersalah Berlebihan", "description": "Apakah pasien menunjukkan perasaan bersalah atau merasa tidak berharga secara berlebihan?"},
+        {"name": "Gangguan Kognitif", "description": "Apakah terdapat gangguan dalam konsentrasi dan fungsi eksekutif pasien?"},
+        {"name": "Penarikan Diri Sosial", "description": "Apakah pasien cenderung mengisolasi diri dan menarik diri dari interaksi sosial?"},
+        {"name": "Alexithymia", "description": "Apakah pasien mengalami kesulitan mengenali dan mengungkapkan emosi mereka?"},
+        {"name": "Defisit Regulasi Emosi", "description": "Apakah pasien kesulitan dalam mengatur dan mengelola emosi mereka?"}
     ]
 
     # Default analysis scale (shared across all aspects)

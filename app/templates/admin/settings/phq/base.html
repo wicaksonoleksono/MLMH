@@ -80,71 +80,7 @@ endblock %} {% block content %}
         },
       },
 
-      categories: [
-        {
-          name_id: "ANHEDONIA",
-          name: "Anhedonia",
-          description_id:
-            "Dalam 2 minggu terakhir apakah Anda merasa kurang tertarik atau bergairah dalam melakukan apapun",
-          questions: [""],
-        },
-        {
-          name_id: "DEPRESSED_MOOD",
-          name: "Suasana Hati Murung",
-          description_id:
-            "Dalam 2 minggu terakhir apakah Anda merasa murung, muram, atau putus asa",
-          questions: [""],
-        },
-        {
-          name_id: "SLEEP_DISTURBANCE",
-          name: "Gangguan Tidur",
-          description_id:
-            "Dalam 2 minggu terakhir apakah Anda merasa sulit tidur atau mudah terbangun, atau terlalu banyak tidur",
-          questions: [""],
-        },
-        {
-          name_id: "FATIGUE",
-          name: "Kelelahan",
-          description_id:
-            "Dalam 2 minggu terakhir apakah Anda merasa sering merasa lelah atau kurang bertenaga",
-          questions: [""],
-        },
-        {
-          name_id: "APPETITE_CHANGES",
-          name: "Perubahan Nafsu Makan",
-          description_id:
-            "Dalam 2 minggu terakhir apakah Anda merasa kurang nafsu makan atau terlalu banyak makan",
-          questions: [""],
-        },
-        {
-          name_id: "WORTHLESSNESS",
-          name: "Merasa Tidak Berharga",
-          description_id:
-            "Dalam 2 minggu terakhir apakah Anda merasa kurang percaya diri atau merasa bahwa Anda adalah orang yang gagal atau telah mengecewakan diri sendiri atau keluarga",
-          questions: [""],
-        },
-        {
-          name_id: "CONCENTRATION",
-          name: "Kesulitan Konsentrasi",
-          description_id:
-            "Dalam 2 minggu terakhir apakah Anda merasa sulit berkonsentrasi pada sesuatu, misalnya membaca koran atau menonton televisi",
-          questions: [""],
-        },
-        {
-          name_id: "PSYCHOMOTOR",
-          name: "Gangguan Psikomotor",
-          description_id:
-            "Dalam 2 minggu terakhir apakah Anda merasa bergerak atau berbicara sangat lambat sehingga orang lain memperhatikannya. Atau sebaliknya merasa resah atau gelisah sehingga Anda lebih sering bergerak dari biasanya",
-          questions: [""],
-        },
-        {
-          name_id: "SUICIDAL_IDEATION",
-          name: "Pikiran Bunuh Diri",
-          description_id:
-            "Dalam 2 minggu terakhir apakah Anda merasa lebih baik mati atau ingin melukai diri sendiri dengan cara apapun",
-          questions: [""],
-        },
-      ],
+      categories: [], // Will be loaded from service layer via window.phqData
 
       settings: {
         id: null,
@@ -182,26 +118,48 @@ endblock %} {% block content %}
         this.categories[categoryIndex].questions.splice(questionIndex, 1);
       },
 
-      loadDefaults() {
+      async loadDefaults() {
         this.showModal = true;
         this.modalTitle = "Muat Data Default";
         this.modalMessage =
-          "Apakah Anda yakin ingin memuat data default PHQ-9? Data yang ada akan diganti.";
-        this.modalConfirm = () => {
-          this.scale = {
-            minValue: 0,
-            maxValue: 3,
-            labels: {
-              0: "Tidak sama sekali",
-              1: "Beberapa hari",
-              2: "Lebih dari setengah hari",
-              3: "Hampir setiap hari",
-            },
-          };
-          // Reset to default questions for each category
-          this.categories.forEach((cat) => {
-            cat.questions = [cat.description_id];
-          });
+          "Apakah Anda yakin ingin memuat data default PHQ-9? Data yang ada akan diganti dengan pertanyaan default yang sudah disediakan.";
+        this.modalConfirm = async () => {
+          this.loading = true;
+          this.showModal = false;
+          try {
+            // Call API to load default questions into database
+            const response = await fetch('/admin/phq/api/defaults', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              }
+            });
+            
+            const result = await response.json();
+            
+            if (result.status === 'OLKORECT') {
+              // Reset scale to defaults
+              this.scale = {
+                minValue: 0,
+                maxValue: 3,
+                labels: {
+                  0: "Tidak sama sekali",
+                  1: "Beberapa hari",
+                  2: "Lebih dari setengah hari",
+                  3: "Hampir setiap hari",
+                },
+              };
+              
+              // Reload the page to get fresh data with default questions
+              window.location.reload();
+            } else {
+              alert('Error loading defaults: ' + (result.error || 'Unknown error'));
+            }
+          } catch (error) {
+            alert('Error loading defaults: ' + error.message);
+          } finally {
+            this.loading = false;
+          }
         };
       },
 
@@ -233,69 +191,16 @@ endblock %} {% block content %}
               }
             }
 
-            // Reset frontend state for categories and settings (but not scales)
-            this.categories = [
-              {
-                name_id: "ANHEDONIA",
-                name: "Anhedonia",
-                description_id:
-                  "Kurang tertarik atau bergairah dalam melakukan apapun",
-                questions: [""],
-              },
-              {
-                name_id: "DEPRESSED_MOOD",
-                name: "Depressed Mood",
-                description_id: "Merasa murung, muram, atau putus asa",
-                questions: [""],
-              },
-              {
-                name_id: "SLEEP_DISTURBANCE",
-                name: "Sleep Disturbance",
-                description_id:
-                  "Sulit tidur atau mudah terbangun, atau terlalu banyak tidur",
-                questions: [""],
-              },
-              {
-                name_id: "FATIGUE",
-                name: "Fatigue",
-                description_id: "Merasa lelah atau kurang bertenaga",
-                questions: [""],
-              },
-              {
-                name_id: "APPETITE_CHANGES",
-                name: "Appetite Changes",
-                description_id: "Kurang nafsu makan atau terlalu banyak makan",
-                questions: [""],
-              },
-              {
-                name_id: "WORTHLESSNESS",
-                name: "Worthlessness",
-                description_id:
-                  "Kurang percaya diri — atau merasa bahwa Anda adalah orang yang gagal atau telah mengecewakan diri sendiri atau keluarga",
-                questions: [""],
-              },
-              {
-                name_id: "CONCENTRATION",
-                name: "Concentration",
-                description_id:
-                  "Sulit berkonsentrasi pada sesuatu, misalnya membaca koran atau menonton televisi",
-                questions: [""],
-              },
-              {
-                name_id: "PSYCHOMOTOR",
-                name: "Psychomotor",
-                description_id:
-                  "Bergerak atau berbicara sangat lambat sehingga orang lain memperhatikannya. Atau sebaliknya — merasa resah atau gelisah sehingga Anda lebih sering bergerak dari biasanya",
-                questions: [""],
-              },
-              {
-                name_id: "SUICIDAL_IDEATION",
-                name: "Suicidal Ideation",
-                description_id:
-                  "Merasa lebih baik mati atau ingin melukai diri sendiri dengan cara apapun",
-                questions: [""],
-              },
-            ];
+            // Reset categories to clean state using service data
+            const phqData = window.phqData || {};
+            if (phqData.categories && Array.isArray(phqData.categories)) {
+              this.categories = phqData.categories.map(cat => ({
+                name_id: cat.name_id,        // Constant from service
+                name: cat.name,              // Constant from service
+                description_id: cat.description_id, // Constant from service
+                questions: [""]              // Reset questions to empty
+              }));
+            }
 
             this.settings = {
               id: null,
@@ -328,14 +233,16 @@ endblock %} {% block content %}
         const phqData = window.phqData || {};
 
         try {
-          // Load questions for predefined categories
-          if (phqData.questions_by_category) {
-            for (const category of this.categories) {
-              const questions =
-                phqData.questions_by_category[category.name_id] || [];
-              category.questions =
-                questions.length > 0 ? questions : [category.description_id];
-            }
+          // Load categories from service layer (immutable structure)
+          if (phqData.categories && Array.isArray(phqData.categories)) {
+            this.categories = phqData.categories.map(cat => ({
+              name_id: cat.name_id,        // Constant
+              name: cat.name,              // Constant  
+              description_id: cat.description_id, // Constant
+              questions: phqData.questions_by_category && phqData.questions_by_category[cat.name_id] 
+                ? phqData.questions_by_category[cat.name_id]
+                : [""] // Empty if no questions, NOT description_id
+            }));
           }
 
           // Load scale
@@ -355,7 +262,9 @@ endblock %} {% block content %}
               : "false";
             this.config.instructions = phqData.settings.instructions || "";
           }
-        } catch (error) {}
+        } catch (error) {
+          console.error('Error loading PHQ data from template:', error);
+        }
       },
 
       // Keep the old async loadData method for fallback

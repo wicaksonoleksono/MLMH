@@ -10,10 +10,25 @@ phq_bp = Blueprint('phq', __name__, url_prefix='/admin/phq')
 @phq_bp.route('/settings', methods=['GET'])
 @raw_response  
 def phq_settings_page():
-    """PHQ Settings page with proper Flask forms instead of apiCall bullshit"""
+    """PHQ Settings page with clean data flow from service layer"""
     if not current_user.is_authenticated or not current_user.is_admin():
         return redirect(url_for('main.auth_page'))
-    return render_template('admin/settings/phq/index.html', user=current_user)
+    
+    # Get complete PHQ data structure from service layer (single source of truth)
+    try:
+        phq_data = PHQService.get_complete_default_structure()
+    except Exception as e:
+        # Fallback to basic structure if error
+        phq_data = {
+            'categories': PHQService.get_default_categories(),
+            'questions_by_category': {},
+            'scale': None,
+            'settings': None
+        }
+    
+    return render_template('admin/settings/phq/index.html', 
+                         user=current_user,
+                         phq_data=phq_data)
 
 
 @phq_bp.route('/settings/save', methods=['POST'])
@@ -92,6 +107,37 @@ def save_all_settings():
     except Exception as e:
         flash(f'Error saving PHQ settings: {str(e)}', 'error')
         return redirect(url_for('phq.phq_settings_page'))
+
+
+@phq_bp.route('/api/defaults', methods=['POST'])
+@raw_response
+def load_phq_defaults_ajax():
+    """Load PHQ default questions from enum into database"""
+    if not current_user.is_authenticated or not current_user.is_admin():
+        return jsonify({"status": "SNAFU", "error": "Admin access required"}), 403
+    
+    try:
+        # Get default categories with their default questions from enum
+        default_categories = PHQService.get_default_categories()
+        
+        # Clear existing questions for all categories first
+        existing_questions = PHQService.get_questions()
+        for q in existing_questions:
+            PHQService.delete_question(q['id'])
+        
+        # Load default questions from enum for each category
+        for default_cat in default_categories:
+            for idx, question_text in enumerate(default_cat['default_questions']):
+                PHQService.create_question(
+                    category_name_id=default_cat['name_id'],
+                    question_text_en=question_text,
+                    question_text_id=question_text,
+                    order_index=idx
+                )
+        
+        return jsonify({"status": "OLKORECT", "message": "PHQ defaults loaded successfully"})
+    except Exception as e:
+        return jsonify({"status": "SNAFU", "error": str(e)}), 500
 
 
 @phq_bp.route('/categories', methods=['GET'])

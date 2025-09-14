@@ -423,3 +423,83 @@ class PHQService:
             db.commit()
 
             return {'id': settings_id, 'deleted': True}
+    
+    @staticmethod
+    def get_complete_default_structure() -> Dict[str, Any]:
+        """Get complete PHQ default structure for frontend - single source of truth"""
+        with get_session() as db:
+            # Get predefined categories (always available from enum)
+            categories = PHQCategoryType.get_all_categories()
+            
+            # Get questions organized by category from database
+            questions_by_category = {}
+            for cat in categories:
+                questions = db.query(PHQQuestion).filter(
+                    PHQQuestion.category_name_id == cat['name_id'],
+                    PHQQuestion.is_active == True
+                ).order_by(PHQQuestion.order_index).all()
+                
+                # If no questions exist, provide empty array (not description_id)
+                questions_by_category[cat['name_id']] = [
+                    q.question_text_id for q in questions
+                ] if questions else []
+            
+            # Get current scale (or provide default from enum)
+            scales = db.query(PHQScale).filter(
+                PHQScale.is_default == True, 
+                PHQScale.is_active == True
+            ).all()
+            
+            if scales:
+                scale_data = {
+                    'id': scales[0].id,
+                    'scale_name': scales[0].scale_name,
+                    'min_value': scales[0].min_value,
+                    'max_value': scales[0].max_value,
+                    'scale_labels': scales[0].scale_labels,
+                    'is_default': scales[0].is_default
+                }
+            else:
+                # No scale exists, return default
+                scale_data = {
+                    'id': None,
+                    'scale_name': 'PHQ-9 Default Scale',
+                    'min_value': 0,
+                    'max_value': 3,
+                    'scale_labels': {
+                        '0': 'Tidak sama sekali',
+                        '1': 'Beberapa hari', 
+                        '2': 'Lebih dari setengah hari',
+                        '3': 'Hampir setiap hari'
+                    },
+                    'is_default': True
+                }
+            
+            # Get current settings (or provide default)
+            settings_list = db.query(PHQSettings).filter(
+                PHQSettings.is_default == True,
+                PHQSettings.is_active == True
+            ).all()
+            
+            if settings_list:
+                settings_data = {
+                    'id': settings_list[0].id,
+                    'randomize_categories': settings_list[0].randomize_categories,
+                    'instructions': settings_list[0].instructions,
+                    'is_default': settings_list[0].is_default
+                }
+            else:
+                # No settings exist, return default
+                settings_data = {
+                    'id': None,
+                    'randomize_categories': False,
+                    'instructions': '',
+                    'is_default': True
+                }
+            
+            return {
+                'categories': categories,
+                'questions_by_category': questions_by_category,
+                'scale': scale_data,
+                'settings': settings_data
+            }

@@ -10,22 +10,32 @@ import enum
 
 class PHQCategoryType(enum.Enum):
     ANHEDONIA = (1, "Anhedonia", "Kehilangan minat atau kesenangan",
-                 "Kurang tertarik atau bergairah dalam melakukan apapun")
+             "Dalam 2 minggu terakhir apakah Anda merasa kurang tertarik atau bergairah dalam melakukan apapun")
+
     DEPRESSED_MOOD = (2, "Suasana Hati Murung", "Merasa sedih, murung, atau putus asa",
-                      "Merasa murung, muram, atau putus asa")
+                    "Dalam 2 minggu terakhir apakah Anda merasa murung, muram, atau putus asa")
+
     SLEEP_DISTURBANCE = (3, "Gangguan Tidur", "Insomnia atau hipersomnia",
-                         "Sulit tidur atau mudah terbangun, atau terlalu banyak tidur")
-    FATIGUE = (4, "Kelelahan", "Kehilangan energi atau merasa lelah", "Merasa lelah atau kurang bertenaga")
+                        "Dalam 2 minggu terakhir apakah Anda merasa sulit tidur atau mudah terbangun, atau terlalu banyak tidur")
+
+    FATIGUE = (4, "Kelelahan", "Kehilangan energi atau merasa lelah",
+            "Dalam 2 minggu terakhir apakah Anda merasa sering merasa lelah atau kurang bertenaga")
+
     APPETITE_CHANGES = (5, "Perubahan Nafsu Makan", "Fluktuasi berat badan/nafsu makan",
-                        "Kurang nafsu makan atau terlalu banyak makan")
+                        "Dalam 2 minggu terakhir apakah Anda merasa kurang nafsu makan atau terlalu banyak makan")
+
     WORTHLESSNESS = (6, "Merasa Tidak Berharga", "Perasaan bersalah atau gagal",
-                     "Kurang percaya diri — atau merasa bahwa Anda adalah orang yang gagal atau telah mengecewakan diri sendiri atau keluarga")
+                    "Dalam 2 minggu terakhir apakah Anda merasa kurang percaya diri atau merasa bahwa Anda adalah orang yang gagal atau telah mengecewakan diri sendiri atau keluarga")
+
     CONCENTRATION = (7, "Kesulitan Konsentrasi", "Kesulitan fokus atau berpikir",
-                     "Sulit berkonsentrasi pada sesuatu, misalnya membaca koran atau menonton televisi")
+                    "Dalam 2 minggu terakhir apakah Anda merasa sulit berkonsentrasi pada sesuatu, misalnya membaca koran atau menonton televisi")
+
     PSYCHOMOTOR = (8, "Gangguan Psikomotor", "Kegelisahan atau perlambatan gerak",
-                   "Bergerak atau berbicara sangat lambat sehingga orang lain memperhatikannya. Atau sebaliknya — merasa resah atau gelisah sehingga Anda lebih sering bergerak dari biasanya")
+                "Dalam 2 minggu terakhir apakah Anda merasa bergerak atau berbicara sangat lambat sehingga orang lain memperhatikannya. Atau sebaliknya merasa resah atau gelisah sehingga Anda lebih sering bergerak dari biasanya")
+
     SUICIDAL_IDEATION = (9, "Pikiran Bunuh Diri", "Pikiran tentang kematian atau menyakiti diri sendiri",
-                         "Merasa lebih baik mati atau ingin melukai diri sendiri dengan cara apapun")
+                        "Dalam 2 minggu terakhir apakah Anda merasa lebih baik mati atau ingin melukai diri sendiri dengan cara apapun")
+
 
     def __init__(self, order_index, name_en, description_en, description_id):
         self.order_index = order_index

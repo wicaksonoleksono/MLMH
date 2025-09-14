@@ -10,6 +10,7 @@ from ...db import get_session
 from ...model.assessment.sessions import AssessmentSession, CameraCapture
 from ...services.assessment.phqService import PHQResponseService
 from ...services.assessment.llmService import LLMConversationService
+from ...services.session.sessionTimingService import SessionTimingService
 
 
 class ExportService:
@@ -93,7 +94,8 @@ class ExportService:
                 phq_data['responses'][category][question_text] = {
                     'response_text': response_data.get('response_text', ''),
                     'response_value': response_data.get('response_value', 0),
-                    'response_time_ms': response_data.get('response_time_ms', None)
+                    'response_time_ms': response_data.get('response_time_ms', None),
+                    'session_time': response_data.get('session_time', None)  # Include unified session timing
                 }
         
         return phq_data
@@ -118,7 +120,8 @@ class ExportService:
                 'has_end_conversation': turn_data.get('has_end_conversation'),
                 'ai_model_used': turn_data.get('ai_model_used'),
                 'response_audio_path': turn_data.get('response_audio_path'),
-                'transcription': turn_data.get('transcription')
+                'transcription': turn_data.get('transcription'),
+                'session_time': turn_data.get('session_time', None)  # Include unified session timing
             }
             
             llm_data['conversations'].append(conv_data)
@@ -194,7 +197,7 @@ class ExportService:
                 
                 # Add metadata for each filename in the JSON array
                 for filename in capture.filenames:
-                    metadata['captures'].append({
+                    capture_meta = {
                         'filename': filename,
                         'assessment_type': assessment_type,
                         'folder_path': folder_path,
@@ -203,7 +206,16 @@ class ExportService:
                         'timestamp': capture.created_at.isoformat(),
                         'capture_type': capture.capture_type,
                         'assessment_id': capture.assessment_id
-                    })
+                    }
+                    
+                    # Include session_time from capture metadata if available
+                    if capture.capture_metadata and 'session_time' in capture.capture_metadata:
+                        capture_meta['session_time'] = capture.capture_metadata['session_time']
+                    else:
+                        # Fallback: calculate session_time from timestamp for old captures
+                        capture_meta['session_time'] = SessionTimingService.get_session_time(session_id, capture.created_at)
+                    
+                    metadata['captures'].append(capture_meta)
             
             # Add main metadata file
             zip_file.writestr('images/metadata.json', json.dumps(metadata, indent=2))
@@ -217,12 +229,21 @@ class ExportService:
                 }
                 for capture in phq_captures:
                     for filename in capture.filenames:
-                        phq_metadata['captures'].append({
+                        capture_meta = {
                             'filename': filename,
                             'timestamp': capture.created_at.isoformat(),
                             'capture_type': capture.capture_type,
                             'assessment_id': capture.assessment_id
-                        })
+                        }
+                        
+                        # Include session_time from capture metadata if available
+                        if capture.capture_metadata and 'session_time' in capture.capture_metadata:
+                            capture_meta['session_time'] = capture.capture_metadata['session_time']
+                        else:
+                            # Fallback: calculate session_time from timestamp for old captures
+                            capture_meta['session_time'] = SessionTimingService.get_session_time(session_id, capture.created_at)
+                        
+                        phq_metadata['captures'].append(capture_meta)
                 zip_file.writestr('images/phq/metadata.json', json.dumps(phq_metadata, indent=2))
             
             if llm_captures:
@@ -233,12 +254,21 @@ class ExportService:
                 }
                 for capture in llm_captures:
                     for filename in capture.filenames:
-                        llm_metadata['captures'].append({
+                        capture_meta = {
                             'filename': filename,
                             'timestamp': capture.created_at.isoformat(),
                             'capture_type': capture.capture_type,
                             'assessment_id': capture.assessment_id
-                        })
+                        }
+                        
+                        # Include session_time from capture metadata if available
+                        if capture.capture_metadata and 'session_time' in capture.capture_metadata:
+                            capture_meta['session_time'] = capture.capture_metadata['session_time']
+                        else:
+                            # Fallback: calculate session_time from timestamp for old captures
+                            capture_meta['session_time'] = SessionTimingService.get_session_time(session_id, capture.created_at)
+                        
+                        llm_metadata['captures'].append(capture_meta)
                 zip_file.writestr('images/llm/metadata.json', json.dumps(llm_metadata, indent=2))
 
     @staticmethod

@@ -332,7 +332,8 @@ class PHQResponse(BaseModel):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False, unique=True)
-    
+    # ADD TIMESTAMP : BY THE SECOND .. D . THX .
+
     # All responses in a single JSON structure, keyed by question_id
     # Structure: {"question_id": {"question_number": 1, "question_text": "...", "response_value": 3, "response_text": "...", "category_name": "..."}, ...}
     responses: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
@@ -352,7 +353,6 @@ class LLMConversation(BaseModel):
     
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
-    
     # Entire conversation as JSON
     conversation_history: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
     

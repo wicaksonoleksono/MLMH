@@ -7,6 +7,7 @@ from flask import current_app
 from ...db import get_session
 from ...model.assessment.sessions import CameraCapture, AssessmentSession
 from ...model.admin.camera import CameraSettings
+from ..session.sessionTimingService import SessionTimingService
 
 
 class CameraCaptureService:
@@ -89,6 +90,21 @@ class CameraCaptureService:
         
         file_size = len(file_data)
         
+        # Calculate session time for this capture
+        session_time = SessionTimingService.get_session_time(session_id, timestamp)
+        
+        # Prepare capture metadata with session timing
+        capture_metadata = {
+            "session_time": session_time,  # Unified session timing starting from 0
+            "capture_trigger": capture_trigger,
+            "file_size": file_size,
+            "timestamp_iso": timestamp.isoformat()
+        }
+        
+        # Merge with any additional camera settings snapshot
+        if camera_settings_snapshot:
+            capture_metadata.update(camera_settings_snapshot)
+        
         # Save database record using new model structure
         with get_session() as db:
             capture = CameraCapture(
@@ -96,6 +112,7 @@ class CameraCaptureService:
                 assessment_id=assessment_id,
                 filenames=[filename],  # New model uses JSON array
                 capture_type=capture_type,
+                capture_metadata=capture_metadata,  # Include session timing
                 created_at=timestamp
             )
             
@@ -113,16 +130,29 @@ class CameraCaptureService:
             
             upload_path = CameraCaptureService.get_upload_path()
             
-            return [{
-                'id': capture.id,
-                'filename': capture.filenames[0] if capture.filenames else '',  # Take first filename for backward compatibility
-                'full_path': os.path.join(upload_path, capture.filenames[0]) if capture.filenames else '',
-                'url': f"/assessment/camera/file/{capture.filenames[0]}" if capture.filenames else '',
-                'timestamp': capture.created_at,
-                'capture_type': capture.capture_type.lower(),
-                'assessment_id': capture.assessment_id,
-                'assessment_type': capture.capture_type.lower()
-            } for capture in captures]
+            result = []
+            for capture in captures:
+                capture_data = {
+                    'id': capture.id,
+                    'filename': capture.filenames[0] if capture.filenames else '',  # Take first filename for backward compatibility
+                    'full_path': os.path.join(upload_path, capture.filenames[0]) if capture.filenames else '',
+                    'url': f"/assessment/camera/file/{capture.filenames[0]}" if capture.filenames else '',
+                    'timestamp': capture.created_at,
+                    'capture_type': capture.capture_type.lower(),
+                    'assessment_id': capture.assessment_id,
+                    'assessment_type': capture.capture_type.lower()
+                }
+                
+                # Include session_time from metadata if available
+                if capture.capture_metadata and 'session_time' in capture.capture_metadata:
+                    capture_data['session_time'] = capture.capture_metadata['session_time']
+                else:
+                    # Fallback: calculate session_time from timestamp
+                    capture_data['session_time'] = SessionTimingService.get_session_time(session_id, capture.created_at)
+                
+                result.append(capture_data)
+            
+            return result
 
     @staticmethod
     def get_captures_by_phq_response(phq_response_id: str) -> List[CameraCapture]:

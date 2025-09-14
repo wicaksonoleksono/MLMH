@@ -85,60 +85,63 @@ endblock %} {% block content %}
           name_id: "ANHEDONIA",
           name: "Anhedonia",
           description_id:
-            "Kurang tertarik atau bergairah dalam melakukan apapun",
+            "Dalam 2 minggu terakhir apakah Anda merasa kurang tertarik atau bergairah dalam melakukan apapun",
           questions: [""],
         },
         {
           name_id: "DEPRESSED_MOOD",
-          name: "Depressed Mood",
-          description_id: "Merasa murung, muram, atau putus asa",
+          name: "Suasana Hati Murung",
+          description_id:
+            "Dalam 2 minggu terakhir apakah Anda merasa murung, muram, atau putus asa",
           questions: [""],
         },
         {
           name_id: "SLEEP_DISTURBANCE",
-          name: "Sleep Disturbance",
+          name: "Gangguan Tidur",
           description_id:
-            "Sulit tidur atau mudah terbangun, atau terlalu banyak tidur",
+            "Dalam 2 minggu terakhir apakah Anda merasa sulit tidur atau mudah terbangun, atau terlalu banyak tidur",
           questions: [""],
         },
         {
           name_id: "FATIGUE",
-          name: "Fatigue",
-          description_id: "Merasa lelah atau kurang bertenaga",
+          name: "Kelelahan",
+          description_id:
+            "Dalam 2 minggu terakhir apakah Anda merasa sering merasa lelah atau kurang bertenaga",
           questions: [""],
         },
         {
           name_id: "APPETITE_CHANGES",
-          name: "Appetite Changes",
-          description_id: "Kurang nafsu makan atau terlalu banyak makan",
+          name: "Perubahan Nafsu Makan",
+          description_id:
+            "Dalam 2 minggu terakhir apakah Anda merasa kurang nafsu makan atau terlalu banyak makan",
           questions: [""],
         },
         {
           name_id: "WORTHLESSNESS",
-          name: "Worthlessness",
+          name: "Merasa Tidak Berharga",
           description_id:
-            "Kurang percaya diri — atau merasa bahwa Anda adalah orang yang gagal atau telah mengecewakan diri sendiri atau keluarga",
+            "Dalam 2 minggu terakhir apakah Anda merasa kurang percaya diri atau merasa bahwa Anda adalah orang yang gagal atau telah mengecewakan diri sendiri atau keluarga",
           questions: [""],
         },
         {
           name_id: "CONCENTRATION",
-          name: "Concentration",
+          name: "Kesulitan Konsentrasi",
           description_id:
-            "Sulit berkonsentrasi pada sesuatu, misalnya membaca koran atau menonton televisi",
+            "Dalam 2 minggu terakhir apakah Anda merasa sulit berkonsentrasi pada sesuatu, misalnya membaca koran atau menonton televisi",
           questions: [""],
         },
         {
           name_id: "PSYCHOMOTOR",
-          name: "Psychomotor",
+          name: "Gangguan Psikomotor",
           description_id:
-            "Bergerak atau berbicara sangat lambat sehingga orang lain memperhatikannya. Atau sebaliknya — merasa resah atau gelisah sehingga Anda lebih sering bergerak dari biasanya",
+            "Dalam 2 minggu terakhir apakah Anda merasa bergerak atau berbicara sangat lambat sehingga orang lain memperhatikannya. Atau sebaliknya merasa resah atau gelisah sehingga Anda lebih sering bergerak dari biasanya",
           questions: [""],
         },
         {
           name_id: "SUICIDAL_IDEATION",
-          name: "Suicidal Ideation",
+          name: "Pikiran Bunuh Diri",
           description_id:
-            "Merasa lebih baik mati atau ingin melukai diri sendiri dengan cara apapun",
+            "Dalam 2 minggu terakhir apakah Anda merasa lebih baik mati atau ingin melukai diri sendiri dengan cara apapun",
           questions: [""],
         },
       ],
@@ -146,7 +149,7 @@ endblock %} {% block content %}
       settings: {
         id: null,
         instructions: "",
-        is_default: false
+        is_default: false,
       },
 
       // Modal state
@@ -293,16 +296,17 @@ endblock %} {% block content %}
                 questions: [""],
               },
             ];
-            
+
             this.settings = {
               id: null,
               instructions: "",
-              is_default: false
+              is_default: false,
             };
 
             this.showModal = true;
             this.modalTitle = "Berhasil";
-            this.modalMessage = "Data PHQ berhasil dihapus! (Kecuali pengaturan skala)";
+            this.modalMessage =
+              "Data PHQ berhasil dihapus! (Kecuali pengaturan skala)";
             this.modalConfirm = () => {
               this.showModal = false;
             };
@@ -351,9 +355,7 @@ endblock %} {% block content %}
               : "false";
             this.config.instructions = phqData.settings.instructions || "";
           }
-        } catch (error) {
-          
-        }
+        } catch (error) {}
       },
 
       // Keep the old async loadData method for fallback
@@ -412,7 +414,6 @@ endblock %} {% block content %}
             this.config.instructions = settings.instructions || "";
           }
         } catch (error) {
-          
         } finally {
           this.loading = false;
         }
@@ -430,13 +431,11 @@ endblock %} {% block content %}
             is_default: true,
           };
 
-          
           const scaleResult = await apiCall(
             "/admin/phq/scales",
             "POST",
             scaleData
           );
-          
 
           if (scaleResult.status === "SNAFU") {
             alert(
@@ -474,13 +473,11 @@ endblock %} {% block content %}
                     order_index: j,
                   };
 
-                  
                   const qResult = await apiCall(
                     "/admin/phq/questions",
                     "POST",
                     questionData
                   );
-                  
 
                   if (qResult.status === "SNAFU") {
                     alert(
@@ -503,13 +500,11 @@ endblock %} {% block content %}
               is_default: true,
             };
 
-            
             const settingsResult = await apiCall(
               "/admin/phq/settings",
               "POST",
               settingsData
             );
-            
 
             if (settingsResult.status === "SNAFU") {
               alert(
@@ -529,7 +524,6 @@ endblock %} {% block content %}
             window.location.reload();
           };
         } catch (error) {
-          
           this.showModal = true;
           this.modalTitle = "Error";
           this.modalMessage = "Error saving data: " + error.message;

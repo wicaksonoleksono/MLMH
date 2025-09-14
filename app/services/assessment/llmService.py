@@ -7,6 +7,7 @@ from ...model.assessment.sessions import AssessmentSession, LLMConversation, LLM
 from ...db import get_session
 from ...services.admin.llmService import LLMService as AdminLLMService
 from ...services.llm.analysisPromptBuilder import LLMAnalysisPromptBuilder
+from ..session.sessionTimingService import SessionTimingService
 
 
 class LLMConversationService:
@@ -74,6 +75,10 @@ class LLMConversationService:
                 "\u003c/end_conversation\u003e" in normalized_ai_message
             )
             
+            # Calculate session time for this turn
+            current_time = datetime.utcnow()
+            session_time = SessionTimingService.get_session_time(session_id, current_time)
+            
             turn_data = {
                 "turn_number": turn_number,
                 "ai_message": ai_message,
@@ -83,7 +88,8 @@ class LLMConversationService:
                 "ai_model_used": ai_model_used,
                 "response_audio_path": response_audio_path,
                 "transcription": transcription,
-                "created_at": datetime.utcnow().isoformat()
+                "created_at": current_time.isoformat(),
+                "session_time": session_time  # Unified session timing starting from 0
             }
 
             turns = conversation_record.conversation_history.get("turns", [])

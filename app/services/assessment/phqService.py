@@ -4,6 +4,7 @@ from sqlalchemy import and_
 from ...model.assessment.sessions import AssessmentSession, PHQResponse
 from ...model.admin.phq import PHQQuestion, PHQSettings, PHQScale, PHQCategoryType
 from ...db import get_session
+from ..session.sessionTimingService import SessionTimingService
 from datetime import datetime
 import random
 
@@ -53,14 +54,18 @@ class PHQResponseService:
                 )
                 db.add(phq_response_record)
 
-            # Add response to the JSON structure
+            # Add response to the JSON structure with session timing
+            current_time = datetime.utcnow()
+            session_time = SessionTimingService.get_session_time(session_id, current_time)
+            
             response_data = {
                 "question_number": question.order_index,
                 "question_text": question.question_text_id,  # Use Indonesian text
                 "category_name": question.category_name_id,  # ANHEDONIA, DEPRESSED_MOOD, etc.
                 "response_value": response_value,
                 "response_text": response_text,
-                "response_time_ms": response_time_ms
+                "response_time_ms": response_time_ms,
+                "session_time": session_time  # Unified session timing starting from 0
             }
 
             # Update the responses JSON
@@ -462,8 +467,10 @@ class PHQResponseService:
                 )
                 db.add(phq_response_record)
 
-            # Build responses JSON structure
+            # Build responses JSON structure with session timing
             responses_dict = {}
+            current_time = datetime.utcnow()
+            
             for response_data in responses_data:
                 question_id = response_data['question_id']
                 
@@ -472,13 +479,22 @@ class PHQResponseService:
                 if not question:
                     raise ValueError(f"PHQ question with ID {question_id} not found")
                 
+                # Calculate session time for this response (use response time if provided, otherwise current time)
+                response_time = response_data.get('response_time_ms')
+                if response_time:
+                    # If response_time_ms is provided, calculate session_time based on that
+                    session_time = SessionTimingService.get_session_time(session_id, current_time)
+                else:
+                    session_time = SessionTimingService.get_session_time(session_id, current_time)
+                
                 responses_dict[str(question_id)] = {
                     "question_number": question.order_index,
                     "question_text": question.question_text_id,  # Use Indonesian text
                     "category_name": question.category_name_id,  # ANHEDONIA, DEPRESSED_MOOD, etc.
                     "response_value": response_data['response_value'],
                     "response_text": response_data.get('response_text', ''),
-                    "response_time_ms": response_data.get('response_time_ms')
+                    "response_time_ms": response_data.get('response_time_ms'),
+                    "session_time": session_time  # Unified session timing starting from 0
                 }
 
             # Update the responses JSON

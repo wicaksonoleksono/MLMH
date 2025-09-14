@@ -95,6 +95,35 @@ class PHQCategoryType(enum.Enum):
             'default_questions': cat.default_questions
         } for cat in cls]
 
+    @classmethod
+    def get_default_scale(cls):
+        """Default PHQ scale configuration"""
+        return {
+            'scale_name': 'PHQ-9 Default Scale',
+            'min_value': 0,
+            'max_value': 3,
+            'scale_labels': {
+                '0': 'Tidak sama sekali',
+                '1': 'Beberapa hari',
+                '2': 'Lebih dari setengah hari',
+                '3': 'Hampir setiap hari'
+            },
+            'is_default': True
+        }
+
+    @classmethod
+    def get_default_settings(cls):
+        """Default PHQ settings configuration"""
+        return {
+            'randomize_categories': True,  # Default to True as requested
+            'instructions': """Anda akan memulai kuesioner singkat untuk membantu memahami kondisi perasaan dan suasana hati Anda akhir-akhir ini.
+
+Di halaman selanjutnya, kami telah menyiapkan beberapa pertanyaan singkat untuk membantu Anda merefleksikan perasaan Anda. Fokus utama dari kuesioner ini adalah kondisi anda dalam periode waktu selama 2 minggu terakhir. Saat menjawab, cobalah untuk mengingat kembali bagaimana perasaan Anda dalam rentang waktu tersebut.
+
+Tidak ada jawaban yang benar atau salah. Jawaban yang paling jujur akan memberikan hasil yang paling bermanfaat bagi anda.""",
+            'is_default': True
+        }
+
 
 class PHQQuestion(BaseModel, StatusMixin):
     __tablename__ = 'phq_questions'

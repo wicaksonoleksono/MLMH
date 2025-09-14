@@ -2,6 +2,7 @@
 from flask import Blueprint, request, jsonify, render_template, redirect, url_for, flash
 from flask_login import current_user
 from ...services.admin.phqService import PHQService
+from ...model.admin.phq import PHQCategoryType
 from ...decorators import raw_response
 phq_bp = Blueprint('phq', __name__, url_prefix='/admin/phq')
 
@@ -117,15 +118,16 @@ def load_phq_defaults_ajax():
         return jsonify({"status": "SNAFU", "error": "Admin access required"}), 403
     
     try:
-        # Get default categories with their default questions from enum
+        # Get defaults from enum
         default_categories = PHQService.get_default_categories()
+        default_scale = PHQCategoryType.get_default_scale()
+        default_settings = PHQCategoryType.get_default_settings()
         
-        # Clear existing questions for all categories first
+        # 1. Clear and load default questions
         existing_questions = PHQService.get_questions()
         for q in existing_questions:
             PHQService.delete_question(q['id'])
         
-        # Load default questions from enum for each category
         for default_cat in default_categories:
             for idx, question_text in enumerate(default_cat['default_questions']):
                 PHQService.create_question(
@@ -134,6 +136,23 @@ def load_phq_defaults_ajax():
                     question_text_id=question_text,
                     order_index=idx
                 )
+        
+        # 2. Create/update default scale
+        scale_result = PHQService.create_scale(
+            scale_name=default_scale['scale_name'],
+            min_value=default_scale['min_value'],
+            max_value=default_scale['max_value'],
+            scale_labels=default_scale['scale_labels'],
+            is_default=True
+        )
+        
+        # 3. Create/update default settings
+        PHQService.create_settings(
+            scale_id=scale_result['id'],
+            randomize_categories=default_settings['randomize_categories'],
+            instructions=default_settings['instructions'],
+            is_default=True
+        )
         
         return jsonify({"status": "OLKORECT", "message": "PHQ defaults loaded successfully"})
     except Exception as e:

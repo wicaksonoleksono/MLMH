@@ -460,19 +460,15 @@ class PHQService:
                     'is_default': scales[0].is_default
                 }
             else:
-                # No scale exists, return default
+                # No scale exists, return default from enum
+                default_scale = PHQCategoryType.get_default_scale()
                 scale_data = {
                     'id': None,
-                    'scale_name': 'PHQ-9 Default Scale',
-                    'min_value': 0,
-                    'max_value': 3,
-                    'scale_labels': {
-                        '0': 'Tidak sama sekali',
-                        '1': 'Beberapa hari', 
-                        '2': 'Lebih dari setengah hari',
-                        '3': 'Hampir setiap hari'
-                    },
-                    'is_default': True
+                    'scale_name': default_scale['scale_name'],
+                    'min_value': default_scale['min_value'],
+                    'max_value': default_scale['max_value'],
+                    'scale_labels': default_scale['scale_labels'],
+                    'is_default': default_scale['is_default']
                 }
             
             # Get current settings (or provide default)
@@ -489,12 +485,13 @@ class PHQService:
                     'is_default': settings_list[0].is_default
                 }
             else:
-                # No settings exist, return default
+                # No settings exist, return default from enum
+                default_settings = PHQCategoryType.get_default_settings()
                 settings_data = {
                     'id': None,
-                    'randomize_categories': False,
-                    'instructions': '',
-                    'is_default': True
+                    'randomize_categories': default_settings['randomize_categories'],
+                    'instructions': default_settings['instructions'],
+                    'is_default': default_settings['is_default']
                 }
             
             return {

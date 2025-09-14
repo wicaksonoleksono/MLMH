@@ -555,81 +555,6 @@ endblock %} {% block content %}
         }
       },
 
-      async saveAll() {
-        this.loading = true;
-        try {
-          const settingsData = {
-            instructions: this.settings.instructions,
-            llm_instructions: this.settings.llm_instructions,
-            chat_model: this.settings.chat_model,
-            analysis_model: this.settings.analysis_model,
-          };
-          //hahaha gajelas manual lah wireshark minta tolong
-          if (
-            this.settings.openai_api_key &&
-            !this.settings.openai_api_key.includes("•")
-          ) {
-            // NOT MASKED> XDXD ./.
-            settingsData.openai_api_key = this.settings.openai_api_key;
-          } else if (this.settings.openai_api_key_unmasked) {
-            // Use the unmasked key we stored
-            settingsData.openai_api_key = this.settings.openai_api_key_unmasked;
-          }
-
-          // Only include depression_aspects if it has valid data (not empty or all empty fields)
-          const validAspects = this.settings.depression_aspects.filter(
-            (aspect) =>
-              aspect.name &&
-              aspect.name.trim() &&
-              aspect.description &&
-              aspect.description.trim()
-          );
-
-          if (validAspects.length > 0) {
-            settingsData.depression_aspects = validAspects;
-          }
-          // If no valid aspects, don't include the field at all (null handling)
-          
-          // Include analysis_scale
-          if (this.settings.analysis_scale && this.settings.analysis_scale.length > 0) {
-            settingsData.analysis_scale = this.settings.analysis_scale;
-          }
-
-          const result = await apiCall(
-            "/admin/llm/settings",
-            "POST",
-            settingsData
-          );
-
-          if (result.status === "SNAFU") {
-            this.showModal = true;
-            this.modalTitle = "Error";
-            this.modalMessage =
-              "Error saving settings: " +
-              (result.error || result.errorMsg || "Unknown error");
-            this.modalConfirm = () => {
-              this.showModal = false;
-            };
-            return;
-          }
-
-          this.showModal = true;
-          this.modalTitle = "Berhasil";
-          this.modalMessage = "Pengaturan LLM berhasil disimpan!";
-          this.modalConfirm = () => {
-            this.showModal = false;
-            window.location.reload();
-          };
-        } catch (error) {
-          this.showModal = true;
-          this.modalTitle = "Error";
-          this.modalMessage = "Error saving data: " + error.message;
-          this.modalConfirm = () => {};
-        } finally {
-          this.loading = false;
-        }
-      },
-
       addAspect() {
         this.settings.depression_aspects.push({ name: "", description: "" });
       },
@@ -811,28 +736,51 @@ endblock %} {% block content %}
         });
       },
 
-      async viewSystemPrompt() {
+      // DELETED: viewSystemPrompt() - We use ChatPromptTemplate now!
+
+      async viewLangChainPrompt() {
         try {
-          const result = await apiCall('/admin/llm/prompt/build', 'POST', {
+          const result = await apiCall('/admin/llm/prompt/langchain/build', 'POST', {
             aspects: this.settings.depression_aspects,
-            llm_instructions: this.settings.llm_instructions
+            llm_instructions: this.settings.llm_instructions,
+            conversation_history: [],
+            user_input: ""
           });
 
-          if (result.prompt) {
+          if (result.status === 'OLKORECT') {
+            let content = `<h4 style="margin-bottom: 15px; color: #7C3AED; font-size: 16px;">Chat Template Messages:</h4>`;
+            
+            // Show actual messages
+            content += `<h5 style="margin-bottom: 10px; color: #374151; font-size: 14px;">Generated Messages (${result.total_messages} total):</h5>`;
+            content += `<div style="max-height: 400px; overflow-y: auto; border: 1px solid #D1D5DB; border-radius: 8px; padding: 10px;">`;
+            
+            result.messages.forEach((msg, index) => {
+              const roleColors = {
+                'system': '#EF4444',
+                'assistant': '#10B981', 
+                'human': '#3B82F6'
+              };
+              const bgColors = {
+                'system': '#FEF2F2',
+                'assistant': '#F0FDF4',
+                'human': '#EFF6FF'
+              };
+              
+              content += `<div style="background: ${bgColors[msg.role] || '#F9FAFB'}; padding: 12px; border-radius: 6px; margin-bottom: 10px; border-left: 4px solid ${roleColors[msg.role] || '#6B7280'};">`;
+              content += `<div style="font-weight: bold; color: ${roleColors[msg.role] || '#6B7280'}; font-size: 12px; text-transform: uppercase; margin-bottom: 5px;">${msg.role}</div>`;
+              content += `<pre style="white-space: pre-wrap; font-size: 12px; line-height: 1.4; margin: 0;">${msg.content}</pre>`;
+              content += `</div>`;
+            });
+            content += `</div>`; // Close scrollable container
+
             this.showPreviewModal = true;
-            this.previewModalTitle = "System Prompt Preview";
-            this.previewModalContent = `
-              <h4 style="margin-bottom: 15px; color: #4F46E5; font-size: 16px;">Final System Prompt (dengan Aspects):</h4>
-              <pre style="background: #F3F4F6; padding: 20px; border-radius: 8px; white-space: pre-wrap; font-size: 13px; line-height: 1.5; border: 1px solid #D1D5DB;">${result.prompt}</pre>
-              <div style="margin-top: 20px; padding: 15px; background: #EEF2FF; border-radius: 8px; font-size: 12px; border: 1px solid #C7D2FE;">
-                <strong>ℹ️ Info:</strong> ${this.settings.llm_instructions ? 'Menggunakan Custom Instructions' : 'Menggunakan Default Anisa Prompt'}
-              </div>
-            `;
+            this.previewModalTitle = "LangChain 4-Part Prompt Structure";
+            this.previewModalContent = content;
           } else {
-            alert('Error: ' + (result.error || 'Failed to build prompt'));
+            alert('Error: ' + (result.error || 'Failed to build LangChain prompt'));
           }
         } catch (error) {
-          alert('Error building prompt: ' + error.message);
+          alert('Error building LangChain prompt: ' + error.message);
         }
       },
     };

@@ -130,22 +130,55 @@ def test_model(model_id):
         return jsonify({"error": str(e)}), 500
 
 
-@llm_bp.route('/prompt/build', methods=['POST'])
-@raw_response  
-def build_prompt():
-    """Build system prompt from template (custom or default) and aspects"""
+    # DELETED: /prompt/build route - We use ChatPromptTemplate now!
+
+
+@llm_bp.route('/prompt/langchain/build', methods=['POST'])
+@raw_response
+def build_langchain_prompt():
+    """Build LangChain ChatPromptTemplate with 4-part structure"""
     if not current_user.is_authenticated or not current_user.is_admin():
         return {"status": "SNAFU", "error": "Admin access required"}, 403
     
     data = request.get_json()
     aspects = data.get('aspects', [])
     custom_instructions = data.get('llm_instructions')
+    conversation_history = data.get('conversation_history', [])
+    user_input = data.get('user_input', "Hi, apa kabar?")
     
     try:
-        prompt = LLMService.build_system_prompt(aspects, custom_instructions)
-        return jsonify({"prompt": prompt})
+        # Build the template
+        template = LLMService.build_langchain_prompt_template(aspects, custom_instructions)
+        
+        # Invoke with sample data
+        prompt_value = LLMService.invoke_langchain_prompt(
+            aspects=aspects,
+            custom_instructions=custom_instructions,
+            conversation_history=conversation_history,
+            user_input=user_input
+        )
+        
+        # Convert to format that can be JSON serialized
+        messages = []
+        for msg in prompt_value.to_messages():
+            messages.append({
+                "role": msg.__class__.__name__.lower().replace('message', ''),
+                "content": msg.content
+            })
+        
+        return jsonify({
+            "status": "OLKORECT",
+            "template_structure": {
+                "part_1": "Fixed System Prompt (Sindi)",
+                "part_2": "Customizable Instructions + Aspects", 
+                "part_3": "Initial Assistant Response",
+                "part_4": "Conversation Starter + History + User Input"
+            },
+            "messages": messages,
+            "total_messages": len(messages)
+        })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"status": "SNAFU", "error": str(e)}), 500
 
 
 @llm_bp.route('/api-key/test', methods=['POST'])

@@ -36,34 +36,30 @@ class LLMService:
 
 
     
-    # Hard-coded Anisa system prompt - TIDAK BISA DIUBAH
-    ANISA_SYSTEM_PROMPT = """
-    Anda adalah Anisa, seorang mahasiswa psikologi yang supportive dan senang hati mendengarkan curhatan orang lain.
-    Salah satu teman Anda kemungkinan mengalami gejala depresi, atau bisa jadi tidak. Buatlah beberapa pertanyaan dengan
-    gaya non-formal kepada rekan Anda tentang aktivitas yang dilakukan **2 pekan terakhir**, 
-    yang kemudian akan menyangkut dengan aspek-aspek di bawah ini:
-    {aspects}
+    # Hard-coded System prompt - TIDAK BISA DIUBAH (Part 1)
+    SYSTEM_PROMPT_FIXED = "Anda adalah Sindi, seorang mahasiswa psikologi yang supportive dan senang hati mendengarkan curhatan orang lain."
+    
+    # Default Instructions - Customizable (Part 2) - Combines instructions + conversation starter
+    DEFAULT_LLM_INSTRUCTIONS = """
 
-    Satu pertanyaan per pesan. Tindak lanjuti setiap jawaban dengan 1–2 pertanyaan yang lebih dalam (contoh konkret, frekuensi, durasi, dampak ke aktivitas/tidur/energi/relasi, perubahan dibanding biasanya).
-    Jika nada jawaban relatif negatif/berat, validasi dulu secara hangat agar pengguna tetap merasa nyaman, lalu lanjut pelan dan jelas.
-    Setelah itu, secara alami alihkan percakapan untuk mengeksplorasi bagaimana kondisi psikologis mereka, terutama yang berkaitan dengan aspek-aspek diatas. 
-    Berikut adalah indikator-indikator dari gejala depresi: gunakan saat relevan—tanpa memberi label/diagnosis.
-    Tolong eksplorasi peggguna berdasarkan aspek, ketahui informasinya secara detil. Pastikan seluruh Aspek telah 
-    Terpenuhi. 
-    Silakan sapa terlebih dahulu sebelum memulai percakapan eksploratif, dan tutup dengan ringkasan singkat lalu
-     jika sudah didapatkan semua informasi yang perlu didapatkan Tolong stop ya dengan menutup  
-    Percakapan dengan "gak papa kamu pasti bisa kok, semangat yaa ! 
-    Kalau memang darurat deh Hubungi psikolog terdekat mu !!" 
-    Tidak perlu bilang secara eksplisit menyebutkan mengenai depresi atau sejenisnya.
-    """
+Salah satu teman Anda kemungkinan mengalami gejala depresi, atau bisa jadi tidak. Lakukan eksplorasi untuk menggali informasi dengan gaya non-formal kepada rekan Anda tentang aktivitas yang dilakukan **2 pekan terakhir**, dimana menyangkut dengan aspek-aspek psikologis terkait gejala depresi di bawah ini:
+{aspects}
 
+### Prinsip Utama Percakapan
+- Setiap pesan hanya boleh berisi maksimal 1 kalimat tanya. 
+- Jika nada jawaban relatif negatif/berat atau terlalu singkat, validasi dulu secara hangat agar pengguna tetap merasa nyaman, lalu lanjut pelan dan jelas.
+- Setelah itu, secara alami alihkan percakapan untuk mengeksplorasi bagaimana kondisi psikologis mereka, terutama yang berkaitan dengan aspek-aspek diatas.
+- Tindak lanjuti setiap jawaban dengan 1–2 pertanyaan yang lebih dalam (contoh konkret, frekuensi, durasi, dampak ke aktivitas/tidur/energi/relasi, perubahan dibanding biasanya).
+- Kuncinya adalah mengaitkan, bukan memulai topik baru secara tiba-tiba.
+- Setelah percakapan terasa cukup (semua aspek sudah diperoleh), rangkum sedikit perasaan atau poin utama yang dibagikan secara positif. Contoh: "Makasih banget ya udah mau cerita panjang lebar.", "Kedengarannya memang banyak banget yang kamu hadapi, tapi kamu hebat lho bisa melewatinya sampai sekarang." kemudian tambahkan </end_conversation> untuk menyudahkan percakapan  
+- Tutup percakapan dengan hangat, tegaskan kembali bahwa kamu ada untuk mendengarkan kapan pun dibutuhkan. Hindari memberi nasihat kecuali diminta secara eksplisit.
+"""
+    INITIAL_ASSISTANT_RESPONSE = "Baik, saya akan mengeksplorasi aspek-aspek psikologis terkait gejala depresi."
     @staticmethod
     def get_settings() -> List[Dict[str, Any]]:
         """Get all LLM settings"""
         with get_session() as db:
             settings = db.query(LLMSettings).filter(LLMSettings.is_active == True).all()
-            
-            
             return [{
                 'id': setting.id,
                 'instructions': setting.instructions,
@@ -288,7 +284,7 @@ class LLMService:
         """Get hardcoded default LLM settings for 'Muat Default' button"""
         return {
             "instructions": "",
-            "llm_instructions": LLMService.ANISA_SYSTEM_PROMPT.strip(),  # Load actual Anisa prompt
+            "llm_instructions": LLMService.DEFAULT_LLM_INSTRUCTIONS.strip(),  # Use new default instructions
             "openai_api_key": "",
             "chat_model": "gpt-4o",
             "analysis_model": "gpt-4o-mini",
@@ -297,28 +293,60 @@ class LLMService:
             "is_default": True
         }
 
+    # DELETED: build_system_prompt() - We use ChatPromptTemplate now!
+    
     @staticmethod
-    def build_system_prompt(aspects: List[dict], custom_instructions: str = None) -> str:
-        """Build final system prompt by combining template with aspects"""
+    def build_langchain_prompt_template(aspects: List[dict], custom_instructions: str = None):
+        """Build LangChain ChatPromptTemplate with 4-part structure"""
+        try:
+            from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+        except ImportError:
+            raise ImportError("LangChain not installed. Please install langchain-core.")
+        
+        # Format aspects for insertion
         aspects_text = "\n".join(f"- {aspect['name']}: {aspect['description']}" for aspect in aspects)
         
-        # Use custom instructions if provided, otherwise use default
-        base_prompt = custom_instructions if custom_instructions else LLMService.ANISA_SYSTEM_PROMPT
+        # Use custom instructions or default
+        instructions = custom_instructions if custom_instructions else LLMService.DEFAULT_LLM_INSTRUCTIONS
         
-        # Validate that {aspects} placeholder exists
-        if '{aspects}' not in base_prompt:
-            raise ValueError("Prompt template must contain {aspects} placeholder")
+        # Validate {aspects} placeholder exists
+        if '{aspects}' not in instructions:
+            raise ValueError("Instructions must contain {aspects} placeholder")
         
-        # Format the prompt with aspects
-        formatted_prompt = base_prompt.format(aspects=aspects_text)
+        # Format instructions with aspects
+        formatted_instructions = instructions.format(aspects=aspects_text)
         
-        # Always append the end conversation parser if not already there
-        if not formatted_prompt.strip().endswith('</end_conversation>'):
-            if not formatted_prompt.strip().endswith('Kemudian tulis </end_conversation> pada akhir kalimat ini untuk parser output.'):
-                formatted_prompt += "\n\nKemudian tulis </end_conversation> pada akhir kalimat ini untuk parser output."
+        # Create 3-part ChatPromptTemplate + dynamic conversation
+        template = ChatPromptTemplate.from_messages([
+            # Part 1: Fixed system prompt (non-customizable) - ONLY Sindi
+            ("system", LLMService.SYSTEM_PROMPT_FIXED),
+            
+            # Part 2: Customizable instructions with aspects - HUMAN MESSAGE (includes "Selanjutnya...")
+            ("human", formatted_instructions),
+            
+            # Part 3: Initial assistant response (simulated)
+            ("assistant", LLMService.INITIAL_ASSISTANT_RESPONSE),
+            
+            # Part 4: Dynamic conversation history + current user input
+            MessagesPlaceholder("conversation_history", optional=True),
+            ("human", "{user_input}")
+        ])
         
-        return formatted_prompt
+        return template
     
+    @staticmethod
+    def invoke_langchain_prompt(aspects: List[dict], 
+                              custom_instructions: str = None,
+                              conversation_history: List = None, 
+                              user_input: str = ""):
+        """Invoke the LangChain prompt template with parameters"""
+        template = LLMService.build_langchain_prompt_template(aspects, custom_instructions)
+        prompt_value = template.invoke({
+            "conversation_history": conversation_history or [],
+            "user_input": user_input
+        })
+        
+        return prompt_value
 
     @staticmethod
     def get_available_models(api_key: str = None) -> List[str]:

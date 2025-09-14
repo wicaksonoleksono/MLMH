@@ -30,6 +30,10 @@ class AssessmentSession(BaseModel):
     phq_completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     llm_completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     
+    # Assessment-specific start times for clean timing calculations
+    phq_start_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    llm_start_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    
     # Session versioning and reset tracking  
     session_attempt: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     session_number: Mapped[int] = mapped_column(Integer, nullable=False)  # 1 or 2 (which session for this user)

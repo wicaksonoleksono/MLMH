@@ -14,12 +14,17 @@ function phqAssessment(sessionId) {
     totalScore: 0,
     scoreAnalysis: "",
     cameraManager: null,
+    
+    // Assessment timing variables
+    assessmentStartTime: null,
+    questionStartTime: null,
 
     get currentQuestion() {
       return this.questions[this.currentQuestionIndex] || null;
     },
 
     async init() {
+      this.assessmentStartTime = Date.now();
       this.questionStartTime = Date.now();
       await this.loadQuestions();
       await this.initCamera();
@@ -177,12 +182,22 @@ function phqAssessment(sessionId) {
 
       const responseValue = parseInt(value);
       if (isNaN(responseValue)) return;
+      
+      const responseTime = Date.now();
+      const questionStart = Math.floor((this.questionStartTime - this.assessmentStartTime) / 1000);
+      const questionEnd = Math.floor((responseTime - this.assessmentStartTime) / 1000);
 
       this.currentResponse = {
         question_id: this.currentQuestion.question_id,
         response_value: responseValue,
         response_text: text,
-        response_time_ms: Date.now() - this.questionStartTime,
+        response_time_ms: responseTime - this.questionStartTime,
+        // Clean timing metadata
+        timing: {
+          start: questionStart,
+          end: questionEnd,
+          duration: questionEnd - questionStart
+        }
       };
 
       this.responses[this.currentQuestion.question_id] = this.currentResponse;

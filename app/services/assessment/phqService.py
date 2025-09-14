@@ -54,10 +54,7 @@ class PHQResponseService:
                 )
                 db.add(phq_response_record)
 
-            # Add response to the JSON structure with session timing
-            current_time = datetime.utcnow()
-            session_time = SessionTimingService.get_session_time(session_id, current_time)
-            
+            # Add response to the JSON structure with clean assessment timing
             response_data = {
                 "question_number": question.order_index,
                 "question_text": question.question_text_id,  # Use Indonesian text
@@ -65,7 +62,7 @@ class PHQResponseService:
                 "response_value": response_value,
                 "response_text": response_text,
                 "response_time_ms": response_time_ms,
-                "session_time": session_time  # Unified session timing starting from 0
+                # Clean timing metadata will be added by frontend
             }
 
             # Update the responses JSON
@@ -286,43 +283,6 @@ class PHQResponseService:
                 "response_count": len(responses)
             }
 
-    @staticmethod
-    def save_session_responses(
-        session_id: str,
-        responses_data: List[Dict[str, Any]]
-    ) -> PHQResponse:
-        """Save multiple PHQ responses at once using JSON column approach"""
-        with get_session() as db:
-            session = db.query(AssessmentSession).filter_by(id=session_id).first()
-            if not session:
-                raise ValueError(f"Session {session_id} not found")
-
-            # Process each response one by one using existing add_response method
-            # This method handles get-or-create logic properly
-            for response_data in responses_data:
-                question_id = response_data.get('question_id')
-                response_value = response_data.get('response_value')
-                response_text = response_data.get('response_text', '')
-                response_time_ms = response_data.get('response_time_ms')
-                
-                if question_id is not None and response_value is not None:
-                    # Use existing add_response method which handles record creation safely
-                    PHQResponseService.add_response(
-                        session_id=session_id,
-                        question_id=question_id,
-                        response_value=response_value,
-                        response_text=response_text,
-                        response_time_ms=response_time_ms
-                    )
-            
-            # Get the record (guaranteed to exist now) and mark as completed
-            phq_response_record = db.query(PHQResponse).filter_by(session_id=session_id).first()
-            if phq_response_record:
-                phq_response_record.is_completed = True
-                phq_response_record.updated_at = datetime.utcnow()
-                db.commit()
-            
-            return phq_response_record
 
     @staticmethod
     def validate_session_complete(session_id: str) -> bool:
@@ -436,12 +396,16 @@ class PHQResponseService:
 
     @staticmethod
     def save_session_responses(session_id: str, responses_data: List[Dict[str, Any]]) -> PHQResponse:
-        """Save all PHQ responses for a session in a single JSON structure"""
+        """Save all PHQ responses with clean timing metadata from frontend"""
         with get_session() as db:
             # Get session and scale for validation
             session = db.query(AssessmentSession).filter_by(id=session_id).first()
             if not session:
                 raise ValueError(f"Session {session_id} not found")
+
+            # Start PHQ assessment timing if not already started
+            if not session.phq_start_time:
+                SessionTimingService.start_phq_assessment(session_id)
 
             # Get scale for dynamic validation
             phq_settings = session.phq_settings
@@ -467,9 +431,8 @@ class PHQResponseService:
                 )
                 db.add(phq_response_record)
 
-            # Build responses JSON structure with session timing
+            # Build responses JSON structure with clean timing metadata from frontend
             responses_dict = {}
-            current_time = datetime.utcnow()
             
             for response_data in responses_data:
                 question_id = response_data['question_id']
@@ -479,23 +442,21 @@ class PHQResponseService:
                 if not question:
                     raise ValueError(f"PHQ question with ID {question_id} not found")
                 
-                # Calculate session time for this response (use response time if provided, otherwise current time)
-                response_time = response_data.get('response_time_ms')
-                if response_time:
-                    # If response_time_ms is provided, calculate session_time based on that
-                    session_time = SessionTimingService.get_session_time(session_id, current_time)
-                else:
-                    session_time = SessionTimingService.get_session_time(session_id, current_time)
-                
-                responses_dict[str(question_id)] = {
+                # Build response data with clean timing structure
+                response_dict = {
                     "question_number": question.order_index,
-                    "question_text": question.question_text_id,  # Use Indonesian text
-                    "category_name": question.category_name_id,  # ANHEDONIA, DEPRESSED_MOOD, etc.
+                    "question_text": question.question_text_id,
+                    "category_name": question.category_name_id,
                     "response_value": response_data['response_value'],
                     "response_text": response_data.get('response_text', ''),
-                    "response_time_ms": response_data.get('response_time_ms'),
-                    "session_time": session_time  # Unified session timing starting from 0
+                    "response_time_ms": response_data.get('response_time_ms')
                 }
+                
+                # Add clean timing metadata if provided by frontend
+                if 'timing' in response_data:
+                    response_dict['timing'] = response_data['timing']
+                
+                responses_dict[str(question_id)] = response_dict
 
             # Update the responses JSON
             phq_response_record.responses = responses_dict
@@ -505,5 +466,4 @@ class PHQResponseService:
             db.commit()
             db.refresh(phq_response_record)
 
-            # No camera linking needed - assessment-first approach handles this automatically
             return phq_response_record

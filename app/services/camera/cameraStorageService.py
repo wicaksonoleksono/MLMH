@@ -78,7 +78,8 @@ class CameraStorageService:
     def add_filename_to_session_incrementally(
         session_id: str,
         filename: str,
-        trigger: str
+        trigger: str,
+        assessment_timing: Optional[Dict[str, int]] = None
     ) -> CameraCapture:
         """Add filename to existing session capture record JSON array, or create new one"""
         # print(f"INCREMENTAL DEBUG - Called with session_id: {session_id}, filename: {filename}, trigger: {trigger}")
@@ -98,6 +99,16 @@ class CameraStorageService:
             
             if not capture:
                 # Create new capture record with first filename
+                capture_entry = {
+                    'filename': filename, 
+                    'trigger': trigger, 
+                    'timestamp': timestamp_iso
+                }
+                
+                # Add assessment timing if provided
+                if assessment_timing:
+                    capture_entry['timing'] = assessment_timing
+                
                 capture = CameraCapture(
                     session_id=session_id,
                     assessment_id=None,  # Will be linked later
@@ -108,7 +119,7 @@ class CameraStorageService:
                         'capture_count': 1,
                         'started_at': timestamp_iso,
                         'last_updated': timestamp_iso,
-                        'capture_history': [{'filename': filename, 'trigger': trigger, 'timestamp': timestamp_iso}]
+                        'capture_history': [capture_entry]
                     },
                     created_at=current_time
                 )
@@ -130,7 +141,17 @@ class CameraStorageService:
                 
                 # Add to capture history
                 capture_history = current_metadata.get('capture_history', [])
-                capture_history.append({'filename': filename, 'trigger': trigger, 'timestamp': timestamp_iso})
+                capture_entry = {
+                    'filename': filename, 
+                    'trigger': trigger, 
+                    'timestamp': timestamp_iso
+                }
+                
+                # Add assessment timing if provided
+                if assessment_timing:
+                    capture_entry['timing'] = assessment_timing
+                    
+                capture_history.append(capture_entry)
                 
                 # Update metadata
                 capture.capture_metadata = {

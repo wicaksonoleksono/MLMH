@@ -923,6 +923,7 @@ def stream_sse_optimized():
     session_id = request.args.get('session_id')
     message = request.args.get('message', '').strip()
     user_token = request.args.get('user_token', '')
+    user_timing_str = request.args.get('user_timing', '')
     
     def sse(event: dict):
         return "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
@@ -957,6 +958,14 @@ def stream_sse_optimized():
                 yield sse({'type': 'error', 'message': 'Session access denied'})
                 return
             
+            # Parse user timing data
+            user_timing = None
+            if user_timing_str:
+                try:
+                    user_timing = json.loads(user_timing_str)
+                except:
+                    user_timing = None
+            
             # Stream response
             chat_service = LLMChatService()
             yield sse({'type': 'stream_start'})
@@ -964,7 +973,7 @@ def stream_sse_optimized():
             last_beat = time.time()
             chunk_count = 0
             
-            for chunk_data in chat_service.stream_ai_response(session_id, message):
+            for chunk_data in chat_service.stream_ai_response(session_id, message, user_timing):
                 chunk_count += 1
                 chunk_payload = {
                     'type': 'chunk', 

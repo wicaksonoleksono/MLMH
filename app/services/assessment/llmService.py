@@ -54,10 +54,21 @@ class LLMConversationService:
         user_message: str,
         ai_model_used: Optional[str] = None,
         response_audio_path: Optional[str] = None,
-        transcription: Optional[str] = None
+        transcription: Optional[str] = None,
+        user_timing: Optional[Dict[str, Any]] = None,
+        ai_timing: Optional[Dict[str, Any]] = None
     ) -> LLMConversation:
-        """Create or update conversation turn in single JSON record"""
+        """Create or update conversation turn with clean timing metadata from frontend"""
         with get_session() as db:
+            # Get session and start LLM assessment timing if needed
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                raise ValueError(f"Session {session_id} not found")
+                
+            # Start LLM assessment timing if not already started
+            if not session.llm_start_time:
+                SessionTimingService.start_llm_assessment(session_id)
+            
             # Get existing LLM conversation record for this session or create new one
             conversation_record = db.query(LLMConversation).filter_by(session_id=session_id).first()
             if not conversation_record:
@@ -75,22 +86,21 @@ class LLMConversationService:
                 "\u003c/end_conversation\u003e" in normalized_ai_message
             )
             
-            # Calculate session time for this turn
-            current_time = datetime.utcnow()
-            session_time = SessionTimingService.get_session_time(session_id, current_time)
-            
             turn_data = {
                 "turn_number": turn_number,
-                "ai_message": ai_message,
                 "user_message": user_message,
+                "ai_message": ai_message,
                 "has_end_conversation": has_end_conversation,
                 "user_message_length": len(user_message),
                 "ai_model_used": ai_model_used,
-                "response_audio_path": response_audio_path,
-                "transcription": transcription,
-                "created_at": current_time.isoformat(),
-                "session_time": session_time  # Unified session timing starting from 0
+                "created_at": datetime.utcnow().isoformat()
             }
+            
+            # Add separate timing metadata for user and AI actions
+            if user_timing:
+                turn_data['user_timing'] = user_timing
+            if ai_timing:
+                turn_data['ai_timing'] = ai_timing
 
             turns = conversation_record.conversation_history.get("turns", [])
             turn_exists = False

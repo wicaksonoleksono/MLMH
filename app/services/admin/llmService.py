@@ -10,21 +10,21 @@ from ...db import get_session
 
 class LLMService:
     """LLM service for managing LLM settings and OpenAI integration"""
-    
+            # {"name": "Alexithymia", "description": "Apakah pengguna mengalami kesulitan mengenali dan mengungkapkan emosi mereka?"},
+        # {"name": "Defisit Regulasi Emosi", "description": "Apakah pengguna kesulitan dalam mengatur dan mengelola emosi mereka?"}
     # Default depression aspects with name and description
     DEFAULT_ASPECTS = [
-        {"name": "Anhedonia", "description": "Apakah pasien kehilangan minat atau kesenangan dalam aktivitas sehari-hari?"},
-        {"name": "Bias Kognitif Negatif", "description": "Apakah pasien menunjukkan pola pikir negatif dan perasaan putus asa?"},
-        {"name": "Ruminasi", "description": "Apakah pasien terjebak dalam pikiran berulang tanpa menemukan solusi?"},
-        {"name": "Retardasi Psikomotor", "description": "Apakah terdapat perlambatan dalam gerakan dan bicara pasien?"},
-        {"name": "Gangguan Tidur", "description": "Apakah pasien mengalami masalah tidur seperti insomnia atau kualitas tidur yang buruk?"},
-        {"name": "Iritabilitas", "description": "Apakah pasien mudah marah atau tersinggung dalam situasi sehari-hari?"},
-        {"name": "Rasa Bersalah Berlebihan", "description": "Apakah pasien menunjukkan perasaan bersalah atau merasa tidak berharga secara berlebihan?"},
-        {"name": "Gangguan Kognitif", "description": "Apakah terdapat gangguan dalam konsentrasi dan fungsi eksekutif pasien?"},
-        {"name": "Penarikan Diri Sosial", "description": "Apakah pasien cenderung mengisolasi diri dan menarik diri dari interaksi sosial?"},
-        {"name": "Alexithymia", "description": "Apakah pasien mengalami kesulitan mengenali dan mengungkapkan emosi mereka?"},
-        {"name": "Defisit Regulasi Emosi", "description": "Apakah pasien kesulitan dalam mengatur dan mengelola emosi mereka?"}
+        {"name": "Anhedonia", "description": "Pengguna kehilangan minat atau kesenangan dalam aktivitas sehari-hari."},
+        {"name": "Bias Kognitif Negatif", "description": "Pengguna menunjukkan pola pikir negatif dan perasaan putus asa."},
+        {"name": "Ruminasi", "description": "Pengguna terjebak dalam pikiran berulang tanpa menemukan solusi."},
+        {"name": "Retardasi Psikomotor", "description": "Pengguna mengalami perlambatan dalam gerakan dan bicara."},
+        {"name": "Gangguan Tidur", "description": "Pengguna mengalami masalah tidur seperti insomnia atau kualitas tidur yang buruk."},
+        {"name": "Iritabilitas", "description": "Pengguna mudah marah atau tersinggung dalam situasi sehari-hari."},
+        {"name": "Rasa Bersalah Berlebihan", "description": "Pengguna merasakan perasaan bersalah atau merasa tidak berharga secara berlebihan."},
+        {"name": "Gangguan Kognitif", "description": "Pengguna mengalami kesulitan dalam konsentrasi dan fungsi eksekutif."},
+        {"name": "Penarikan Diri Sosial", "description": "Pengguna cenderung mengisolasi diri dan menarik diri dari interaksi sosial."},
     ]
+
 
     # Default analysis scale (shared across all aspects)
     DEFAULT_ANALYSIS_SCALE = [
@@ -39,10 +39,15 @@ class LLMService:
     # Hard-coded System prompt - TIDAK BISA DIUBAH (Part 1)
     SYSTEM_PROMPT_FIXED = "Anda adalah Sindi, seorang mahasiswa psikologi yang supportive dan senang hati mendengarkan curhatan orang lain."
     
-    # Default Instructions - Customizable (Part 2) - Combines instructions + conversation starter
-    DEFAULT_LLM_INSTRUCTIONS = """
+    # Default User Instructions - "Arahan untuk User" (what users see before starting)
+    DEFAULT_USER_INSTRUCTIONS = """Anda akan memulai percakapan singkat untuk membahas aktivitas Anda akhir-akhir ini.
 
-Salah satu teman Anda kemungkinan mengalami gejala depresi, atau bisa jadi tidak. Lakukan eksplorasi untuk menggali informasi dengan gaya non-formal kepada rekan Anda tentang aktivitas yang dilakukan **2 pekan terakhir**, dimana menyangkut dengan aspek-aspek psikologis terkait gejala depresi di bawah ini:
+Di halaman selanjutnya, kami telah menyiapkan teman untuk bercerita yang akan menemani Anda menceritakan aktivitas dan apa saja yang Anda lalui dalam periode 2 minggu terakhir. Saat bercerita, cobalah untuk mengingat kembali bagaimana perasaan Anda dalam rentang waktu tersebut. Jawab pertanyaan dengan jujur dan terbuka
+
+Tidak ada jawaban yang benar atau salah. Jawaban yang paling jujur akan memberikan hasil yang paling bermanfaat bagi anda."""
+
+    # Default LLM Instructions - Customizable (Part 2) - Instructions for the AI behavior
+    DEFAULT_LLM_INSTRUCTIONS = """Salah satu teman Anda kemungkinan mengalami gejala depresi, atau bisa jadi tidak. Lakukan eksplorasi untuk menggali informasi dengan gaya non-formal kepada rekan Anda tentang aktivitas yang dilakukan **2 pekan terakhir**, dimana menyangkut dengan aspek-aspek psikologis terkait gejala depresi di bawah ini:
 {aspects}
 
 ### Prinsip Utama Percakapan
@@ -74,8 +79,8 @@ Salah satu teman Anda kemungkinan mengalami gejala depresi, atau bisa jadi tidak
             } for setting in settings]
 
     @staticmethod
-    def create_settings(openai_api_key: Optional[str] = None, chat_model: str = "gpt-4o", 
-                       analysis_model: str = "gpt-4o-mini",
+    def create_settings(openai_api_key: Optional[str] = None, chat_model: str = "gpt-4.1-mini-2025-04-14", 
+                       analysis_model: str = "gpt-4.1-mini-2025-04-14",
                        depression_aspects: Optional[List[Dict]] = None,
                        analysis_scale: Optional[List[Dict]] = None,
                        instructions: str = None,
@@ -283,11 +288,11 @@ Salah satu teman Anda kemungkinan mengalami gejala depresi, atau bisa jadi tidak
     def get_default_settings() -> Dict[str, Any]:
         """Get hardcoded default LLM settings for 'Muat Default' button"""
         return {
-            "instructions": "",
+            "instructions": LLMService.DEFAULT_USER_INSTRUCTIONS.strip(),
             "llm_instructions": LLMService.DEFAULT_LLM_INSTRUCTIONS.strip(),  # Use new default instructions
             "openai_api_key": "",
-            "chat_model": "gpt-4o",
-            "analysis_model": "gpt-4o-mini",
+            "chat_model": "gpt-4.1-mini-2025-04-14",
+            "analysis_model": "gpt-4.1-mini-2025-04-14",
             "depression_aspects": LLMService.DEFAULT_ASPECTS,
             "analysis_scale": LLMService.DEFAULT_ANALYSIS_SCALE,
             "is_default": True

@@ -77,11 +77,31 @@ class CameraAssessmentService:
                 file_data=file_data
             )
             
+            # Calculate assessment timing if we can determine current assessment
+            assessment_timing = None
+            try:
+                from ..session.sessionTimingService import SessionTimingService
+                # Try to determine current assessment timing
+                with get_session() as db:
+                    from ...model.assessment.sessions import AssessmentSession
+                    session = db.query(AssessmentSession).filter_by(id=session_id).first()
+                    if session:
+                        # Determine current assessment based on session status
+                        if session.status == 'PHQ_IN_PROGRESS' and session.phq_start_time:
+                            phq_time = SessionTimingService.get_phq_assessment_time(session_id)
+                            assessment_timing = {"time": phq_time}
+                        elif session.status == 'LLM_IN_PROGRESS' and session.llm_start_time:
+                            llm_time = SessionTimingService.get_llm_assessment_time(session_id)
+                            assessment_timing = {"time": llm_time}
+            except Exception:
+                pass  # Continue without timing if calculation fails
+            
             # INCREMENTAL: Add filename to database JSON array immediately
             CameraStorageService.add_filename_to_session_incrementally(
                 session_id=session_id,
                 filename=filename,
-                trigger=trigger
+                trigger=trigger,
+                assessment_timing=assessment_timing
             )
             
             # Return filename for frontend to track locally

@@ -21,10 +21,15 @@ function chatInterface(sessionId) {
     exchangeCount: 0,
     messageId: 1,
     cameraManager: null,
+    
+    // Assessment timing variables
+    assessmentStartTime: null,
+    currentMessageStartTime: null,
 
     // Initialize
     async init() {
       // console.log("Chat interface initializing...");
+      this.assessmentStartTime = Date.now();
       this.startConversationTimer();
       await this.initCamera();
       // console.log("About to initialize chat...");
@@ -148,6 +153,7 @@ function chatInterface(sessionId) {
 
       const userMessage = this.currentMessage.trim();
       this.currentMessage = "";
+      this.currentMessageStartTime = Date.now();
 
       // Add user message to UI
       this.messages.push({
@@ -187,11 +193,22 @@ function chatInterface(sessionId) {
           throw new Error("Failed to get stream token");
         }
 
+        // Calculate user timing
+        const messageEndTime = Date.now();
+        const userStart = Math.floor((this.currentMessageStartTime - this.assessmentStartTime) / 1000);
+        const userEnd = Math.floor((messageEndTime - this.assessmentStartTime) / 1000);
+        const userTiming = {
+          start: userStart,
+          end: userEnd,
+          duration: userEnd - userStart
+        };
+
         // Build stream URL with parameters
         const params = new URLSearchParams({
           session_id: this.sessionId,
           message: userMessage,
           user_token: tokenData.token,
+          user_timing: JSON.stringify(userTiming),
         });
 
         const streamUrl = `/assessment/stream/?${params}`;
@@ -199,6 +216,8 @@ function chatInterface(sessionId) {
 
         // Get reference to the bot message we just added
         const botMessage = this.messages[this.messages.length - 1];
+        let aiStartTime = null;
+        let aiEndTime = null;
 
         // Add timeout handling
         const timeoutId = setTimeout(() => {
@@ -220,6 +239,11 @@ function chatInterface(sessionId) {
           }
 
           if (data.type === "chunk") {
+            // Record AI start time on first chunk
+            if (aiStartTime === null) {
+              aiStartTime = Date.now();
+            }
+            
             // Clear typing indicator on first chunk
             if (botMessage.content.includes('<span class="typing-cursor">')) {
               botMessage.content = "";
@@ -231,6 +255,7 @@ function chatInterface(sessionId) {
             if (data.conversation_ended) {
               // End conversation immediately when backend detects the tag
               this.conversationEnded = true;
+              aiEndTime = Date.now();
               // Don't wait - finish conversation right now
               eventSource.close();
               this.isTyping = false;
@@ -239,10 +264,14 @@ function chatInterface(sessionId) {
             }
           } else if (data.type === "complete") {
             clearTimeout(timeoutId);
+            aiEndTime = Date.now();
             botMessage.streaming = false;
             this.isTyping = false;
             this.exchangeCount++;
             eventSource.close();
+
+            // Send AI timing to backend
+            this.sendAiTiming(userMessage, userTiming, aiStartTime, aiEndTime);
 
             // Check if conversation ended after every message delivery
             this.checkConversationStatus();
@@ -254,6 +283,9 @@ function chatInterface(sessionId) {
             eventSource.close();
           } else if (data.type === "stream_start") {
             // Stream started - clear loading message and show AI is typing
+            if (aiStartTime === null) {
+              aiStartTime = Date.now();
+            }
             botMessage.content = '<span class="typing-cursor">|</span>';
             this.scrollToBottom();
           }
@@ -272,6 +304,33 @@ function chatInterface(sessionId) {
         botMessage.content = `Error: ${error.stack || error.toString()}`;
         botMessage.streaming = false;
         this.isTyping = false;
+      }
+    },
+
+    async sendAiTiming(userMessage, userTiming, aiStartTime, aiEndTime) {
+      if (!aiStartTime || !aiEndTime) return;
+
+      // Calculate AI timing
+      const aiStart = Math.floor((aiStartTime - this.assessmentStartTime) / 1000);
+      const aiEnd = Math.floor((aiEndTime - this.assessmentStartTime) / 1000);
+      const aiTiming = {
+        start: aiStart,
+        end: aiEnd,
+        duration: aiEnd - aiStart
+      };
+
+      try {
+        await fetch(`/assessment/llm/save-timing/${this.sessionId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_message: userMessage,
+            user_timing: userTiming,
+            ai_timing: aiTiming
+          })
+        });
+      } catch (error) {
+        console.error("Failed to send AI timing:", error);
       }
     },
 

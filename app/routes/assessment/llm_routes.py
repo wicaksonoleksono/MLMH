@@ -450,3 +450,44 @@ def llm_instructions():
 #         "session_metadata_keys": list(session.session_metadata.keys()) if session.session_metadata else [],
 #         "assessment_order": session.assessment_order
 #     }
+
+
+@llm_assessment_bp.route('/save-timing/<session_id>', methods=['POST'])
+@user_required
+@api_response  
+def save_timing_data(session_id):
+    """Save timing data for user and AI messages"""
+    # Validate session belongs to current user
+    session = SessionService.get_session(session_id)
+    if not session or int(session.user_id) != int(current_user.id):
+        return {"message": "Access denied"}, 403
+        
+    data = request.get_json()
+    user_message = data.get('user_message')
+    user_timing = data.get('user_timing')
+    ai_timing = data.get('ai_timing')
+    
+    if not user_message:
+        return {"message": "user_message is required"}, 400
+        
+    # Find the most recent turn that matches this user message
+    existing_turns = LLMConversationService.get_session_conversations(session_id)
+    
+    for turn in reversed(existing_turns):
+        if turn.get('user_message') == user_message:
+            # Update this turn with timing data
+            updates = {}
+            if user_timing:
+                updates['user_timing'] = user_timing
+            if ai_timing:
+                updates['ai_timing'] = ai_timing
+                
+            if updates:
+                LLMConversationService.update_conversation_turn(
+                    session_id=session_id,
+                    turn_number=turn.get('turn_number'),
+                    updates=updates
+                )
+            break
+    
+    return {"message": "Timing data saved successfully"}

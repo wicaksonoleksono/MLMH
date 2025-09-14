@@ -85,23 +85,22 @@ class LLMChatService:
                 streaming=True
             )
             
-            # Build system prompt from settings
+            # Build system prompt from settings using the new approach
             aspects = settings['depression_aspects']
             custom_instructions = settings.get('llm_instructions')
-            system_prompt = LLMService.build_system_prompt(aspects, custom_instructions)
             
-            # Create prompt template with system prompt from database
-            self.prompt = ChatPromptTemplate.from_messages([
-                ("system", system_prompt),
-                MessagesPlaceholder(variable_name="history"),
-                ("human", "{input}"),
-            ])
+            # Use the new build_langchain_prompt_template method for proper structure
+            self.prompt = LLMService.build_langchain_prompt_template(aspects, custom_instructions)
+            
+            # For streaming, we need to adjust how we pass parameters to match the new template
+            # The new template expects "user_input" and "conversation_history" instead of "input" and "history"
             self.chain = self.prompt | self.chat_model
+            # Adjust the history handling to match the new template structure
             self.chain_with_history = RunnableWithMessageHistory(
                 self.chain,
                 get_by_session_id,
-                input_messages_key="input",
-                history_messages_key="history",
+                input_messages_key="user_input",  # Changed to match new template
+                history_messages_key="conversation_history",  # Changed to match new template
                 history_factory_config=[
                     ConfigurableFieldSpec(
                         id="session_id",
@@ -117,7 +116,7 @@ class LLMChatService:
             # Don't hide the error - show the raw error message
             raise e
     
-    def stream_ai_response(self, session_id: str, user_message: str) -> Generator[dict, None, None]:
+    def stream_ai_response(self, session_id: str, user_message: str, user_timing: dict = None) -> Generator[dict, None, None]:
         """
         Stream AI response using session's system prompt from database settings
         """
@@ -135,7 +134,7 @@ class LLMChatService:
             # Stream directly without timeout/retry interference
             chunk_count = 0
             for chunk in self.chain_with_history.stream(
-                {"input": user_message},
+                {"user_input": user_message},  # Changed from "input" to "user_input"
                 config=config
             ):
                 chunk_count += 1
@@ -169,13 +168,13 @@ class LLMChatService:
                 raise ValueError("No response received from OpenAI")
             
             # After streaming completes, save turn to database immediately
-            self._save_conversation_turn(session_id, user_message, response_content, settings)
+            self._save_conversation_turn(session_id, user_message, response_content, settings, user_timing)
             
         except Exception as e:
             # Show raw error - no hiding
             raise e
     
-    def _save_conversation_turn(self, session_id: str, user_message: str, ai_response: str, settings: Dict[str, Any]) -> None:
+    def _save_conversation_turn(self, session_id: str, user_message: str, ai_response: str, settings: Dict[str, Any], user_timing: dict = None) -> None:
         """Save conversation turn immediately using LLMConversationService"""
         # Get current turn number
         existing_turns = LLMConversationService.get_session_conversations(session_id)
@@ -187,7 +186,8 @@ class LLMChatService:
             turn_number=turn_number,
             ai_message=ai_response,
             user_message=user_message,
-            ai_model_used=settings['chat_model']
+            ai_model_used=settings['chat_model'],
+            user_timing=user_timing
         )
         
         # If conversation ended, clear LangChain memory AND complete the session

@@ -117,7 +117,7 @@ class CameraManager {
     }
   }
 
-  async captureImage(trigger = "manual") {
+  async captureImage(trigger = "manual", timing = null) {
     try {
       if (!this.isInitialized) {
         throw new Error("Camera not initialized");
@@ -145,6 +145,11 @@ class CameraManager {
 
       formData.append("image", blob, filename);
       formData.append("trigger", trigger);
+      
+      // Add timing data if provided
+      if (timing) {
+        formData.append("timing", JSON.stringify(timing));
+      }
 
       const response = await fetch(
         `/assessment/camera/upload-single/${this.sessionId}`,
@@ -171,33 +176,33 @@ class CameraManager {
   }
 
   // Smart trigger methods that only work if enabled in settings
-  async onButtonClick() {
+  async onButtonClick(timing = null) {
     if (
       this.cameraSettings.recording_mode === "EVENT_DRIVEN" &&
       this.cameraSettings.capture_on_button_click
     ) {
-      return await this.captureImage("button_click");
+      return await this.captureImage("button_click", timing);
     }
     return null;
   }
 
-  async onMessageSend() {
+  async onMessageSend(timing = null) {
     if (
       this.cameraSettings.recording_mode === "EVENT_DRIVEN" &&
       this.cameraSettings.capture_on_message_send
     ) {
-      return await this.captureImage("message_send");
+      return await this.captureImage("message_send", timing);
     }
     return null;
   }
 
-  async onQuestionStart() {
+  async onQuestionStart(timing = null) {
     if (
       this.cameraSettings.recording_mode === "EVENT_DRIVEN" &&
       this.cameraSettings.capture_on_question_start
     ) {
       // console.log("Question start capture enabled - capturing");
-      return await this.captureImage("question_start");
+      return await this.captureImage("question_start", timing);
     }
     // console.log("Question start capture disabled or wrong mode");
     return null;
@@ -205,6 +210,10 @@ class CameraManager {
 
   setCurrentResponseId(responseId) {
     this.currentResponseId = responseId;
+  }
+
+  setConversationId(conversationId) {
+    this.assessmentId = conversationId;
   }
 
   // Note: uploadBatch() removed - using incremental backend approach instead

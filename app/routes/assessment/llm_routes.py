@@ -466,28 +466,55 @@ def save_timing_data(session_id):
     user_message = data.get('user_message')
     user_timing = data.get('user_timing')
     ai_timing = data.get('ai_timing')
+    turn_number = data.get('turn_number')  # Use turn_number for more reliable matching
     
     if not user_message:
         return {"message": "user_message is required"}, 400
         
-    # Find the most recent turn that matches this user message
+    # Find the most recent turn that matches this user message or turn number
     existing_turns = LLMConversationService.get_session_conversations(session_id)
     
-    for turn in reversed(existing_turns):
-        if turn.get('user_message') == user_message:
-            # Update this turn with timing data
-            updates = {}
-            if user_timing:
-                updates['user_timing'] = user_timing
-            if ai_timing:
-                updates['ai_timing'] = ai_timing
-                
-            if updates:
-                LLMConversationService.update_conversation_turn(
-                    session_id=session_id,
-                    turn_number=turn.get('turn_number'),
-                    updates=updates
-                )
-            break
+    # Debug logging
+    print(f"DEBUG: Looking for turn with user_message: '{user_message[:50]}...'")
+    print(f"DEBUG: Available turns: {[(t.get('turn_number'), t.get('user_message')[:30] if t.get('user_message') else 'None') for t in existing_turns]}")
     
-    return {"message": "Timing data saved successfully"}
+    target_turn = None
+    if turn_number is not None:
+        # Use turn_number for more reliable matching
+        for turn in existing_turns:
+            if turn.get('turn_number') == turn_number:
+                target_turn = turn
+                print(f"DEBUG: Found matching turn {turn_number} by turn_number")
+                break
+    else:
+        # Fallback to user_message matching for backward compatibility
+        for turn in reversed(existing_turns):
+            if turn.get('user_message') == user_message:
+                target_turn = turn
+                print(f"DEBUG: Found matching turn {turn.get('turn_number')} by user_message")
+                break
+    
+    if target_turn:
+        # Update this turn with timing data
+        updates = {}
+        if user_timing:
+            updates['user_timing'] = user_timing
+        if ai_timing:
+            updates['ai_timing'] = ai_timing
+            
+        print(f"DEBUG: Updating turn {target_turn.get('turn_number')} with timing: user={bool(user_timing)}, ai={bool(ai_timing)}")
+        
+        if updates:
+            LLMConversationService.update_conversation_turn(
+                session_id=session_id,
+                turn_number=target_turn.get('turn_number'),
+                updates=updates
+            )
+            print(f"DEBUG: Successfully updated turn {target_turn.get('turn_number')} with timing data")
+            return {"message": "Timing data saved successfully"}
+        else:
+            print("DEBUG: No timing updates provided")
+            return {"message": "No timing data provided"}, 400
+    else:
+        print(f"DEBUG: No matching turn found for user_message: '{user_message[:50]}...' or turn_number: {turn_number}")
+        return {"message": f"No matching turn found for message or turn number"}, 404

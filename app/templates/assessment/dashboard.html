@@ -107,8 +107,9 @@ block content %}
               %H:%M') if session.phq_completed_at else '-' }}
             </p>
             <p>
-              Open Question selesai: {{ session.llm_completed_at.strftime('%d/%m/%Y
-              %H:%M') if session.llm_completed_at else '-' }}
+              Open Question selesai: {{
+              session.llm_completed_at.strftime('%d/%m/%Y %H:%M') if
+              session.llm_completed_at else '-' }}
             </p>
             <p>
               Durasi total: {{ session.duration_seconds // 60 if
@@ -123,13 +124,16 @@ block content %}
         <div class="text-6xl mb-4">📝</div>
         <h2 class="text-2xl font-bold text-gray-900 mb-3">Mulai Assessment</h2>
         <p class="text-gray-600 mb-6">
-          Semua persiapan selesai. Assessment akan dimulai dengan {% if session.is_first == 'llm' %}Open Question{% else %}{{ session.is_first.upper() }}{% endif %} terlebih dahulu.
+          Semua persiapan selesai. Assessment akan dimulai dengan {% if
+          session.is_first == 'llm' %}Open Question{% else %}{{
+          session.is_first.upper() }}{% endif %} terlebih dahulu.
         </p>
         <button
           @click="startFirstAssessment()"
           class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-8 rounded-xl transition-colors mr-4"
         >
-          Mulai {% if session.is_first == 'llm' %}Open Question{% else %}{{ session.is_first.upper() }}{% endif %} Assessment
+          Mulai {% if session.is_first == 'llm' %}Open Question{% else %}{{
+          session.is_first.upper() }}{% endif %} Assessment
         </button>
         <button
           @click="resetSession()"
@@ -160,69 +164,76 @@ block content %}
 {% endblock %} {% block scripts %}
 <script>
   // Direct refresh detection - redirect with reset parameter
-  window.addEventListener('beforeunload', function() {
+  window.addEventListener("beforeunload", function () {
     // Only set the flag if there's an active session
     const sessionId = "{{ session.id }}";
     if (sessionId) {
       // Set a flag in sessionStorage (cleared on tab close)
-      sessionStorage.setItem('refreshingSession', sessionId);
+      sessionStorage.setItem("refreshingSession", sessionId);
     }
   });
 
   function assessmentDashboard() {
-      return {
-          sessionId: "{{ session.id }}",
-          sessionType: '{{ session.is_first }}',
+    return {
+      sessionId: "{{ session.id }}",
+      sessionType: "{{ session.is_first }}",
 
-          async init() {
-              // Check if we're coming from a refresh
-              await this.handleRefreshRedirect();
-          },
+      async init() {
+        // Check if we're coming from a refresh
+        await this.handleRefreshRedirect();
+      },
 
-          async handleRefreshRedirect() {
-              // Check if we're coming from a refresh
-              const refreshingSession = sessionStorage.getItem('refreshingSession');
-              if (refreshingSession === this.sessionId) {
-                  sessionStorage.removeItem('refreshingSession');
-                  // Redirect to dashboard with reset parameter
-                  window.location.href = `/assessment/?reset_session=${this.sessionId}`;
-              }
-          },
+      async handleRefreshRedirect() {
+        // Check if we're coming from a refresh
+        const refreshingSession = sessionStorage.getItem("refreshingSession");
+        if (refreshingSession === this.sessionId) {
+          sessionStorage.removeItem("refreshingSession");
+          // Redirect to dashboard with reset parameter
+          window.location.href = `/assessment/?reset_session=${this.sessionId}`;
+        }
+      },
 
-          async resetSession() {
-              if (confirm('Apakah Anda yakin ingin mereset session assessment ini dan memulai dari awal? Semua data yang belum disimpan akan hilang.')) {
-                  try {
-                      await this.performReset();
-                  } catch (error) {
-                      alert('Gagal mereset session: ' + error.message);
-                  }
-              }
-          },
-
-          async performReset() {
-              const response = await fetch(`/assessment/reset-session-on-refresh/${this.sessionId}`, {
-                  method: 'POST',
-                  headers: {
-                      'Content-Type': 'application/json'
-                  }
-              });
-              
-              // Redirect to main menu
-              window.location.href = '/';
-          },
-
-          goToConsent() {
-              window.location.href = '/assessment/consent';
-          },
-
-          startFirstAssessment() {
-              if (this.sessionType === 'phq') {
-                  window.location.href = '/assessment/phq';
-              } else if (this.sessionType === 'llm') {
-                  window.location.href = '/assessment/llm';
-              }
+      async resetSession() {
+        if (
+          confirm(
+            "Apakah Anda yakin ingin mereset session assessment ini dan memulai dari awal? Semua data yang belum disimpan akan hilang."
+          )
+        ) {
+          try {
+            await this.performReset();
+          } catch (error) {
+            alert("Gagal mereset session: " + error.message);
           }
-      };
+        }
+      },
+
+      async performReset() {
+        const response = await fetch(
+          `/assessment/reset-session-on-refresh/${this.sessionId}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        // Redirect to main menu
+        window.location.href = "/";
+      },
+
+      goToConsent() {
+        window.location.href = "/assessment/consent";
+      },
+
+      startFirstAssessment() {
+        if (this.sessionType === "phq") {
+          window.location.href = "/assessment/phq";
+        } else if (this.sessionType === "llm") {
+          window.location.href = "/assessment/llm";
+        }
+      },
+    };
   }
   // Initialize refresh detection for this session
   setupRefreshDetection("{{ session.id }}");

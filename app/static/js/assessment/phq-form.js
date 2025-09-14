@@ -140,7 +140,15 @@ function phqAssessment(sessionId) {
           await this.loadCurrentResponse();
           // Trigger camera capture when first question loads
           if (this.cameraManager) {
-            await this.cameraManager.onQuestionStart();
+            // Pass timing data to camera capture
+            const currentTime = Date.now();
+            const questionStart = Math.floor((currentTime - this.assessmentStartTime) / 1000);
+            const timing = {
+              start: questionStart,
+              end: questionStart,
+              duration: 0
+            };
+            await this.cameraManager.onQuestionStart(timing);
           }
         } else {
           alert(
@@ -158,13 +166,18 @@ function phqAssessment(sessionId) {
       if (this.currentQuestion) {
         this.currentResponse =
           this.responses[this.currentQuestion.question_id] || null;
-        // Set current response ID and trigger camera capture when new question loads
-        if (this.cameraManager) {
-          this.cameraManager.setCurrentResponseId(
-            this.currentQuestion.question_id
-          );
-          await this.cameraManager.onQuestionStart();
-        }
+        // Trigger camera capture when new question loads
+              if (this.cameraManager) {
+                // Pass timing data to camera capture
+                const currentTime = Date.now();
+                const questionStart = Math.floor((currentTime - this.assessmentStartTime) / 1000);
+                const timing = {
+                  start: questionStart,
+                  end: questionStart,
+                  duration: 0
+                };
+                await this.cameraManager.onQuestionStart(timing);
+              }
       }
     },
 
@@ -177,7 +190,16 @@ function phqAssessment(sessionId) {
         this.cameraManager.setCurrentResponseId(
           this.currentQuestion.question_id
         );
-        await this.cameraManager.onButtonClick();
+        // Pass timing data to camera capture
+        const responseTime = Date.now();
+        const questionStart = Math.floor((this.questionStartTime - this.assessmentStartTime) / 1000);
+        const questionEnd = Math.floor((responseTime - this.assessmentStartTime) / 1000);
+        const timing = {
+          start: questionStart,
+          end: questionEnd,
+          duration: questionEnd - questionStart
+        };
+        await this.cameraManager.onButtonClick(timing);
       }
 
       const responseValue = parseInt(value);

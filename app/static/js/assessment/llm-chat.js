@@ -25,17 +25,43 @@ function chatInterface(sessionId) {
     // Assessment timing variables
     assessmentStartTime: null,
     currentMessageStartTime: null,
+    
+    // Initialization guard
+    isInitialized: false,
 
     // Initialize
     async init() {
-      // console.log("Chat interface initializing...");
+      // Prevent double initialization
+      if (this.isInitialized) {
+        return;
+      }
+      
+      this.isInitialized = true;
       this.assessmentStartTime = Date.now();
       this.startConversationTimer();
       await this.initCamera();
-      // console.log("About to initialize chat...");
       await this.initializeChat();
       this.setupAbandonTracking();
-      // console.log("Chat interface initialized");
+      this.addGreetingMessage();
+    },
+
+    addGreetingMessage() {
+      // Add initial greeting from Sindi
+      this.messages.push({
+        id: this.messageId++,
+        type: "ai",
+        content: "Halo apakabar aku Sindi. Silakan ceritakan apa yang sedang kamu rasakan atau pikirkan hari ini.",
+        streaming: false,
+        timestamp: new Date(),
+      });
+      this.scrollToBottom();
+    },
+
+    onMessageInput() {
+      // Track when user starts typing for accurate timing
+      if (!this.currentMessageStartTime && this.currentMessage.trim()) {
+        this.currentMessageStartTime = Date.now();
+      }
     },
 
     async initCamera() {
@@ -44,7 +70,6 @@ function chatInterface(sessionId) {
           `/assessment/camera/settings/${this.sessionId}`
         );
         const cameraSettings = cameraResult?.data?.data?.settings || {};
-        // console.log("LLM Camera settings loaded:", cameraSettings);
 
         this.cameraManager = new CameraManager(
           this.sessionId,
@@ -52,7 +77,6 @@ function chatInterface(sessionId) {
           cameraSettings
         );
         await this.cameraManager.initialize();
-        // console.log("LLM Camera initialized successfully");
       } catch (error) {
         console.error("LLM Camera initialization failed:", error);
         // Camera initialization failed - continue without camera
@@ -97,20 +121,16 @@ function chatInterface(sessionId) {
     },
 
     async initializeChat() {
-      // console.log("Initializing chat with session ID:", this.sessionId);
       try {
         // Start chat session
         const url = `/assessment/llm/start-chat/${this.sessionId}`;
-        // console.log("Calling start chat endpoint:", url);
 
         const response = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
         });
 
-        // console.log("Start chat response status:", response.status);
         const result = await response.json();
-        // console.log("Start chat response:", result);
 
         if (result.status !== "success") {
           console.error("Start chat failed:", result.message);
@@ -120,7 +140,7 @@ function chatInterface(sessionId) {
 
           // Update camera manager with conversation_id
           if (this.cameraManager) {
-            this.cameraManager.assessmentId = this.conversationId;
+            this.cameraManager.setConversationId(this.conversationId);
           }
         }
 
@@ -133,6 +153,16 @@ function chatInterface(sessionId) {
       }
     },
 
+    // Utility methods
+    scrollToBottom() {
+      setTimeout(() => {
+        const container = this.$refs.chatContainer;
+        if (container) {
+          container.scrollTop = container.scrollHeight;
+        }
+      }, 100);
+    },
+
     async sendMessage() {
       if (
         !this.currentMessage.trim() ||
@@ -141,21 +171,34 @@ function chatInterface(sessionId) {
       )
         return;
 
-      // Capture on message send
+      const userMessage = this.currentMessage.trim();
+      this.currentMessage = "";
+      
+      // Set message start time if not already set (when user started typing)
+      if (!this.currentMessageStartTime) {
+        this.currentMessageStartTime = Date.now();
+      }
+
+      // Capture on message send with timing data
       if (this.cameraManager) {
         try {
-          const result = await this.cameraManager.onMessageSend();
-          // console.log("Camera onMessageSend result:", result);
+          // Calculate timing before capture
+          const captureTime = Date.now();
+          const messageStart = Math.floor((this.currentMessageStartTime - this.assessmentStartTime) / 1000);
+          const messageEnd = Math.floor((captureTime - this.assessmentStartTime) / 1000);
+          const timing = {
+            start: messageStart,
+            end: messageEnd,
+            duration: messageEnd - messageStart
+          };
+          
+          await this.cameraManager.onMessageSend(timing);
         } catch (error) {
           console.error("Camera onMessageSend error:", error);
         }
       }
 
-      const userMessage = this.currentMessage.trim();
-      this.currentMessage = "";
-      this.currentMessageStartTime = Date.now();
-
-      // Add user message to UI
+      // Add user message
       this.messages.push({
         id: this.messageId++,
         type: "user",
@@ -175,11 +218,6 @@ function chatInterface(sessionId) {
       this.isTyping = true;
       this.scrollToBottom();
 
-      // Add immediate visual feedback when sending message
-      const botMessage = this.messages[this.messages.length - 1];
-      botMessage.content = '<span class="typing-cursor">|</span>';
-      this.scrollToBottom();
-
       try {
         // Get stream token for authentication
         const tokenResponse = await fetch(
@@ -195,21 +233,26 @@ function chatInterface(sessionId) {
 
         // Calculate user timing
         const messageEndTime = Date.now();
-        const userStart = Math.floor((this.currentMessageStartTime - this.assessmentStartTime) / 1000);
-        const userEnd = Math.floor((messageEndTime - this.assessmentStartTime) / 1000);
+        const userStart = Math.floor(
+          (this.currentMessageStartTime - this.assessmentStartTime) / 1000
+        );
+        const userEnd = Math.floor(
+          (messageEndTime - this.assessmentStartTime) / 1000
+        );
         const userTiming = {
           start: userStart,
           end: userEnd,
-          duration: userEnd - userStart
+          duration: userEnd - userStart,
         };
 
         // Build stream URL with parameters
         const params = new URLSearchParams({
           session_id: this.sessionId,
           message: userMessage,
-          user_token: tokenData.token,
-          user_timing: JSON.stringify(userTiming),
+          user_token: tokenData.token
         });
+        // Add timing data separately to ensure proper encoding
+        params.append('user_timing', JSON.stringify(userTiming));
 
         const streamUrl = `/assessment/stream/?${params}`;
         const eventSource = new EventSource(streamUrl);
@@ -243,20 +286,18 @@ function chatInterface(sessionId) {
             if (aiStartTime === null) {
               aiStartTime = Date.now();
             }
-            
-            // Clear typing indicator on first chunk
-            if (botMessage.content.includes('<span class="typing-cursor">')) {
-              botMessage.content = "";
-            }
+
             botMessage.content += data.data;
             this.scrollToBottom();
 
             // Check conversation_ended flag from backend (immediate detection)
             if (data.conversation_ended) {
-              // End conversation immediately when backend detects the tag
               this.conversationEnded = true;
-              aiEndTime = Date.now();
-              // Don't wait - finish conversation right now
+              if (aiEndTime === null) {
+                aiEndTime = Date.now();
+              }
+              // Send AI timing before finishing conversation
+              this.sendAiTiming(userMessage, userTiming, aiStartTime, aiEndTime);
               eventSource.close();
               this.isTyping = false;
               botMessage.streaming = false;
@@ -264,7 +305,9 @@ function chatInterface(sessionId) {
             }
           } else if (data.type === "complete") {
             clearTimeout(timeoutId);
-            aiEndTime = Date.now();
+            if (aiEndTime === null) {
+              aiEndTime = Date.now();
+            }
             botMessage.streaming = false;
             this.isTyping = false;
             this.exchangeCount++;
@@ -272,6 +315,9 @@ function chatInterface(sessionId) {
 
             // Send AI timing to backend
             this.sendAiTiming(userMessage, userTiming, aiStartTime, aiEndTime);
+
+            // Reset timing for next message
+            this.currentMessageStartTime = null;
 
             // Check if conversation ended after every message delivery
             this.checkConversationStatus();
@@ -282,19 +328,19 @@ function chatInterface(sessionId) {
             this.isTyping = false;
             eventSource.close();
           } else if (data.type === "stream_start") {
-            // Stream started - clear loading message and show AI is typing
+            // Stream started - record AI start time
             if (aiStartTime === null) {
               aiStartTime = Date.now();
             }
-            botMessage.content = '<span class="typing-cursor">|</span>';
             this.scrollToBottom();
           }
         };
 
         eventSource.onerror = (error) => {
           clearTimeout(timeoutId);
-          const botMessage = this.messages[this.messages.length - 1];
-          botMessage.content = `<span style="color: red;">Connection error. Please try again.</span>`;
+          // Show the actual error instead of generic message
+          const errorMessage = error.message || error.toString() || "Unknown connection error";
+          botMessage.content = `<span style="color: red;">Connection error: ${errorMessage}</span>`;
           botMessage.streaming = false;
           this.isTyping = false;
           eventSource.close();
@@ -308,15 +354,19 @@ function chatInterface(sessionId) {
     },
 
     async sendAiTiming(userMessage, userTiming, aiStartTime, aiEndTime) {
-      if (!aiStartTime || !aiEndTime) return;
+      if (!aiStartTime || !aiEndTime) {
+        return;
+      }
 
       // Calculate AI timing
-      const aiStart = Math.floor((aiStartTime - this.assessmentStartTime) / 1000);
+      const aiStart = Math.floor(
+        (aiStartTime - this.assessmentStartTime) / 1000
+      );
       const aiEnd = Math.floor((aiEndTime - this.assessmentStartTime) / 1000);
       const aiTiming = {
         start: aiStart,
         end: aiEnd,
-        duration: aiEnd - aiStart
+        duration: aiEnd - aiStart,
       };
 
       try {
@@ -326,7 +376,8 @@ function chatInterface(sessionId) {
           body: JSON.stringify({
             user_message: userMessage,
             user_timing: userTiming,
-            ai_timing: aiTiming
+            ai_timing: aiTiming,
+            turn_number: this.exchangeCount
           })
         });
       } catch (error) {
@@ -363,8 +414,6 @@ function chatInterface(sessionId) {
         if (result.status === "OLKORECT" && actualResult.next_redirect) {
           this.markAsCompleted();
 
-          // console.log("LLM finish result:", actualResult);
-
           // Camera captures are automatically linked by backend - no frontend action needed
 
           window.location.href = actualResult.next_redirect;
@@ -389,9 +438,6 @@ function chatInterface(sessionId) {
 
     async checkConversationStatus() {
       try {
-        // console.log(
-        //   `Checking conversation status for session ${this.sessionId}`
-        // );
         const response = await fetch(
           `/assessment/llm/check/${this.sessionId}`,
           {
@@ -401,23 +447,15 @@ function chatInterface(sessionId) {
         );
 
         const result = await response.json();
-        // console.log("Raw API response:", result);
 
         const actualResult =
           result.status === "OLKORECT" ? result.data : result;
-        // console.log("Processed result:", actualResult);
-        // console.log(
-        //   `conversation_complete: ${actualResult.conversation_complete}`
-        // );
 
         if (actualResult.conversation_complete) {
-          // console.log(" CONVERSATION COMPLETE - triggering end");
           this.handleConversationEnd();
-        } else {
-          // console.log("Conversation not complete yet");
         }
       } catch (error) {
-        // console.log(" Error checking conversation status:", error);
+        // Silently ignore errors
       }
     },
 
@@ -428,6 +466,7 @@ function chatInterface(sessionId) {
       this.finishConversation();
     },
 
+    // Timer functions
     startConversationTimer() {
       timerInterval = setInterval(() => {
         conversationTimer++;
@@ -439,11 +478,11 @@ function chatInterface(sessionId) {
       }, 1000);
     },
 
-    scrollToBottom() {
-      this.$nextTick(() => {
-        this.$refs.chatContainer.scrollTop =
-          this.$refs.chatContainer.scrollHeight;
-      });
+    stopConversationTimer() {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
     },
 
     async linkCameraToConversations(capture_id, conversation_ids) {
@@ -466,7 +505,6 @@ function chatInterface(sessionId) {
 
           const result = await response.json();
           if (result.status === "OLKORECT") {
-            // console.log("Camera batch linked to conversations successfully");
           } else {
             console.error("Failed to link camera batch:", result);
           }
@@ -483,7 +521,7 @@ function chatInterface(sessionId) {
         )
       ) {
         try {
-          const response = await fetch(
+          await fetch(
             `/assessment/reset-session-on-refresh/${this.sessionId}`,
             {
               method: "POST",

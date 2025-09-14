@@ -95,7 +95,7 @@ class ExportService:
                     'response_text': response_data.get('response_text', ''),
                     'response_value': response_data.get('response_value', 0),
                     'response_time_ms': response_data.get('response_time_ms', None),
-                    'session_time': response_data.get('session_time', None)  # Include unified session timing
+                    'timing': response_data.get('timing', {})  # Include assessment-relative timing
                 }
         
         return phq_data
@@ -119,9 +119,8 @@ class ExportService:
                 'user_message_length': turn_data.get('user_message_length'),
                 'has_end_conversation': turn_data.get('has_end_conversation'),
                 'ai_model_used': turn_data.get('ai_model_used'),
-                'response_audio_path': turn_data.get('response_audio_path'),
-                'transcription': turn_data.get('transcription'),
-                'session_time': turn_data.get('session_time', None)  # Include unified session timing
+                'user_timing': turn_data.get('user_timing', {}),  # Include user timing
+                'ai_timing': turn_data.get('ai_timing', {})  # Include AI timing
             }
             
             llm_data['conversations'].append(conv_data)
@@ -208,12 +207,17 @@ class ExportService:
                         'assessment_id': capture.assessment_id
                     }
                     
-                    # Include session_time from capture metadata if available
-                    if capture.capture_metadata and 'session_time' in capture.capture_metadata:
-                        capture_meta['session_time'] = capture.capture_metadata['session_time']
-                    else:
-                        # Fallback: calculate session_time from timestamp for old captures
-                        capture_meta['session_time'] = SessionTimingService.get_session_time(session_id, capture.created_at)
+                    # Include assessment-relative timing from capture metadata if available
+                    if capture.capture_metadata and 'capture_history' in capture.capture_metadata:
+                        capture_history = capture.capture_metadata['capture_history']
+                        # Find the entry for this filename
+                        for entry in capture_history:
+                            if entry.get('filename') == filename and 'timing' in entry:
+                                capture_meta['assessment_timing'] = entry['timing']
+                                break
+                    # For old captures without timing, use the capture timestamp
+                    if 'assessment_timing' not in capture_meta:
+                        capture_meta['capture_timestamp'] = capture.created_at.isoformat()
                     
                     metadata['captures'].append(capture_meta)
             
@@ -236,12 +240,17 @@ class ExportService:
                             'assessment_id': capture.assessment_id
                         }
                         
-                        # Include session_time from capture metadata if available
-                        if capture.capture_metadata and 'session_time' in capture.capture_metadata:
-                            capture_meta['session_time'] = capture.capture_metadata['session_time']
-                        else:
-                            # Fallback: calculate session_time from timestamp for old captures
-                            capture_meta['session_time'] = SessionTimingService.get_session_time(session_id, capture.created_at)
+                        # Include assessment-relative timing from capture metadata if available
+                        if capture.capture_metadata and 'capture_history' in capture.capture_metadata:
+                            capture_history = capture.capture_metadata['capture_history']
+                            # Find the entry for this filename
+                            for entry in capture_history:
+                                if entry.get('filename') == filename and 'timing' in entry:
+                                    capture_meta['assessment_timing'] = entry['timing']
+                                    break
+                        # For old captures without timing, use the capture timestamp
+                        if 'assessment_timing' not in capture_meta:
+                            capture_meta['capture_timestamp'] = capture.created_at.isoformat()
                         
                         phq_metadata['captures'].append(capture_meta)
                 zip_file.writestr('images/phq/metadata.json', json.dumps(phq_metadata, indent=2))
@@ -261,12 +270,17 @@ class ExportService:
                             'assessment_id': capture.assessment_id
                         }
                         
-                        # Include session_time from capture metadata if available
-                        if capture.capture_metadata and 'session_time' in capture.capture_metadata:
-                            capture_meta['session_time'] = capture.capture_metadata['session_time']
-                        else:
-                            # Fallback: calculate session_time from timestamp for old captures
-                            capture_meta['session_time'] = SessionTimingService.get_session_time(session_id, capture.created_at)
+                        # Include assessment-relative timing from capture metadata if available
+                        if capture.capture_metadata and 'capture_history' in capture.capture_metadata:
+                            capture_history = capture.capture_metadata['capture_history']
+                            # Find the entry for this filename
+                            for entry in capture_history:
+                                if entry.get('filename') == filename and 'timing' in entry:
+                                    capture_meta['assessment_timing'] = entry['timing']
+                                    break
+                        # For old captures without timing, use the capture timestamp
+                        if 'assessment_timing' not in capture_meta:
+                            capture_meta['capture_timestamp'] = capture.created_at.isoformat()
                         
                         llm_metadata['captures'].append(capture_meta)
                 zip_file.writestr('images/llm/metadata.json', json.dumps(llm_metadata, indent=2))

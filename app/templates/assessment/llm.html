@@ -1,5 +1,5 @@
 {% extends "base.html" %} {% block title %}Open Question Assessment - Chat
-dengan Anisa{% endblock %} 
+dengan Sindi{% endblock %} 
 
 {% block extra_head %}
 <style>
@@ -26,7 +26,7 @@ dengan Anisa{% endblock %}
   <nav class="bg-white shadow-sm border-b border-gray-200">
     <div class="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
       <div class="flex items-center space-x-4">
-        <h1 class="text-xl font-semibold text-gray-900">Chat dengan Anisa</h1>
+        <h1 class="text-xl font-semibold text-gray-900">Chat dengan Sindi</h1>
         <div class="bg-green-600 rounded-lg px-3 py-1">
           <span class="text-white font-medium text-sm"
             >Open Question Assessment</span
@@ -71,7 +71,7 @@ dengan Anisa{% endblock %}
           <div>
             <h3 class="text-sm font-medium text-green-700">Instruksi</h3>
             <p class="text-sm text-gray-700 mt-1">
-              Silakan berbicara dengan Anisa tentang perasaan dan pikiran Anda.
+              Silakan berbicara dengan Sindi tentang perasaan dan pikiran Anda.
               Ceritakan apa yang sedang Anda alami dengan jujur dan terbuka.
             </p>
           </div>
@@ -161,9 +161,10 @@ dengan Anisa{% endblock %}
             type="text"
             x-model="currentMessage"
             :disabled="isTyping || conversationEnded"
-            :placeholder="conversationEnded ? 'Percakapan telah selesai' : (isTyping ? 'Anisa sedang merespons...' : 'Bagikan pikiran, perasaan, atau apa pun yang ada di benak Anda...')"
+            :placeholder="conversationEnded ? 'Percakapan telah selesai' : (isTyping ? 'Sindi sedang merespons...' : 'Bagikan pikiran, perasaan, atau apa pun yang ada di benak Anda...')"
             class="flex-1 bg-white border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:opacity-50"
             maxlength="1000"
+            @input="onMessageInput()"
           />
 
           <button

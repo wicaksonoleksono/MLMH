@@ -88,12 +88,13 @@
               name="phone" 
               type="tel" 
               required 
-              placeholder="08xxxxxxxxxx atau +62xxxxxxxxxx"
+              placeholder="+62xxxxxxxxxx"
               value="{{ request.form.phone if request.form.phone else '' }}"
               class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm 
                      focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500
                      placeholder-gray-400">
           </div>
+        <p>nomor yang digunakan akan digunakan untuk pemberian Hadiah karena telah mengikuti riset ini</p>
         </div>
         
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">

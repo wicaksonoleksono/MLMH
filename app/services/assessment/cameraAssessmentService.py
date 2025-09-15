@@ -60,13 +60,9 @@ class CameraAssessmentService:
         camera_settings = CameraCaptureService.get_camera_settings_for_session(session_id)
         if not camera_settings:
             return {"status": "SNAFU", "error": "No camera settings configured"}
-        
-        # Get single file and metadata
         file = request.files.get('image')
         if not file or not file.filename:
             return {"status": "SNAFU", "error": "No image file provided"}
-        
-        # Get metadata
         trigger = request.form.get('trigger', 'unknown')
         timing_str = request.form.get('timing')
         timing_data = None
@@ -103,10 +99,6 @@ class CameraAssessmentService:
                 }
             }
             
-            # DEBUG: Log what we're returning to frontend
-            # print(f"UPLOAD RESPONSE DEBUG:")
-            # print(f"   filename: {filename}")
-            # print(f"   response: {upload_response}")
             
             return upload_response
             

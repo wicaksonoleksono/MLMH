@@ -47,13 +47,7 @@ def create_batch_capture(assessment_id):
     capture_metadata = data.get('capture_metadata', {})
     
     # DEBUG: Log what we're receiving from frontend
-    print(f"BATCH ROUTE DEBUG:")
-    print(f"   assessment_id: {assessment_id}")
-    print(f"   raw data: {data}")
-    print(f"   filenames: {filenames} (type: {type(filenames)}, length: {len(filenames) if filenames else 0})")
-    print(f"   capture_type: {capture_type}")
-    print(f"   capture_metadata keys: {list(capture_metadata.keys()) if capture_metadata else []}")
-    
+  
     if not filenames:
         return {"status": "SNAFU", "error": "No filenames provided"}, 400
     
@@ -72,17 +66,13 @@ def link_captures_to_assessment(session_id):
     """Link existing camera captures to assessment - INCREMENTAL APPROACH"""
     if not SessionService.validate_user_session(session_id, current_user.id):
         return {"message": "Session not found or access denied"}, 403
-    
     data = request.get_json()
     assessment_id = data.get('assessment_id')
     assessment_type = data.get('assessment_type')
-    
     if not assessment_id or not assessment_type:
         return {"status": "SNAFU", "error": "assessment_id and assessment_type required"}, 400
-        
     if assessment_type not in ['PHQ', 'LLM']:
         return {"status": "SNAFU", "error": "Invalid assessment type"}, 400
-    
     return CameraAssessmentService.link_incremental_captures_to_assessment(
         session_id=session_id,
         assessment_id=assessment_id,

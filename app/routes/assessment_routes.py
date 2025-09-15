@@ -909,8 +909,8 @@ def thank_you():
     last_session = user_sessions[0] if user_sessions else None
     
     # Invalidate the current session in background (token cleanup)
-    from flask_login import logout_user
-    logout_user()
+    # from flask_login import logout_user
+    # logout_user()
     
     # Show thank you page with last completed session info
     return render_template('assessment/thank_you.html', 

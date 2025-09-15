@@ -61,7 +61,7 @@ Tidak ada jawaban yang benar atau salah. Jawaban yang paling jujur akan memberik
     INITIAL_ASSISTANT_RESPONSE = "Baik, saya akan mengeksplorasi aspek-aspek psikologis terkait gejala depresi."
     
     INTIAL_ADMIN_RESPONSE="Selanjutnya, kamu akan berhadapan dengan seseorang mahasiswa secara langsung. Silahkan memulai percakapan terlebih dahulu dengan menyapa mahasiswa tersebut."
-    GREETING = "Halo apakabar aku Sindi, Asisten Kesehatan mental kamu!, bagaimana kabar kamu !"
+    GREETING = "Halo aku Sindi, bagaimana kabar kamu ?"
 
     @staticmethod
     def get_settings() -> List[Dict[str, Any]]:

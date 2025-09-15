@@ -2,9 +2,10 @@
 class CameraManager {
   constructor(sessionId, assessmentType, cameraSettings, assessmentId = null) {
     this.sessionId = sessionId;
-    this.assessmentId = assessmentId;  // For assessment-first approach
+    this.assessmentId = assessmentId; // For assessment-first approach
     this.assessmentType = assessmentType;
-    this.cameraSettings = cameraSettings || {};
+    this.cameraSettings = cameraSettings;
+    //  || {};
     // Note: this.captures removed - using incremental backend approach
     this.videoElement = null;
     this.canvasElement = null;
@@ -46,22 +47,32 @@ class CameraManager {
 
   async requestCameraAccess() {
     try {
+      // If no resolution in settings, fetch from admin route
+      if (!this.cameraSettings.resolution) {
+        try {
+          const adminResponse = await fetch('/admin/camera/settings');
+          const adminData = await adminResponse.json();
+          if (adminData.resolution) {
+            this.cameraSettings.resolution = adminData.resolution;
+          } else {
+            throw new Error("Camera resolution not configured in admin settings");
+          }
+        } catch (adminError) {
+          throw new Error("Camera resolution not configured in settings");
+        }
+      }
+
+      const [width, height] = this.cameraSettings.resolution
+        .split("x")
+        .map(Number);
+
       const constraints = {
         video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: width },
+          height: { ideal: height },
           facingMode: "user",
         },
       };
-
-      // Apply resolution from settings if available
-      if (this.cameraSettings.resolution) {
-        const [width, height] = this.cameraSettings.resolution
-          .split("x")
-          .map(Number);
-        constraints.video.width = { ideal: width };
-        constraints.video.height = { ideal: height };
-      }
 
       this.stream = await navigator.mediaDevices.getUserMedia(constraints);
       this.videoElement.srcObject = this.stream;
@@ -145,7 +156,7 @@ class CameraManager {
 
       formData.append("image", blob, filename);
       formData.append("trigger", trigger);
-      
+
       // Add timing data if provided
       if (timing) {
         formData.append("timing", JSON.stringify(timing));
@@ -167,9 +178,12 @@ class CameraManager {
       }
 
       // console.log("Single upload successful - file processed by incremental backend");
-      
+
       // No frontend storage needed - backend handles incremental JSON array building
-      return { success: true, message: "File uploaded and added to database incrementally" };
+      return {
+        success: true,
+        message: "File uploaded and added to database incrementally",
+      };
     } catch (error) {
       throw error;
     }

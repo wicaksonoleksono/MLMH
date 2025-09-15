@@ -81,14 +81,12 @@ class LLMChatService:
             self.chat_model = ChatOpenAI(
                 model=settings['chat_model'],
                 openai_api_key=settings['openai_api_key_unmasked'],
-                temperature=0,
+                # temperature=0,
                 streaming=True
             )
-            
             # Build system prompt from settings using the new approach
             aspects = settings['depression_aspects']
             custom_instructions = settings.get('llm_instructions')
-            
             # Use the new build_langchain_prompt_template method for proper structure
             self.prompt = LLMService.build_langchain_prompt_template(aspects, custom_instructions)
             

@@ -77,6 +77,9 @@ function chatInterface(sessionId) {
           cameraSettings
         );
         await this.cameraManager.initialize();
+        
+        // Give camera extra time to be fully ready before any captures
+        await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (error) {
         console.error("LLM Camera initialization failed:", error);
         // Camera initialization failed - continue without camera

@@ -32,14 +32,20 @@ class CameraManager {
   }
 
   async createVideoElements() {
-    // Create hidden video element for webcam stream
+    // Create video element - keep renderable but hidden for proper frame rendering
     this.videoElement = document.createElement("video");
-    this.videoElement.style.display = "none";
+    this.videoElement.style.position = "absolute";
+    this.videoElement.style.top = "-9999px";
+    this.videoElement.style.left = "-9999px";
+    this.videoElement.style.width = "1px";
+    this.videoElement.style.height = "1px";
+    this.videoElement.style.opacity = "0";
     this.videoElement.autoplay = true;
     this.videoElement.muted = true;
+    this.videoElement.playsInline = true; // Required for Safari
     document.body.appendChild(this.videoElement);
 
-    // Create hidden canvas element for capturing frames
+    // Canvas only for fallback
     this.canvasElement = document.createElement("canvas");
     this.canvasElement.style.display = "none";
     document.body.appendChild(this.canvasElement);
@@ -47,35 +53,32 @@ class CameraManager {
 
   async requestCameraAccess() {
     try {
-      // If no resolution in settings, fetch from admin route
-      if (!this.cameraSettings.resolution) {
-        try {
-          const adminResponse = await fetch('/admin/camera/settings');
-          const adminData = await adminResponse.json();
-          if (adminData.resolution) {
-            this.cameraSettings.resolution = adminData.resolution;
-          } else {
-            throw new Error("Camera resolution not configured in admin settings");
-          }
-        } catch (adminError) {
-          throw new Error("Camera resolution not configured in settings");
-        }
-      }
-
-      const [width, height] = this.cameraSettings.resolution
-        .split("x")
-        .map(Number);
-
+      // Simple constraints - let camera use its natural resolution
       const constraints = {
         video: {
-          width: { ideal: width },
-          height: { ideal: height },
-          facingMode: "user",
-        },
+          facingMode: "user"
+        }
       };
+
+      // Add resolution preference if available in settings (not required)
+      if (this.cameraSettings.resolution) {
+        const [width, height] = this.cameraSettings.resolution.split("x").map(Number);
+        constraints.video.width = { ideal: width };
+        constraints.video.height = { ideal: height };
+      }
 
       this.stream = await navigator.mediaDevices.getUserMedia(constraints);
       this.videoElement.srcObject = this.stream;
+
+      // Explicitly play video and wait for it to be ready
+      await this.videoElement.play();
+
+      // Initialize ImageCapture API if available
+      const videoTrack = this.stream.getVideoTracks()[0];
+      if (window.ImageCapture && videoTrack) {
+        this.imageCapture = new ImageCapture(videoTrack);
+      }
+
     } catch (error) {
       throw new Error("Camera access is required for assessment");
     }
@@ -134,64 +137,69 @@ class CameraManager {
         throw new Error("Camera not initialized");
       }
 
-      // Capture frame from video
+      // Use ImageCapture API if available (better quality, avoids canvas issues)
+      if (this.imageCapture) {
+        try {
+          const blob = await this.imageCapture.takePhoto();
+          return await this.uploadBlob(blob, trigger, timing);
+        } catch (imageCaptureError) {
+          // Fallback to canvas method if ImageCapture fails
+        }
+      }
+
+      // Canvas fallback for browsers without ImageCapture
       const video = this.videoElement;
       const canvas = this.canvasElement;
 
-      // Use fixed resolution from settings (same as admin test)
-      const [width, height] = this.cameraSettings.resolution
-        .split("x")
-        .map(Number);
-
-      canvas.width = width;
-      canvas.height = height;
+      // Use actual video dimensions
+      canvas.width = video.videoWidth || video.width || 640;
+      canvas.height = video.videoHeight || video.height || 480;
 
       const ctx = canvas.getContext("2d");
-      ctx.drawImage(video, 0, 0, width, height);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
       // Convert to JPEG blob
       const blob = await new Promise((resolve) =>
         canvas.toBlob(resolve, "image/jpeg", 0.8)
       );
 
-      // Upload immediately to save file only (no DB record)
-      const formData = new FormData();
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const filename = `capture_${timestamp}.jpg`;
-
-      formData.append("image", blob, filename);
-      formData.append("trigger", trigger);
-
-      // Add timing data if provided
-      if (timing) {
-        formData.append("timing", JSON.stringify(timing));
-      }
-
-      const response = await fetch(
-        `/assessment/camera/upload-single/${this.sessionId}`,
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
-
-      const result = await response.json();
-
-      if (result.status !== "OLKORECT") {
-        console.error("Upload failed:", result);
-        throw new Error(result.error || "Upload failed");
-      }
-
-      // console.log("Single upload successful - file processed by incremental backend");
-
-      // No frontend storage needed - backend handles incremental JSON array building
-      return {
-        success: true,
-        message: "File uploaded and added to database incrementally",
-      };
+      return await this.uploadBlob(blob, trigger, timing);
     } catch (error) {
       throw error;
     }
+  }
+
+  async uploadBlob(blob, trigger, timing) {
+    const formData = new FormData();
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const filename = `capture_${timestamp}.jpg`;
+
+    formData.append("image", blob, filename);
+    formData.append("trigger", trigger);
+
+    // Add timing data if provided
+    if (timing) {
+      formData.append("timing", JSON.stringify(timing));
+    }
+
+    const response = await fetch(
+      `/assessment/camera/upload-single/${this.sessionId}`,
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+
+    const result = await response.json();
+
+    if (result.status !== "OLKORECT") {
+      throw new Error(result.error || "Upload failed");
+    }
+
+    return {
+      success: true,
+      message: "File uploaded and added to database incrementally",
+    };
   }
 
   // Smart trigger methods that only work if enabled in settings

@@ -9,7 +9,6 @@ from ...model.assessment.sessions import CameraCapture, AssessmentSession
 from ...model.admin.camera import CameraSettings
 from ..session.sessionTimingService import SessionTimingService
 
-
 class CameraCaptureService:
     """Service for handling camera capture operations with settings integration"""
 

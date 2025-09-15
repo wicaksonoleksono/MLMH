@@ -138,11 +138,16 @@ class CameraManager {
       const video = this.videoElement;
       const canvas = this.canvasElement;
 
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      // Use fixed resolution from settings (same as admin test)
+      const [width, height] = this.cameraSettings.resolution
+        .split("x")
+        .map(Number);
+
+      canvas.width = width;
+      canvas.height = height;
 
       const ctx = canvas.getContext("2d");
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(video, 0, 0, width, height);
 
       // Convert to JPEG blob
       const blob = await new Promise((resolve) =>

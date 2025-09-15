@@ -22,6 +22,31 @@
         font-family: "Inter", sans-serif;
       }
     </style>
+    <script>
+      // Disable console logs in production/admin
+      if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        console.log = function() {};
+        console.warn = function() {};
+        console.info = function() {};
+        console.debug = function() {};
+      }
+
+      // Mobile detection and redirect
+      function detectMobileAndRedirect() {
+        const isMobile = window.innerWidth <= 768 || 
+                        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        if (isMobile && !window.location.pathname.includes('/mobile-restriction')) {
+          window.location.href = '/mobile-restriction';
+        }
+      }
+
+      // Check on page load
+      document.addEventListener('DOMContentLoaded', detectMobileAndRedirect);
+      
+      // Check on window resize
+      window.addEventListener('resize', detectMobileAndRedirect);
+    </script>
     {% block head %}{% endblock %}
   </head>
   <body class="h-full bg-gray-50">

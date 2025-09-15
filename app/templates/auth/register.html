@@ -3,133 +3,149 @@
 {% block title %}Daftar - Penilaian Kesehatan Mental{% endblock %}
 
 {% block content %}
-<div class="min-h-full flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-  <div class="max-w-2xl w-full space-y-8">
-    <div>
-      <h2 class="mt-6 text-center text-3xl font-bold tracking-tight text-gray-900">
-        Buat akun Anda
-      </h2>
-      <p class="mt-2 text-center text-sm text-gray-600">
-        Penilaian Kesehatan Mental
+<div class="min-h-screen flex">
+  <!-- Left CTA Section -->
+  <div class="flex-1 bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center px-8">
+    <div class="max-w-md text-white">
+      <h1 class="text-4xl font-bold mb-6">Bergabunglah dengan Kami!</h1>
+      <p class="text-xl mb-8 opacity-90">
+        Mulai perjalanan kesehatan mental Anda hari ini. 
+        Dapatkan assessment yang akurat dan wawasan mendalam 
+        tentang kondisi mental Anda.
       </p>
     </div>
+  </div>
+
+  <!-- Right Registration Form Section -->
+  <div class="flex-1 flex items-center justify-center px-8 bg-gray-50 overflow-y-auto">
+    <div class="max-w-lg w-full space-y-6 py-8">
+      <div>
+        <h2 class="text-3xl font-bold tracking-tight text-gray-900">
+          Buat Akun Baru
+        </h2>
+        <p class="mt-2 text-sm text-gray-600">
+          Isi semua informasi di bawah untuk memulai
+        </p>
+      </div>
     
-    <!-- Flash Messages -->
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="rounded-md p-4 {% if category == 'error' %}bg-red-50{% else %}bg-green-50{% endif %}">
-            <div class="flex">
-              <div class="flex-shrink-0">
-                {% if category == 'error' %}
-                  <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
-                  </svg>
-                {% else %}
-                  <svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                  </svg>
-                {% endif %}
-              </div>
-              <div class="ml-3">
-                <p class="text-sm font-medium {% if category == 'error' %}text-red-800{% else %}text-green-800{% endif %}">
-                  {{ message }}
-                </p>
+      <!-- Flash Messages -->
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="rounded-md p-4 {% if category == 'error' %}bg-red-50{% else %}bg-green-50{% endif %}">
+              <div class="flex">
+                <div class="flex-shrink-0">
+                  {% if category == 'error' %}
+                    <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                    </svg>
+                  {% else %}
+                    <svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                    </svg>
+                  {% endif %}
+                </div>
+                <div class="ml-3">
+                  <p class="text-sm font-medium {% if category == 'error' %}text-red-800{% else %}text-green-800{% endif %}">
+                    {{ message }}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
-    
-    <form id="registerForm" class="mt-8 space-y-6" method="POST">
-      <div class="space-y-4">
-        <div>
-          <label for="username" class="block text-sm font-medium text-gray-700">
-            Nama Pengguna <span class="text-red-500">*</span>
-          </label>
-          <input 
-            id="username" 
-            name="username" 
-            type="text" 
-            required 
-            value="{{ request.form.username if request.form.username else '' }}"
-            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm 
-                   focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500
-                   placeholder-gray-400">
-          <div id="usernameStatus" class="mt-1 text-xs hidden"></div>
-          <p class="mt-1 text-xs text-gray-500">
-            <b>PERINGATAN</b>: Demi menjaga privasi, jangan gunakan nama asli
-          </p>
-        </div>
-        
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+      
+      <form id="registerForm" class="space-y-6" method="POST">
+        <!-- Account Information -->
+        <div class="space-y-4">
           <div>
-            <label for="email" class="block text-sm font-medium text-gray-700">
-              Email <span class="text-red-500">*</span>
+            <label for="username" class="block text-sm font-medium text-gray-700">
+              Nama Pengguna <span class="text-red-500">*</span>
             </label>
             <input 
-              id="email" 
-              name="email" 
-              type="email" 
+              id="username" 
+              name="username" 
+              type="text" 
               required 
-              value="{{ request.form.email if request.form.email else '' }}"
+              value="{{ request.form.username if request.form.username else '' }}"
               class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm 
-                     focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500
+                     focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500
                      placeholder-gray-400">
+            <div id="usernameStatus" class="mt-1 text-xs hidden"></div>
+            <p class="mt-1 text-xs text-gray-500">
+              <b>PERINGATAN</b>: Demi menjaga privasi, jangan gunakan nama asli
+            </p>
           </div>
           
-          <div>
-            <label for="phone" class="block text-sm font-medium text-gray-700">
-              Nomor Telepon <span class="text-red-500">*</span>
-            </label>
-            <input 
-              id="phone" 
-              name="phone" 
-              type="tel" 
-              required 
-              placeholder="+62xxxxxxxxxx"
-              value="{{ request.form.phone if request.form.phone else '' }}"
-              class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm 
-                     focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500
-                     placeholder-gray-400">
-          </div>
-        <p>nomor yang digunakan akan digunakan untuk pemberian Hadiah karena telah mengikuti riset ini</p>
-        </div>
-        
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label for="password" class="block text-sm font-medium text-gray-700">
-              Kata Sandi <span class="text-red-500">*</span>
-            </label>
-            <input 
-              id="password" 
-              name="password" 
-              type="password" 
-              required 
-              class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm 
-                     focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500
-                     placeholder-gray-400">
-            <p class="mt-1 text-xs text-gray-500">Minimal 6 karakter</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label for="email" class="block text-sm font-medium text-gray-700">
+                Email <span class="text-red-500">*</span>
+              </label>
+              <input 
+                id="email" 
+                name="email" 
+                type="email" 
+                required 
+                value="{{ request.form.email if request.form.email else '' }}"
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm 
+                       focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500
+                       placeholder-gray-400">
+            </div>
+            
+            <div>
+              <label for="phone" class="block text-sm font-medium text-gray-700">
+                Nomor Telepon <span class="text-red-500">*</span>
+              </label>
+              <input 
+                id="phone" 
+                name="phone" 
+                type="tel" 
+                required 
+                placeholder="+62xxxxxxxxxx"
+                value="{{ request.form.phone if request.form.phone else '' }}"
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm 
+                       focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500
+                       placeholder-gray-400">
+              <p class="text-xs text-gray-500 mt-1">nomor yang digunakan akan digunakan untuk pemberian Hadiah sebagai apresiasi kami untuk anda karena telah mengikuti riset ini</p>
+            </div>
           </div>
           
-          <div>
-            <label for="confirm_password" class="block text-sm font-medium text-gray-700">
-              Konfirmasi Kata Sandi <span class="text-red-500">*</span>
-            </label>
-            <input 
-              id="confirm_password" 
-              name="confirm_password" 
-              type="password" 
-              required 
-              class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm 
-                     focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500
-                     placeholder-gray-400">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label for="password" class="block text-sm font-medium text-gray-700">
+                Kata Sandi <span class="text-red-500">*</span>
+              </label>
+              <input 
+                id="password" 
+                name="password" 
+                type="password" 
+                required 
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm 
+                       focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500
+                       placeholder-gray-400">
+              <p class="mt-1 text-xs text-gray-500">Minimal 6 karakter</p>
+            </div>
+            
+            <div>
+              <label for="confirm_password" class="block text-sm font-medium text-gray-700">
+                Konfirmasi Kata Sandi <span class="text-red-500">*</span>
+              </label>
+              <input 
+                id="confirm_password" 
+                name="confirm_password" 
+                type="password" 
+                required 
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm 
+                       focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500
+                       placeholder-gray-400">
+            </div>
           </div>
         </div>
 
-        <!-- Required Profile Information -->
-        <div class="border-t border-gray-200 pt-4">
+        <!-- Profile Information -->
+        <div class="border-t border-gray-200 pt-6">
           <h3 class="text-lg font-medium text-gray-900 mb-4">Informasi Profil (Wajib Diisi)</h3>
           
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -146,7 +162,7 @@
                 max="120"
                 value="{{ request.form.age if request.form.age else '' }}"
                 class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm 
-                       focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500
+                       focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500
                        placeholder-gray-400">
             </div>
             
@@ -159,7 +175,7 @@
                 name="gender"
                 required
                 class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm 
-                       focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                       focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
                 <option value="">Pilih jenis kelamin</option>
                 <option value="Laki-laki" {{ 'selected' if request.form.gender == 'Laki-laki' else '' }}>Laki-laki</option>
                 <option value="Perempuan" {{ 'selected' if request.form.gender == 'Perempuan' else '' }}>Perempuan</option>
@@ -175,7 +191,7 @@
                 name="educational_level"
                 required
                 class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm 
-                       focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                       focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
                 <option value="">Pilih tingkat pendidikan</option>
                 <option value="SD" {{ 'selected' if request.form.educational_level == 'SD' else '' }}>SD</option>
                 <option value="SMP" {{ 'selected' if request.form.educational_level == 'SMP' else '' }}>SMP</option>
@@ -199,30 +215,30 @@
                 placeholder="Contoh: Jawa, Batak, Minang"
                 value="{{ request.form.cultural_background if request.form.cultural_background else '' }}"
                 class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm 
-                       focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500
+                       focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500
                        placeholder-gray-400">
             </div>
           </div>
         </div>
-      </div>
 
-      <div>
-        <button 
-          type="submit" 
-          class="group relative w-full flex justify-center py-3 px-4 border border-transparent 
-                 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 
-                 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500
-                 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-          Periksa Username
-        </button>
-      </div>
-      
-      <div class="text-center">
-        <a href="{{ url_for('auth.login') }}" class="text-sm text-indigo-600 hover:text-indigo-500">
-          Sudah punya akun? Masuk
-        </a>
-      </div>
-    </form>
+        <div>
+          <button 
+            type="submit" 
+            class="group relative w-full flex justify-center py-3 px-4 border border-transparent 
+                   text-sm font-medium rounded-lg text-white bg-emerald-600 hover:bg-emerald-700 
+                   focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500
+                   transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            Periksa Username
+          </button>
+        </div>
+        
+        <div class="text-center">
+          <a href="{{ url_for('auth.login') }}" class="text-sm text-emerald-600 hover:text-emerald-500">
+            Sudah punya akun? Masuk
+          </a>
+        </div>
+      </form>
+    </div>
   </div>
 </div>
 

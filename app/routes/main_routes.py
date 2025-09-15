@@ -32,3 +32,10 @@ def settings_not_configured():
     settings_check = SessionService.check_assessment_settings_configured()
     return render_template('error/settings_not_configured.html', 
                          missing_settings=settings_check['missing_settings'])
+
+
+@main_bp.route('/mobile-restriction')
+@raw_response
+def mobile_restriction():
+    """Mobile restriction page for phone/tablet users"""
+    return render_template('mobile_restriction.html')

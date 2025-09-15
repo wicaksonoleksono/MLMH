@@ -182,10 +182,12 @@ endblock %} {% block content %}
           </p>
           <p class="text-yellow-400 font-semibold text-sm mt-3 text-justify">
             Sesi ke 2 akan dilaksanakan di tahap selanjutnya dan akan diemail
-            automatis dan tidak perlu melakukan sesi baru kembali
+            automatis dan tidak perlu melakukan sesi baru kembali. Jangan
+            melakukan refresh page, jika tidak sengaja anda dapat merefresh
+            sekali lagi untuk mengulang assesmen
           </p>
-          <p class="text-gray-300 text-sm mt-1">Assesmen</p>
         </div>
+
         <form
           method="POST"
           action="{{ url_for('assessment.start_assessment') }}"

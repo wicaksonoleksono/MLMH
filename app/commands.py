@@ -2,7 +2,11 @@ import click
 from flask import current_app
 from .model.shared.users import User
 from .model.shared.enums import UserType
-from .model.assessment.sessions import EmailNotification
+from .model.shared.auto_login_tokens import AutoLoginToken
+from .model.assessment.sessions import (
+    EmailNotification, AssessmentSession, PHQResponse, LLMConversation, 
+    LLMAnalysisResult, CameraCapture, SessionExport
+)
 from .db import get_session, create_all_tables, get_engine
 from .services.SMTP.emailNotificationService import EmailNotificationService
 from sqlalchemy.exc import IntegrityError
@@ -1141,4 +1145,179 @@ def register_commands(app):
             
         except Exception as e:
             click.echo(f"[SNAFU] Failed to create pagination test users: {str(e)}")
+
+    @app.cli.command("delete-user")
+    @click.argument('username')
+    @click.option('--dry-run', is_flag=True, help='Show what would be deleted without actually deleting')
+    @click.confirmation_option(prompt='Are you sure you want to delete this user and ALL related data?')
+    def delete_user(username, dry_run):
+        """
+        Delete a user by username with complete cascade deletion.
+        
+        This will delete:
+        - User record
+        - All assessment sessions for this user
+        - All PHQ responses, LLM conversations, analysis results
+        - All camera captures and email notifications
+        - All auto login tokens
+        - All session exports requested by this user
+        
+        USERNAME: The uname field of the user to delete
+        """
+        
+        with get_session() as db:
+            try:
+                # Find the user
+                user = db.query(User).filter(User.uname == username).first()
+                
+                if not user:
+                    click.echo(f"❌ User '{username}' not found.", err=True)
+                    return
+                
+                click.echo(f"🔍 Found user: {user.uname} (ID: {user.id})")
+                
+                # Count related records for confirmation
+                auto_login_tokens = db.query(AutoLoginToken).filter(AutoLoginToken.user_id == user.id).count()
+                assessment_sessions = db.query(AssessmentSession).filter(AssessmentSession.user_id == user.id).count()
+                session_exports = db.query(SessionExport).filter(SessionExport.requested_by_user == user.id).count()
+                direct_email_notifications = db.query(EmailNotification).filter(EmailNotification.user_id == user.id).count()
+                
+                # Count cascading records from assessment sessions
+                session_ids = db.query(AssessmentSession.id).filter(AssessmentSession.user_id == user.id).subquery()
+                phq_responses = db.query(PHQResponse).filter(PHQResponse.session_id.in_(session_ids)).count()
+                llm_conversations = db.query(LLMConversation).filter(LLMConversation.session_id.in_(session_ids)).count()
+                llm_analysis = db.query(LLMAnalysisResult).filter(LLMAnalysisResult.session_id.in_(session_ids)).count()
+                camera_captures = db.query(CameraCapture).filter(CameraCapture.session_id.in_(session_ids)).count()
+                session_email_notifications = db.query(EmailNotification).filter(EmailNotification.session_id.in_(session_ids)).count()
+                
+                # Display what will be deleted
+                click.echo("\n📊 Records to be deleted:")
+                click.echo(f"   👤 User: 1")
+                click.echo(f"   🔑 Auto Login Tokens: {auto_login_tokens}")
+                click.echo(f"   📋 Assessment Sessions: {assessment_sessions}")
+                click.echo(f"   📝 PHQ Responses: {phq_responses}")
+                click.echo(f"   💬 LLM Conversations: {llm_conversations}")
+                click.echo(f"   🔬 LLM Analysis Results: {llm_analysis}")
+                click.echo(f"   📸 Camera Captures: {camera_captures}")
+                click.echo(f"   📧 Email Notifications (direct): {direct_email_notifications}")
+                click.echo(f"   📧 Email Notifications (session): {session_email_notifications}")
+                click.echo(f"   📤 Session Exports: {session_exports}")
+                
+                total_records = (1 + auto_login_tokens + assessment_sessions + phq_responses + 
+                               llm_conversations + llm_analysis + camera_captures + 
+                               direct_email_notifications + session_email_notifications + session_exports)
+                click.echo(f"\n🗑️  Total records to delete: {total_records}")
+                
+                if dry_run:
+                    click.echo("\n🧪 DRY RUN - No data was actually deleted")
+                    return
+                
+                # Perform cascade deletion
+                click.echo("\n🗑️  Starting cascade deletion...")
+                
+                # Delete auto login tokens
+                if auto_login_tokens > 0:
+                    deleted = db.query(AutoLoginToken).filter(AutoLoginToken.user_id == user.id).delete()
+                    click.echo(f"   ✅ Deleted {deleted} auto login tokens")
+                
+                # Delete session exports
+                if session_exports > 0:
+                    deleted = db.query(SessionExport).filter(SessionExport.requested_by_user == user.id).delete()
+                    click.echo(f"   ✅ Deleted {deleted} session exports")
+                
+                # Delete direct email notifications
+                if direct_email_notifications > 0:
+                    deleted = db.query(EmailNotification).filter(EmailNotification.user_id == user.id).delete()
+                    click.echo(f"   ✅ Deleted {deleted} direct email notifications")
+                
+                # Delete assessment sessions (this will cascade to related records via SQLAlchemy)
+                if assessment_sessions > 0:
+                    # Get the sessions to delete
+                    sessions_to_delete = db.query(AssessmentSession).filter(AssessmentSession.user_id == user.id).all()
+                    
+                    for session in sessions_to_delete:
+                        db.delete(session)  # This will cascade via SQLAlchemy relationships
+                    
+                    click.echo(f"   ✅ Deleted {len(sessions_to_delete)} assessment sessions with cascaded data")
+                
+                # Finally delete the user
+                db.delete(user)
+                
+                # Commit all changes
+                db.commit()
+                
+                click.echo(f"\n✅ Successfully deleted user '{username}' and all related data!")
+                
+            except Exception as e:
+                db.rollback()
+                click.echo(f"\n❌ Error during deletion: {str(e)}", err=True)
+                raise
+
+    @app.cli.command("check-user-data")
+    @click.argument('username')
+    def check_user_data(username):
+        """
+        Check what data exists for a user without deleting anything.
+        
+        USERNAME: The uname field of the user to check
+        """
+        
+        with get_session() as db:
+            try:
+                # Find the user
+                user = db.query(User).filter(User.uname == username).first()
+                
+                if not user:
+                    click.echo(f"❌ User '{username}' not found.", err=True)
+                    return
+                
+                click.echo(f"🔍 User: {user.uname} (ID: {user.id})")
+                click.echo(f"   Email: {user.email}")
+                click.echo(f"   Phone: {user.phone}")
+                click.echo(f"   Created: {user.created_at}")
+                click.echo(f"   User Type ID: {user.user_type_id}")
+                
+                # Count related records
+                auto_login_tokens = db.query(AutoLoginToken).filter(AutoLoginToken.user_id == user.id).count()
+                assessment_sessions = db.query(AssessmentSession).filter(AssessmentSession.user_id == user.id).count()
+                session_exports = db.query(SessionExport).filter(SessionExport.requested_by_user == user.id).count()
+                direct_email_notifications = db.query(EmailNotification).filter(EmailNotification.user_id == user.id).count()
+                
+                # Count cascading records from assessment sessions
+                if assessment_sessions > 0:
+                    session_ids = db.query(AssessmentSession.id).filter(AssessmentSession.user_id == user.id).subquery()
+                    phq_responses = db.query(PHQResponse).filter(PHQResponse.session_id.in_(session_ids)).count()
+                    llm_conversations = db.query(LLMConversation).filter(LLMConversation.session_id.in_(session_ids)).count()
+                    llm_analysis = db.query(LLMAnalysisResult).filter(LLMAnalysisResult.session_id.in_(session_ids)).count()
+                    camera_captures = db.query(CameraCapture).filter(CameraCapture.session_id.in_(session_ids)).count()
+                    session_email_notifications = db.query(EmailNotification).filter(EmailNotification.session_id.in_(session_ids)).count()
+                else:
+                    phq_responses = llm_conversations = llm_analysis = camera_captures = session_email_notifications = 0
+                
+                # Display data summary
+                click.echo(f"\n📊 Related data:")
+                click.echo(f"   🔑 Auto Login Tokens: {auto_login_tokens}")
+                click.echo(f"   📋 Assessment Sessions: {assessment_sessions}")
+                click.echo(f"   📝 PHQ Responses: {phq_responses}")
+                click.echo(f"   💬 LLM Conversations: {llm_conversations}")
+                click.echo(f"   🔬 LLM Analysis Results: {llm_analysis}")
+                click.echo(f"   📸 Camera Captures: {camera_captures}")
+                click.echo(f"   📧 Email Notifications (direct): {direct_email_notifications}")
+                click.echo(f"   📧 Email Notifications (session): {session_email_notifications}")
+                click.echo(f"   📤 Session Exports: {session_exports}")
+                
+                total_records = (1 + auto_login_tokens + assessment_sessions + phq_responses + 
+                               llm_conversations + llm_analysis + camera_captures + 
+                               direct_email_notifications + session_email_notifications + session_exports)
+                click.echo(f"\n📊 Total records: {total_records}")
+                
+                if assessment_sessions > 0:
+                    click.echo(f"\n📋 Assessment sessions:")
+                    sessions = db.query(AssessmentSession).filter(AssessmentSession.user_id == user.id).all()
+                    for session in sessions:
+                        click.echo(f"   - {session.id[:8]}: {session.status} ({session.created_at.strftime('%Y-%m-%d %H:%M')})")
+                        
+            except Exception as e:
+                click.echo(f"\n❌ Error checking user data: {str(e)}", err=True)
+                raise
 

@@ -523,6 +523,23 @@
     if (bulkDownloadBtn) {
       bulkDownloadBtn.classList.add('bulk-download-btn');
     }
+
+    // Initialize pagination controls with server-side data
+    const paginationData = {
+      page: {{ user_sessions_page.page }},
+      pages: {{ user_sessions_page.pages }},
+      total: {{ user_sessions_page.total }},
+      per_page: {{ user_sessions_page.per_page }},
+      has_prev: {{ user_sessions_page.has_prev | tojson }},
+      has_next: {{ user_sessions_page.has_next | tojson }},
+      prev_num: {{ user_sessions_page.prev_num or 1 }},
+      next_num: {{ user_sessions_page.next_num or user_sessions_page.pages }}
+    };
+    
+    // Only initialize if pagination function exists
+    if (typeof updatePaginationControls === 'function') {
+      updatePaginationControls(paginationData, "{{ search_query or '' }}");
+    }
   });
 </script>
 <script src="{{ url_for('static', filename='js/admin/dashboard.js') }}"></script>

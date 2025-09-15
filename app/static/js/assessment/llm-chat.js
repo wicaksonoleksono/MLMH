@@ -21,11 +21,11 @@ function chatInterface(sessionId) {
     exchangeCount: 0,
     messageId: 1,
     cameraManager: null,
-    
+
     // Assessment timing variables
     assessmentStartTime: null,
     currentMessageStartTime: null,
-    
+
     // Initialization guard
     isInitialized: false,
 
@@ -35,7 +35,7 @@ function chatInterface(sessionId) {
       if (this.isInitialized) {
         return;
       }
-      
+
       this.isInitialized = true;
       this.assessmentStartTime = Date.now();
       this.startConversationTimer();
@@ -50,8 +50,8 @@ function chatInterface(sessionId) {
       this.messages.push({
         id: this.messageId++,
         type: "ai",
-        content: "Halo apakabar aku Sindi. Silakan ceritakan apa yang sedang kamu rasakan atau pikirkan hari ini.",
-        streaming: false,
+        content: "Halo apakabar aku Sindi, Asisten keseheatan mental kamu! ",
+        streaming: true,
         timestamp: new Date(),
       });
       this.scrollToBottom();
@@ -173,7 +173,7 @@ function chatInterface(sessionId) {
 
       const userMessage = this.currentMessage.trim();
       this.currentMessage = "";
-      
+
       // Set message start time if not already set (when user started typing)
       if (!this.currentMessageStartTime) {
         this.currentMessageStartTime = Date.now();
@@ -184,14 +184,18 @@ function chatInterface(sessionId) {
         try {
           // Calculate timing before capture
           const captureTime = Date.now();
-          const messageStart = Math.floor((this.currentMessageStartTime - this.assessmentStartTime) / 1000);
-          const messageEnd = Math.floor((captureTime - this.assessmentStartTime) / 1000);
+          const messageStart = Math.floor(
+            (this.currentMessageStartTime - this.assessmentStartTime) / 1000
+          );
+          const messageEnd = Math.floor(
+            (captureTime - this.assessmentStartTime) / 1000
+          );
           const timing = {
             start: messageStart,
             end: messageEnd,
-            duration: messageEnd - messageStart
+            duration: messageEnd - messageStart,
           };
-          
+
           await this.cameraManager.onMessageSend(timing);
         } catch (error) {
           console.error("Camera onMessageSend error:", error);
@@ -249,10 +253,10 @@ function chatInterface(sessionId) {
         const params = new URLSearchParams({
           session_id: this.sessionId,
           message: userMessage,
-          user_token: tokenData.token
+          user_token: tokenData.token,
         });
         // Add timing data separately to ensure proper encoding
-        params.append('user_timing', JSON.stringify(userTiming));
+        params.append("user_timing", JSON.stringify(userTiming));
 
         const streamUrl = `/assessment/stream/?${params}`;
         const eventSource = new EventSource(streamUrl);
@@ -297,7 +301,12 @@ function chatInterface(sessionId) {
                 aiEndTime = Date.now();
               }
               // Send AI timing before finishing conversation
-              this.sendAiTiming(userMessage, userTiming, aiStartTime, aiEndTime);
+              this.sendAiTiming(
+                userMessage,
+                userTiming,
+                aiStartTime,
+                aiEndTime
+              );
               eventSource.close();
               this.isTyping = false;
               botMessage.streaming = false;
@@ -339,7 +348,8 @@ function chatInterface(sessionId) {
         eventSource.onerror = (error) => {
           clearTimeout(timeoutId);
           // Show the actual error instead of generic message
-          const errorMessage = error.message || error.toString() || "Unknown connection error";
+          const errorMessage =
+            error.message || error.toString() || "Unknown connection error";
           botMessage.content = `<span style="color: red;">Connection error: ${errorMessage}</span>`;
           botMessage.streaming = false;
           this.isTyping = false;
@@ -355,6 +365,7 @@ function chatInterface(sessionId) {
 
     async sendAiTiming(userMessage, userTiming, aiStartTime, aiEndTime) {
       if (!aiStartTime || !aiEndTime) {
+        console.log("No AI timing - missing start/end time");
         return;
       }
 
@@ -369,17 +380,29 @@ function chatInterface(sessionId) {
         duration: aiEnd - aiStart,
       };
 
+      console.log("Sending AI timing:", {
+        userMessage: userMessage.substring(0, 20),
+        turn: this.exchangeCount,
+        userTiming,
+        aiTiming,
+      });
+
       try {
-        await fetch(`/assessment/llm/save-timing/${this.sessionId}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            user_message: userMessage,
-            user_timing: userTiming,
-            ai_timing: aiTiming,
-            turn_number: this.exchangeCount
-          })
-        });
+        const response = await fetch(
+          `/assessment/llm/save-timing/${this.sessionId}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_message: userMessage,
+              user_timing: userTiming,
+              ai_timing: aiTiming,
+              turn_number: this.exchangeCount,
+            }),
+          }
+        );
+        const result = await response.json();
+        console.log("AI timing response:", result);
       } catch (error) {
         console.error("Failed to send AI timing:", error);
       }

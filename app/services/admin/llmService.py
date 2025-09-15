@@ -54,12 +54,15 @@ Tidak ada jawaban yang benar atau salah. Jawaban yang paling jujur akan memberik
 - Setiap pesan hanya boleh berisi maksimal 1 kalimat tanya. 
 - Jika nada jawaban relatif negatif/berat atau terlalu singkat, validasi dulu secara hangat agar pengguna tetap merasa nyaman, lalu lanjut pelan dan jelas.
 - Setelah itu, secara alami alihkan percakapan untuk mengeksplorasi bagaimana kondisi psikologis mereka, terutama yang berkaitan dengan aspek-aspek diatas.
-- Tindak lanjuti setiap jawaban dengan 1–2 pertanyaan yang lebih dalam (contoh konkret, frekuensi, durasi, dampak ke aktivitas/tidur/energi/relasi, perubahan dibanding biasanya).
 - Kuncinya adalah mengaitkan, bukan memulai topik baru secara tiba-tiba.
 - Setelah percakapan terasa cukup (semua aspek sudah diperoleh), rangkum sedikit perasaan atau poin utama yang dibagikan secara positif. Contoh: "Makasih banget ya udah mau cerita panjang lebar.", "Kedengarannya memang banyak banget yang kamu hadapi, tapi kamu hebat lho bisa melewatinya sampai sekarang." kemudian tambahkan </end_conversation> untuk menyudahkan percakapan  
 - Tutup percakapan dengan hangat, tegaskan kembali bahwa kamu ada untuk mendengarkan kapan pun dibutuhkan. Hindari memberi nasihat kecuali diminta secara eksplisit.
 """
     INITIAL_ASSISTANT_RESPONSE = "Baik, saya akan mengeksplorasi aspek-aspek psikologis terkait gejala depresi."
+    
+    INTIAL_ADMIN_RESPONSE="Selanjutnya, kamu akan berhadapan dengan seseorang mahasiswa secara langsung. Silahkan memulai percakapan terlebih dahulu dengan menyapa mahasiswa tersebut."
+    GREETING = "Halo apakabar aku Sindi, Asisten Kesehatan mental kamu!, bagaimana kabar kamu !"
+
     @staticmethod
     def get_settings() -> List[Dict[str, Any]]:
         """Get all LLM settings"""
@@ -323,22 +326,16 @@ Tidak ada jawaban yang benar atau salah. Jawaban yang paling jujur akan memberik
         
         # Create 3-part ChatPromptTemplate + dynamic conversation
         template = ChatPromptTemplate.from_messages([
-            # Part 1: Fixed system prompt (non-customizable) - ONLY Sindi
             ("system", LLMService.SYSTEM_PROMPT_FIXED),
-            
-            # Part 2: Customizable instructions with aspects - HUMAN MESSAGE (includes "Selanjutnya...")
             ("human", formatted_instructions),
-            
-            # Part 3: Initial assistant response (simulated)
             ("assistant", LLMService.INITIAL_ASSISTANT_RESPONSE),
-            
-            # Part 4: Dynamic conversation history + current user input
+            ("human", LLMService.INTIAL_ADMIN_RESPONSE),
+            ("assistant", LLMService.GREETING),
             MessagesPlaceholder("conversation_history", optional=True),
             ("human", "{user_input}")
         ])
-        
         return template
-    
+   
     @staticmethod
     def invoke_langchain_prompt(aspects: List[dict], 
                               custom_instructions: str = None,

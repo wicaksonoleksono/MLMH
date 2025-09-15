@@ -50,7 +50,8 @@ function chatInterface(sessionId) {
       this.messages.push({
         id: this.messageId++,
         type: "ai",
-        content: "Halo apakabar aku Sindi, Asisten keseheatan mental kamu! ",
+        content:
+          "Halo apakabar aku Sindi, Asisten Kesehatan mental kamu!, bagaimana kabar kamu !",
         streaming: true,
         timestamp: new Date(),
       });

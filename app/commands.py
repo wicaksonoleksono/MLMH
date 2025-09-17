@@ -4,8 +4,9 @@ from .model.shared.users import User
 from .model.shared.enums import UserType
 from .model.shared.auto_login_tokens import AutoLoginToken
 from .model.assessment.sessions import (
-    EmailNotification, AssessmentSession, PHQResponse, LLMConversation, 
-    LLMAnalysisResult, CameraCapture, SessionExport
+    EmailNotification, AssessmentSession, PHQResponse, 
+    LLMConversation, LLMAnalysisResult, CameraCapture, 
+    SessionExport
 )
 from .db import get_session, create_all_tables, get_engine
 from .services.SMTP.emailNotificationService import EmailNotificationService
@@ -299,7 +300,6 @@ def register_commands(app):
                 click.echo(f"[OLKORECT] Admin user '{username}' created successfully with verified email!")
             except Exception as e:
                 click.echo(f"[SNAFU] Error creating admin user: {str(e)}")
-
     @app.cli.command("create-admin-random")
     @click.argument("username")
     def create_admin_random(username):
@@ -1075,12 +1075,10 @@ def register_commands(app):
                 "Handoko", "Maharani", "Setiawan", "Anggraini", "Hidayat", "Permatasari", "Nugroho", "Wulandari",
                 "Saputra", "Fitria", "Rahman", "Safitri", "Gunawan", "Nuraini", "Utomo", "Kartika", "Susanto", "Indira"
             ]
-            
             genders = ["male", "female", "other"]
             education_levels = [
                 "SD", "SMP", "SMA", "D3", "S1", "S2", "S3", "Tidak Sekolah"
             ]
-            
             created_count = 0
             skipped_count = 0
             
@@ -1119,18 +1117,14 @@ def register_commands(app):
                             medications="None" if random.random() > 0.2 else "Multivitamin",
                             emergency_contact=f"Emergency contact for {first_name} {last_name}"
                         )
-                        
                         # Mark email as verified for testing purposes
                         with get_session() as update_db:
                             user = update_db.merge(user)
                             user.email_verified = True
                             update_db.commit()
-                        
                         created_count += 1
-                        
                         if created_count % 10 == 0:
                             click.echo(f"  ✓ Created {created_count} users...")
-                        
                     except Exception as e:
                         click.echo(f"  ❌ Failed to create user {username}: {str(e)}")
                         skipped_count += 1
@@ -1190,6 +1184,14 @@ def register_commands(app):
                 camera_captures = db.query(CameraCapture).filter(CameraCapture.session_id.in_(session_ids)).count()
                 session_email_notifications = db.query(EmailNotification).filter(EmailNotification.session_id.in_(session_ids)).count()
                 
+                # Count camera files
+                camera_files_count = 0
+                if camera_captures > 0:
+                    camera_capture_records = db.query(CameraCapture).filter(CameraCapture.session_id.in_(session_ids)).all()
+                    for capture in camera_capture_records:
+                        if capture.filenames:
+                            camera_files_count += len(capture.filenames)
+                
                 # Display what will be deleted
                 click.echo("\n📊 Records to be deleted:")
                 click.echo(f"   👤 User: 1")
@@ -1199,6 +1201,7 @@ def register_commands(app):
                 click.echo(f"   💬 LLM Conversations: {llm_conversations}")
                 click.echo(f"   🔬 LLM Analysis Results: {llm_analysis}")
                 click.echo(f"   📸 Camera Captures: {camera_captures}")
+                click.echo(f"   🗂️  Camera Files: {camera_files_count}")
                 click.echo(f"   📧 Email Notifications (direct): {direct_email_notifications}")
                 click.echo(f"   📧 Email Notifications (session): {session_email_notifications}")
                 click.echo(f"   📤 Session Exports: {session_exports}")
@@ -1207,6 +1210,7 @@ def register_commands(app):
                                llm_conversations + llm_analysis + camera_captures + 
                                direct_email_notifications + session_email_notifications + session_exports)
                 click.echo(f"\n🗑️  Total records to delete: {total_records}")
+                click.echo(f"🗂️  Total files to delete: {camera_files_count}")
                 
                 if dry_run:
                     click.echo("\n🧪 DRY RUN - No data was actually deleted")
@@ -1230,6 +1234,34 @@ def register_commands(app):
                     deleted = db.query(EmailNotification).filter(EmailNotification.user_id == user.id).delete()
                     click.echo(f"   ✅ Deleted {deleted} direct email notifications")
                 
+                # Delete camera capture files before deleting session records
+                camera_files_deleted = 0
+                if camera_captures > 0:
+                    import os
+                    # Get all camera captures for this user
+                    user_session_ids = [s.id for s in db.query(AssessmentSession).filter(AssessmentSession.user_id == user.id).all()]
+                    camera_capture_records = db.query(CameraCapture).filter(CameraCapture.session_id.in_(user_session_ids)).all()
+                    
+                    # Delete physical files
+                    for capture in camera_capture_records:
+                        if capture.filenames:
+                            for filename in capture.filenames:
+                                try:
+                                    # Use current_app.media_save path
+                                    file_path = os.path.join(current_app.config.get('UPLOAD_FOLDER', current_app.root_path + '/static/uploads'), filename)
+                                    # Also try media_save attribute
+                                    if hasattr(current_app, 'media_save'):
+                                        file_path = os.path.join(current_app.media_save, filename)
+                                    
+                                    if os.path.exists(file_path):
+                                        os.remove(file_path)
+                                        camera_files_deleted += 1
+                                except Exception as file_error:
+                                    click.echo(f"   ⚠️  Could not delete file {filename}: {str(file_error)}")
+                    
+                    if camera_files_deleted > 0:
+                        click.echo(f"   ✅ Deleted {camera_files_deleted} camera capture files")
+
                 # Delete assessment sessions (this will cascade to related records via SQLAlchemy)
                 if assessment_sessions > 0:
                     # Get the sessions to delete

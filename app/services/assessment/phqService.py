@@ -5,7 +5,7 @@ from ...model.assessment.sessions import AssessmentSession, PHQResponse
 from ...model.admin.phq import PHQQuestion, PHQSettings, PHQScale, PHQCategoryType
 from ...db import get_session
 from ..session.sessionTimingService import SessionTimingService
-from datetime import datetime
+from datetime import datetime, timezone
 import random
 
 
@@ -65,11 +65,20 @@ class PHQResponseService:
                 # Clean timing metadata will be added by frontend
             }
 
-            # Update the responses JSON
-            phq_response_record.responses[str(question_id)] = response_data
-            phq_response_record.updated_at = datetime.utcnow()
+            # CRITICAL FIX: Force SQLAlchemy to detect JSON field change
+            # We need to reassign the entire responses dict to trigger change detection
+            responses_copy = dict(phq_response_record.responses)
+            responses_copy[str(question_id)] = response_data
+            phq_response_record.responses = responses_copy
+            
+            # Mark the object as modified explicitly
+            from sqlalchemy.orm import attributes
+            attributes.flag_modified(phq_response_record, 'responses')
+            
+            phq_response_record.updated_at = datetime.now(timezone.utc)
 
             db.commit()
+            
             return phq_response_record
 
     @staticmethod
@@ -182,8 +191,9 @@ class PHQResponseService:
     def update_response(session_id: str, question_id: int, updates: Dict[str, Any]) -> PHQResponse:
         """Update a PHQ response for a specific question in the session"""
         with get_session() as db:
-            # Get latest incomplete assessment for this session
-            phq_response_record = PHQResponseService._get_latest_assessment(session_id, db)
+            # Simple: Get first assessment for this session (same as LLM approach)
+            phq_response_record = db.query(PHQResponse).filter_by(session_id=session_id).first()
+            print(f"DEBUG SERVICE: Found assessment ID: {phq_response_record.id if phq_response_record else 'None'}")
             if not phq_response_record:
                 raise ValueError(f"PHQ response record for session {session_id} not found")
 
@@ -205,17 +215,27 @@ class PHQResponseService:
             # Update the specific response
             response_data = phq_response_record.responses[question_key]
             response_data.update(updates)
-            phq_response_record.responses[question_key] = response_data
-            phq_response_record.updated_at = datetime.utcnow()
+            
+            # Force SQLAlchemy to detect JSON field change
+            responses_copy = dict(phq_response_record.responses)
+            responses_copy[question_key] = response_data
+            phq_response_record.responses = responses_copy
+            
+            # Mark the object as modified explicitly
+            from sqlalchemy.orm import attributes
+            attributes.flag_modified(phq_response_record, 'responses')
+            
+            phq_response_record.updated_at = datetime.now(timezone.utc)
 
             db.commit()
+            
             return phq_response_record
 
     @staticmethod
     def delete_response(session_id: str, question_id: int) -> bool:
         """Delete a PHQ response for a specific question from the session"""
         with get_session() as db:
-            phq_response_record = db.query(PHQResponse).filter_by(session_id=session_id).first()
+            phq_response_record = PHQResponseService._get_latest_assessment(session_id, db)
             if not phq_response_record:
                 raise ValueError(f"PHQ response record for session {session_id} not found")
 
@@ -225,7 +245,7 @@ class PHQResponseService:
 
             # Remove the specific response
             del phq_response_record.responses[question_key]
-            phq_response_record.updated_at = datetime.utcnow()
+            phq_response_record.updated_at = datetime.now(timezone.utc)
 
             db.commit()
             return True
@@ -382,7 +402,7 @@ class PHQResponseService:
             if phq_response_record:
                 count = len(phq_response_record.responses)
                 phq_response_record.responses = {}
-                phq_response_record.updated_at = datetime.utcnow()
+                phq_response_record.updated_at = datetime.now(timezone.utc)
                 db.commit()
                 return count
             return 0
@@ -414,48 +434,56 @@ class PHQResponseService:
 
     @staticmethod
     def get_or_create_assessment_record(session_id: str) -> PHQResponse:
-        """Get existing incomplete PHQ assessment or create new one with generated questions"""
+        """Get existing PHQ assessment or create new one - SAFETY ENFORCED APPROACH"""
         with get_session() as db:
-            # Get session for validation
-            session = db.query(AssessmentSession).filter_by(id=session_id).first()
-            if not session:
-                raise ValueError(f"Session {session_id} not found")
-
-            # First, try to get an incomplete assessment for this session
-            incomplete_record = db.query(PHQResponse).filter_by(
-                session_id=session_id, 
-                is_completed=False
-            ).order_by(PHQResponse.updated_at.desc()).first()
+            # SAFETY: Check if assessment exists for this session_id (1 session = 1 PHQ assessment max)
+            existing_records = db.query(PHQResponse).filter_by(session_id=session_id).all()
             
-            if incomplete_record:
-                # Ensure questions are populated (backward compatibility)
-                if not incomplete_record.questions:
-                    PHQResponseService._populate_questions_for_record(incomplete_record, db)
-                return incomplete_record
-
-            # If no incomplete assessment, check if there's any existing record
-            existing_record = db.query(PHQResponse).filter_by(session_id=session_id).first()
-            if existing_record:
-                # Reset completed assessment to allow continuation
-                existing_record.is_completed = False
-                # Keep existing questions - DON'T regenerate (questions are per assessment_id)
-                if not existing_record.questions:
-                    PHQResponseService._populate_questions_for_record(existing_record, db)
+            # SAFETY CONSTRAINT: Enforce 1 session = 1 PHQ assessment maximum
+            if len(existing_records) > 1:
+                # Keep the most recent assessment, delete others
+                most_recent = max(existing_records, key=lambda x: x.updated_at or x.created_at)
+                for record in existing_records:
+                    if record.id != most_recent.id:
+                        db.delete(record)
                 db.commit()
-                db.refresh(existing_record)
+                existing_record = most_recent
+            elif len(existing_records) == 1:
+                existing_record = existing_records[0]
+            else:
+                existing_record = None
+            
+            if existing_record:
+                # SAFETY CHECK: Validate question consistency (1 assessment = 1 question set)
+                if existing_record.responses and len(existing_record.responses) > 0:
+                    # Check if existing questions are from a consistent set
+                    existing_question_ids = set(existing_record.responses.keys())
+                    expected_question_count = PHQResponseService.get_expected_response_count(session_id)
+                    
+                    # SAFETY: Only clean up if there's a MAJOR inconsistency (not just minor differences)
+                    if len(existing_question_ids) != expected_question_count:
+                        PHQResponseService._reset_and_populate_questions(existing_record, db)
+                        db.commit()
+                    else:
+                        # Refresh the record from DB to ensure we have latest data
+                        db.refresh(existing_record)
+                else:
+                    # Empty assessment, populate with questions
+                    PHQResponseService._populate_questions_in_responses(existing_record, db)
+                    db.commit()
+                    
                 return existing_record
 
-            # Create new PHQ response record with generated questions
+            # Create new assessment if none exists
             phq_response_record = PHQResponse(
                 session_id=session_id,
-                questions={},  # Will be populated below
-                responses={}   # Empty JSON, will be populated as user answers
+                responses={}   # Will be populated with question data + responses
             )
             db.add(phq_response_record)
             db.flush()  # Get ID before populating questions
             
-            # Generate and save questions to DB
-            PHQResponseService._populate_questions_for_record(phq_response_record, db)
+            # Generate questions and save them into responses JSON
+            PHQResponseService._populate_questions_in_responses(phq_response_record, db)
             
             db.commit()
             db.refresh(phq_response_record)
@@ -463,8 +491,19 @@ class PHQResponseService:
             return phq_response_record
 
     @staticmethod
-    def _populate_questions_for_record(phq_record: PHQResponse, db) -> None:
-        """Generate randomized questions and save them to the PHQ record's questions JSON field"""
+    def _reset_and_populate_questions(phq_record: PHQResponse, db) -> None:
+        """SAFETY: Reset assessment and populate with clean question set"""
+        # Clear existing responses to ensure clean state
+        phq_record.responses = {}
+        phq_record.is_completed = False
+        phq_record.updated_at = datetime.now(timezone.utc)
+        
+        # Populate with fresh, consistent question set
+        PHQResponseService._populate_questions_in_responses(phq_record, db)
+
+    @staticmethod
+    def _populate_questions_in_responses(phq_record: PHQResponse, db) -> None:
+        """Generate randomized questions and save them to the PHQ record's responses JSON field"""
         # Get session and PHQ settings
         session = db.query(AssessmentSession).filter_by(id=phq_record.session_id).first()
         if not session:
@@ -516,7 +555,10 @@ class PHQResponseService:
                     "category_name_id": category['name_id'],
                     "category_name": category['name_id'],
                     "category_display": category['name'],
-                    "order_index": question.order_index
+                    "order_index": question.order_index,
+                    "response_value": None,
+                    "response_text": None,
+                    "response_time_ms": None
                 }
                 question_number += 1
 
@@ -532,8 +574,8 @@ class PHQResponseService:
                     "instructions": phq_settings.instructions
                 })
 
-        # Save questions to PHQ record
-        phq_record.questions = questions_dict
+        # Save questions to PHQ record's responses JSON (question data only, no response_value yet)
+        phq_record.responses = questions_dict
 
     @staticmethod
     def save_session_responses(session_id: str, responses_data: List[Dict[str, Any]]) -> PHQResponse:
@@ -602,7 +644,7 @@ class PHQResponseService:
             # Update the responses JSON
             phq_response_record.responses = responses_dict
             phq_response_record.is_completed = True
-            phq_response_record.updated_at = datetime.utcnow()
+            phq_response_record.updated_at = datetime.now(timezone.utc)
 
             db.commit()
             db.refresh(phq_response_record)

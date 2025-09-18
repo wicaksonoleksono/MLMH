@@ -10,7 +10,7 @@ phq_assessment_bp = Blueprint('phq_assessment', __name__, url_prefix='/assessmen
 
 
 @phq_assessment_bp.route('/start/<session_id>', methods=['GET'])
-@user_required
+@user_required  # TEMPORARILY COMMENTED FOR TESTING
 @api_response
 def get_phq_questions(session_id):
     """Get randomized PHQ questions per category for assessment - CREATE EMPTY ASSESSMENT RECORD IMMEDIATELY"""
@@ -22,24 +22,33 @@ def get_phq_questions(session_id):
     # GET OR CREATE PHQ ASSESSMENT RECORD with questions saved to DB
     phq_assessment_record = PHQResponseService.get_or_create_assessment_record(session_id)
     
-    # Convert questions dict to list format for frontend
+    # DEBUG: Log what we found
+    print(f"DEBUG /start: Session ID: {session_id}")
+    print(f"DEBUG /start: Assessment ID: {phq_assessment_record.id}")
+    print(f"DEBUG /start: Responses count: {len(phq_assessment_record.responses) if phq_assessment_record.responses else 0}")
+    if phq_assessment_record.responses:
+        for q_id, q_data in phq_assessment_record.responses.items():
+            print(f"DEBUG /start: Question {q_id} response_value: {q_data.get('response_value')}")
+    
+    # Convert responses dict to questions list for frontend
     questions_list = []
-    if phq_assessment_record.questions:
+    if phq_assessment_record.responses:
         # Sort by question_number to maintain order
         sorted_questions = sorted(
-            phq_assessment_record.questions.values(), 
+            phq_assessment_record.responses.values(), 
             key=lambda q: q.get('question_number', 0)
         )
         questions_list = sorted_questions
     
-    # Calculate resume position based on missing responses
+    # Calculate resume position based on responses that have response_value
     current_question_index = 0
     completed_responses_count = 0
     if phq_assessment_record.responses:
-        # Find first question without response
+        # Find first question without response_value (question data exists but no answer)
         for i, question in enumerate(questions_list):
             question_id = str(question['question_id'])
-            if question_id not in phq_assessment_record.responses:
+            question_data = phq_assessment_record.responses.get(question_id, {})
+            if question_data.get('response_value') is None:  # Properly check for None (0 is valid response)
                 current_question_index = i
                 break
             completed_responses_count += 1
@@ -137,8 +146,8 @@ def get_session_responses(session_id):
                 "question_number": response_data.get("question_number", 0),
                 "question_text": response_data.get("question_text", ""),
                 "category_name": response_data.get("category_name", ""),
-                "response_value": response_data.get("response_value", 0),
-                "response_text": response_data.get("response_text", ""),
+                "response_value": response_data.get("response_value"),
+                "response_text": response_data.get("response_text"),
                 "response_time_ms": response_data.get("response_time_ms"),
                 "is_completed": phq_response_record.is_completed
             })
@@ -176,7 +185,10 @@ def update_phq_response(session_id, question_id):
         return {"message": "No valid fields to update"}, 400
     
     try:
+        print(f"DEBUG PUT: Session ID: {session_id}")
+        print(f"DEBUG PUT: Updating question {question_id}, updates: {updates}")
         updated_response_record = PHQResponseService.update_response(session_id, question_id, updates)
+        print(f"DEBUG PUT: Updated successfully, assessment ID: {updated_response_record.id}")
         
         # Get the specific response data from the JSON structure
         question_key = str(question_id)
@@ -217,6 +229,77 @@ def get_phq_score(session_id):
         "max_possible_score": max_possible_score,
         "category_scores": category_scores
     }
+
+
+@phq_assessment_bp.route('/progress/<session_id>', methods=['GET'])
+@user_required
+@api_response
+def get_phq_progress(session_id):
+    """Get current PHQ assessment progress for resume functionality (LLM-style approach)"""
+    # Validate session belongs to current user
+    session = SessionService.get_session(session_id)
+    if not session or str(session.user_id) != str(current_user.id):
+        return {"message": "Session not found or access denied"}, 403
+    
+    try:
+        # Get or create empty PHQ assessment record (assessment-first approach)
+        phq_assessment_record = PHQResponseService.get_or_create_assessment_record(session_id)
+        
+        # Build questions list from assessment record
+        questions_list = []
+        if phq_assessment_record.responses:
+            # Sort by question_number to maintain order
+            sorted_questions = sorted(
+                phq_assessment_record.responses.values(), 
+                key=lambda q: q.get('question_number', 0)
+            )
+            questions_list = sorted_questions
+        
+        # Calculate resume position: find first question with response_value = null
+        current_question_index = 0
+        completed_responses_count = 0
+        
+        if questions_list:
+            for i, question in enumerate(questions_list):
+                question_id = str(question['question_id'])
+                question_data = phq_assessment_record.responses.get(question_id, {})
+                response_value = question_data.get('response_value')
+                if response_value is None:  # First unanswered question
+                    current_question_index = i
+                    break
+                completed_responses_count += 1
+            else:
+                # All questions answered
+                current_question_index = len(questions_list) - 1 if questions_list else 0
+        
+        # Check assessment status
+        is_assessment_complete = PHQResponseService.is_assessment_complete(session_id)
+        expected_count = PHQResponseService.get_expected_response_count(session_id)
+        
+        # Assessment can start if no questions exist yet
+        can_start = len(questions_list) == 0
+        
+        # Assessment can continue if questions exist but not all answered
+        can_continue = len(questions_list) > 0 and not is_assessment_complete
+        
+        return {
+            "session_id": session_id,
+            "assessment_id": phq_assessment_record.id,
+            "questions": questions_list,
+            "total_questions": len(questions_list),
+            "current_question_index": current_question_index,
+            "completed_responses_count": completed_responses_count,
+            "responses_expected": expected_count,
+            "completion_percentage": (completed_responses_count / expected_count * 100) if expected_count > 0 else 0,
+            "assessment_complete": is_assessment_complete,
+            "can_start": can_start,
+            "can_continue": can_continue,
+            "resumed_from_previous": completed_responses_count > 0,
+            "instructions": questions_list[0]["instructions"] if questions_list else None
+        }
+        
+    except Exception as e:
+        return {"message": f"Error getting progress: {str(e)}"}, 500
 
 
 @phq_assessment_bp.route('/check/<session_id>', methods=['GET'])

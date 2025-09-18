@@ -338,12 +338,9 @@ class PHQResponse(BaseModel):
     session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
     # ADD TIMESTAMP : BY THE SECOND .. D . THX .
 
-    # Generated questions stored as JSON, keyed by question_id
-    # Structure: {"question_id": {"question_number": 1, "question_text": "...", "category_name": "...", "scale_labels": {...}}, ...}
-    questions: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    
     # All responses in a single JSON structure, keyed by question_id
-    # Structure: {"question_id": {"question_number": 1, "question_text": "...", "response_value": 3, "response_text": "...", "category_name": "..."}, ...}
+    # Structure includes both question data and response data:
+    # {"question_id": {"question_number": 1, "question_text": "...", "category_name": "...", "scale_labels": {...}, "response_value": 3, "response_text": "...", "response_time_ms": 1234}, ...}
     responses: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -28,7 +28,7 @@ function phqAssessment(sessionId) {
     async init() {
       this.assessmentStartTime = Date.now();
       this.questionStartTime = Date.now();
-      await this.loadQuestions();
+      await this.loadProgress(); // Use progress endpoint instead of loadQuestions
       await this.initCamera();
       this.setupAbandonTracking();
       // Check if this is a legitimate refresh that should trigger reset
@@ -130,13 +130,16 @@ function phqAssessment(sessionId) {
       };
     },
 
-    async loadQuestions() {
+    async loadProgress() {
       try {
-        const result = await apiCall(`/assessment/phq/start/${this.sessionId}`);
+        const result = await apiCall(`/assessment/phq/progress/${this.sessionId}`);
         if (result && result.status === "OLKORECT") {
+          console.log("DEBUG JS: Received progress from backend:", result.data);
+          
+          // Get assessment state from progress endpoint
           this.questions = result.data.questions;
           this.assessmentId = result.data.assessment_id;
-
+          
           // Update camera manager with assessment_id
           if (this.cameraManager) {
             this.cameraManager.assessmentId = this.assessmentId;
@@ -154,8 +157,32 @@ function phqAssessment(sessionId) {
             console.log(`PHQ Resume: Resuming from question ${this.currentQuestionIndex + 1} (${completedCount} responses completed)`);
           }
 
-          // Load responses from backend (simplified - no separate API call needed)
-          await this.loadExistingResponses();
+          // Populate responses from questions data (questions already include response_value/response_text)
+          this.responses = {};
+          this.questions.forEach(question => {
+            console.log(`DEBUG JS: Question ${question.question_id} response_value:`, question.response_value);
+            if (question.response_value !== null) {
+              console.log(`DEBUG JS: Adding response for question ${question.question_id}`);
+              this.responses[question.question_id] = {
+                question_id: question.question_id,
+                question_number: question.question_number,
+                response_value: question.response_value,
+                response_text: question.response_text,
+                response_time_ms: question.response_time_ms
+              };
+            }
+          });
+          console.log("DEBUG JS: Final this.responses:", this.responses);
+
+          // If assessment can start (no questions generated yet), initialize it
+          if (result.data.can_start) {
+            console.log("Initializing new PHQ assessment...");
+            // The progress endpoint already creates the assessment record
+            // Just need to load current response
+          } else if (result.data.can_continue) {
+            console.log("Resuming existing PHQ assessment...");
+          }
+
           await this.loadCurrentResponse();
 
           // Trigger camera capture when question loads
@@ -171,7 +198,7 @@ function phqAssessment(sessionId) {
           }
         } else {
           alert(
-            "Error loading questions: " + (result?.error || "Unknown error")
+            "Error loading assessment progress: " + (result?.error || "Unknown error")
           );
         }
       } catch (error) {
@@ -185,6 +212,12 @@ function phqAssessment(sessionId) {
       if (this.currentQuestion) {
         this.currentResponse =
           this.responses[this.currentQuestion.question_id] || null;
+        
+        // Force UI update after setting currentResponse (use setTimeout for Alpine.js)
+        setTimeout(() => {
+          this.updateFormUI();
+        }, 10);
+        
         // Trigger camera capture when new question loads
               if (this.cameraManager) {
                 // Pass timing data to camera capture
@@ -200,32 +233,16 @@ function phqAssessment(sessionId) {
       }
     },
 
-    async loadExistingResponses() {
-      try {
-        // Get existing responses for this session (already calculated by backend)
-        const responsesResult = await apiCall(`/assessment/phq/responses/${this.sessionId}`);
-        
-        if (responsesResult && responsesResult.status === "OLKORECT" && responsesResult.data.responses) {
-          const savedResponses = responsesResult.data.responses;
-          
-          // Convert saved responses to frontend format
-          this.responses = {};
-          for (const responseData of savedResponses) {
-            const questionId = responseData.question_id;
-            this.responses[questionId] = {
-              question_id: questionId,
-              question_number: responseData.question_number,
-              response_value: responseData.response_value,
-              response_text: responseData.response_text,
-              response_time_ms: responseData.response_time_ms
-            };
-          }
-        }
-      } catch (error) {
-        console.log("No existing responses found, starting fresh:", error.message);
-        // Continue with fresh start if no responses exist
+    updateFormUI() {
+      // Force radio button update for existing responses
+      if (this.currentResponse && this.currentResponse.response_value !== null) {
+        const radioButtons = document.querySelectorAll('input[name="current_response"]');
+        radioButtons.forEach(radio => {
+          radio.checked = (parseInt(radio.value) === this.currentResponse.response_value);
+        });
       }
     },
+
 
     async updateCurrentResponse(value, text) {
       if (!this.currentQuestion) return;

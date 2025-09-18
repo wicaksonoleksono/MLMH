@@ -5,7 +5,6 @@ from ...decorators import api_response, user_required
 from ...services.assessment.phqService import PHQResponseService
 from ...services.sessionService import SessionService
 from ...services.admin.phqService import PHQService
-import random
 
 phq_assessment_bp = Blueprint('phq_assessment', __name__, url_prefix='/assessment/phq')
 
@@ -20,27 +19,43 @@ def get_phq_questions(session_id):
     if not session or str(session.user_id) != str(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
-    # Get randomized questions
-    questions = PHQResponseService.get_session_questions(session_id)
+    # GET OR CREATE PHQ ASSESSMENT RECORD with questions saved to DB
+    phq_assessment_record = PHQResponseService.get_or_create_assessment_record(session_id)
     
-    # If no questions found, try initializing assessments
-    if not questions:
-        from ...services.session.assessmentOrchestrator import AssessmentOrchestrator
-        try:
-            AssessmentOrchestrator.initialize_session_assessments(session_id)
-            questions = PHQResponseService.get_session_questions(session_id)
-        except Exception as e:
-            return {"message": f"Failed to initialize PHQ questions: {str(e)}"}, 500
+    # Convert questions dict to list format for frontend
+    questions_list = []
+    if phq_assessment_record.questions:
+        # Sort by question_number to maintain order
+        sorted_questions = sorted(
+            phq_assessment_record.questions.values(), 
+            key=lambda q: q.get('question_number', 0)
+        )
+        questions_list = sorted_questions
     
-    # CREATE EMPTY PHQ ASSESSMENT RECORD IMMEDIATELY (assessment-first approach)
-    phq_assessment_record = PHQResponseService.create_empty_assessment_record(session_id)
+    # Calculate resume position based on missing responses
+    current_question_index = 0
+    completed_responses_count = 0
+    if phq_assessment_record.responses:
+        # Find first question without response
+        for i, question in enumerate(questions_list):
+            question_id = str(question['question_id'])
+            if question_id not in phq_assessment_record.responses:
+                current_question_index = i
+                break
+            completed_responses_count += 1
+        else:
+            # All questions answered
+            current_question_index = len(questions_list) - 1 if questions_list else 0
     
     return {
         "session_id": session_id,
-        "assessment_id": phq_assessment_record.id,  # Return assessment_id for camera to use
-        "questions": questions,
-        "total_questions": len(questions),
-        "instructions": questions[0]["instructions"] if questions else None
+        "assessment_id": phq_assessment_record.id,
+        "questions": questions_list,
+        "total_questions": len(questions_list),
+        "current_question_index": current_question_index,
+        "completed_responses_count": completed_responses_count,
+        "resumed_from_previous": completed_responses_count > 0,
+        "instructions": questions_list[0]["instructions"] if questions_list else None
     }
 
 

@@ -7,6 +7,7 @@ from ...services.llm.chatService import LLMChatService
 from ...services.assessment.llmService import LLMConversationService
 from ...services.sessionService import SessionService
 from ...services.admin.llmService import LLMService
+from ...services.session.assessmentOrchestrator import AssessmentOrchestrator
 from datetime import datetime
 
 llm_assessment_bp = Blueprint('llm_assessment', __name__, url_prefix='/assessment/llm')
@@ -283,7 +284,7 @@ def save_conversation(session_id):
 @user_required
 @api_response
 def start_chat(session_id):
-    """Initialize LLM chat - CREATE EMPTY CONVERSATION RECORD IMMEDIATELY (assessment-first approach)"""
+    """DEPRECATED: Use /progress endpoint instead. Initialize LLM chat - CREATE EMPTY CONVERSATION RECORD IMMEDIATELY (assessment-first approach)"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
@@ -351,7 +352,7 @@ def chat_stream_new(session_id):
 @user_required
 @api_response
 def finish_chat(session_id):
-    """Finish conversation and prepare for completion handler"""
+    """DEPRECATED: Use /complete endpoint instead. Finish conversation and prepare for completion handler"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
@@ -451,6 +452,196 @@ def llm_instructions():
 #         "assessment_order": session.assessment_order
 #     }
 
+
+# ============================================================================
+# NEW INCREMENTAL AUTO-SAVE ROUTES FOR LLM
+# ============================================================================
+
+@llm_assessment_bp.route('/progress/<session_id>', methods=['GET'])
+@user_required
+@api_response
+def get_llm_progress(session_id):
+    """Get current LLM conversation progress for resume functionality"""
+    # Validate session belongs to current user
+    session = SessionService.get_session(session_id)
+    if not session or int(session.user_id) != int(current_user.id):
+        return {"message": "Session not found or access denied"}, 403
+    
+    try:
+        # Get or create empty conversation record
+        conversation_record = LLMConversationService.create_empty_conversation_record(session_id)
+        
+        # Get conversation history from both sources
+        # 1. Database conversation turns (persistent)
+        database_conversations = LLMConversationService.get_session_conversations(session_id)
+        
+        # 2. Session metadata chat history (real-time)
+        chat_history_data = AssessmentOrchestrator.get_chat_history(session_id)
+        chat_history = chat_history_data.get('chat_history', {})
+        
+        # Build unified conversation history for frontend
+        conversation_messages = []
+        
+        # ALWAYS start with the greeting message from LangChain template
+        from ...services.admin.llmService import LLMService
+        greeting_message = {
+            'id': 1,
+            'type': 'ai', 
+            'content': LLMService.GREETING,  # "Halo aku Sindi, bagaimana kabar kamu ?"
+            'timestamp': None,
+            'streaming': False,
+            'is_greeting': True
+        }
+        conversation_messages.append(greeting_message)
+        
+        # Convert database turns to frontend format (skip if first turn is same as greeting)
+        for turn in database_conversations:
+            # Skip if this turn's AI message is the same as greeting (avoid duplication)
+            if turn.get('ai_message') == LLMService.GREETING:
+                # Add only the user message for this turn
+                if turn.get('user_message'):
+                    conversation_messages.append({
+                        'id': len(conversation_messages) + 1,
+                        'type': 'user',
+                        'content': turn.get('user_message'),
+                        'timestamp': turn.get('created_at'),
+                        'turn_number': turn.get('turn_number')
+                    })
+                continue
+            
+            # Add user message
+            if turn.get('user_message'):
+                conversation_messages.append({
+                    'id': len(conversation_messages) + 1,
+                    'type': 'user',
+                    'content': turn.get('user_message'),
+                    'timestamp': turn.get('created_at'),
+                    'turn_number': turn.get('turn_number')
+                })
+            
+            # Add AI message
+            if turn.get('ai_message'):
+                conversation_messages.append({
+                    'id': len(conversation_messages) + 1,
+                    'type': 'ai',
+                    'content': turn.get('ai_message'),
+                    'timestamp': turn.get('created_at'),
+                    'turn_number': turn.get('turn_number'),
+                    'streaming': False
+                })
+        
+        # Check conversation status
+        is_conversation_active = chat_history.get('conversation_active', False)
+        conversation_ended = LLMConversationService.check_conversation_complete(session_id)
+        
+        # If no database conversations exist and not started, we can start
+        can_start = len(database_conversations) == 0 and not is_conversation_active
+        
+        return {
+            "session_id": session_id,
+            "conversation_id": conversation_record.id,
+            "conversation_messages": conversation_messages,
+            "conversation_active": is_conversation_active,
+            "conversation_ended": conversation_ended,
+            "total_messages": len(conversation_messages),
+            "total_turns": len(database_conversations),
+            "exchange_count": chat_history.get('exchange_count', 0),
+            "can_continue": is_conversation_active and not conversation_ended,
+            "can_start": can_start,
+            "greeting_message": LLMService.GREETING  # Always provide greeting for consistency
+        }
+        
+    except Exception as e:
+        return {"message": f"Error getting progress: {str(e)}"}, 500
+
+
+@llm_assessment_bp.route('/save-message/<session_id>', methods=['POST'])
+@user_required
+@api_response
+def save_llm_message(session_id):
+    """Save single message immediately (incremental auto-save for real-time chat)"""
+    # Validate session belongs to current user
+    session = SessionService.get_session(session_id)
+    if not session or int(session.user_id) != int(current_user.id):
+        return {"message": "Session not found or access denied"}, 403
+    
+    data = request.get_json()
+    if not data:
+        return {"message": "No data provided"}, 400
+    
+    # Extract required fields
+    message_type = data.get('message_type')  # 'user' or 'ai'
+    content = data.get('content')
+    timing = data.get('timing', {})
+    
+    if not message_type or not content:
+        return {"message": "message_type and content are required"}, 400
+    
+    if message_type not in ['user', 'ai']:
+        return {"message": "message_type must be 'user' or 'ai'"}, 400
+    
+    try:
+        # Use existing add_chat_message method for incremental save
+        message_result = AssessmentOrchestrator.add_chat_message(
+            session_id=int(session_id),
+            message_type=message_type,
+            content=content
+        )
+        
+        # Add timing metadata if provided
+        if timing:
+            # Store timing in session metadata for later use
+            # This can be associated with conversation turns when they're saved
+            pass  # Timing will be handled by existing /save-timing endpoint
+        
+        return {
+            "session_id": session_id,
+            "message_type": message_type,
+            "content_length": len(content),
+            "saved": True,
+            "total_messages": message_result.get('total_messages', 0),
+            "exchange_count": message_result.get('exchange_count', 0)
+        }
+        
+    except Exception as e:
+        return {"message": f"Error saving message: {str(e)}"}, 400
+
+
+@llm_assessment_bp.route('/complete/<session_id>', methods=['POST'])
+@user_required
+@api_response
+def complete_llm_assessment(session_id):
+    """Mark LLM conversation as complete and get next step"""
+    # Validate session belongs to current user
+    session = SessionService.get_session(session_id)
+    if not session or int(session.user_id) != int(current_user.id):
+        return {"message": "Session not found or access denied"}, 403
+    
+    try:
+        # Complete LLM conversation
+        completion_result = AssessmentOrchestrator.complete_llm_conversation(session_id)
+        
+        # Get next step using session service
+        next_step_result = SessionService.complete_llm_and_get_next_step(session_id)
+        
+        return {
+            "session_id": session_id,
+            "conversation_completed": True,
+            "conversation_id": completion_result.get('session_id'),
+            "total_messages": completion_result.get('total_messages', 0),
+            "total_exchanges": completion_result.get('total_exchanges', 0),
+            "session_status": completion_result.get('session_status'),
+            "next_redirect": next_step_result.get("next_redirect"),
+            "message": next_step_result.get("message", "LLM assessment completed successfully")
+        }
+        
+    except Exception as e:
+        return {"message": f"Error completing assessment: {str(e)}"}, 400
+
+
+# ============================================================================
+# EXISTING ROUTES (kept for backward compatibility)
+# ============================================================================
 
 @llm_assessment_bp.route('/save-timing/<session_id>', methods=['POST'])
 @user_required

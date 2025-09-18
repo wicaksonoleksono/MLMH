@@ -15,6 +15,15 @@ content %}
             x-text="`Pertanyaan ${currentQuestionIndex + 1} dari ${questions.length}`"
           ></span>
         </div>
+        <div
+          class="bg-green-600 rounded-lg px-3 py-1"
+          x-show="isResuming && !loading"
+        >
+          <span
+            class="text-white font-medium text-sm"
+            x-text="`Dilanjutkan dari pertanyaan ${resumedFromQuestion}`"
+          ></span>
+        </div>
       </div>
       <a
         href="{{ url_for('auth.logout') }}"

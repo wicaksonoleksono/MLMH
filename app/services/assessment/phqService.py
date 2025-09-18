@@ -150,10 +150,27 @@ class PHQResponseService:
             return selected_questions
 
     @staticmethod
+    def _get_latest_assessment(session_id: str, db) -> PHQResponse:
+        """Helper: Get latest incomplete assessment for a session"""
+        # First try to get incomplete assessment
+        incomplete_record = db.query(PHQResponse).filter_by(
+            session_id=session_id, 
+            is_completed=False
+        ).order_by(PHQResponse.updated_at.desc()).first()
+        
+        if incomplete_record:
+            return incomplete_record
+            
+        # If no incomplete, get the latest assessment
+        return db.query(PHQResponse).filter_by(
+            session_id=session_id
+        ).order_by(PHQResponse.updated_at.desc()).first()
+
+    @staticmethod
     def get_session_responses(session_id: str) -> PHQResponse:
-        """Get all PHQ responses for a session"""
+        """Get latest incomplete PHQ assessment responses for a session"""
         with get_session() as db:
-            return db.query(PHQResponse).filter_by(session_id=session_id).first()
+            return PHQResponseService._get_latest_assessment(session_id, db)
 
     @staticmethod
     def get_response_by_id(response_id: int) -> Optional[PHQResponse]:
@@ -165,7 +182,8 @@ class PHQResponseService:
     def update_response(session_id: str, question_id: int, updates: Dict[str, Any]) -> PHQResponse:
         """Update a PHQ response for a specific question in the session"""
         with get_session() as db:
-            phq_response_record = db.query(PHQResponse).filter_by(session_id=session_id).first()
+            # Get latest incomplete assessment for this session
+            phq_response_record = PHQResponseService._get_latest_assessment(session_id, db)
             if not phq_response_record:
                 raise ValueError(f"PHQ response record for session {session_id} not found")
 
@@ -393,6 +411,129 @@ class PHQResponseService:
             db.refresh(phq_response_record)
             
             return phq_response_record
+
+    @staticmethod
+    def get_or_create_assessment_record(session_id: str) -> PHQResponse:
+        """Get existing incomplete PHQ assessment or create new one with generated questions"""
+        with get_session() as db:
+            # Get session for validation
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                raise ValueError(f"Session {session_id} not found")
+
+            # First, try to get an incomplete assessment for this session
+            incomplete_record = db.query(PHQResponse).filter_by(
+                session_id=session_id, 
+                is_completed=False
+            ).order_by(PHQResponse.updated_at.desc()).first()
+            
+            if incomplete_record:
+                # Ensure questions are populated (backward compatibility)
+                if not incomplete_record.questions:
+                    PHQResponseService._populate_questions_for_record(incomplete_record, db)
+                return incomplete_record
+
+            # If no incomplete assessment, check if there's any existing record
+            existing_record = db.query(PHQResponse).filter_by(session_id=session_id).first()
+            if existing_record:
+                # Reset completed assessment to allow continuation
+                existing_record.is_completed = False
+                # Keep existing questions - DON'T regenerate (questions are per assessment_id)
+                if not existing_record.questions:
+                    PHQResponseService._populate_questions_for_record(existing_record, db)
+                db.commit()
+                db.refresh(existing_record)
+                return existing_record
+
+            # Create new PHQ response record with generated questions
+            phq_response_record = PHQResponse(
+                session_id=session_id,
+                questions={},  # Will be populated below
+                responses={}   # Empty JSON, will be populated as user answers
+            )
+            db.add(phq_response_record)
+            db.flush()  # Get ID before populating questions
+            
+            # Generate and save questions to DB
+            PHQResponseService._populate_questions_for_record(phq_response_record, db)
+            
+            db.commit()
+            db.refresh(phq_response_record)
+            
+            return phq_response_record
+
+    @staticmethod
+    def _populate_questions_for_record(phq_record: PHQResponse, db) -> None:
+        """Generate randomized questions and save them to the PHQ record's questions JSON field"""
+        # Get session and PHQ settings
+        session = db.query(AssessmentSession).filter_by(id=phq_record.session_id).first()
+        if not session:
+            raise ValueError(f"Session {phq_record.session_id} not found")
+
+        phq_settings = session.phq_settings
+        if not phq_settings:
+            raise ValueError(f"Session {phq_record.session_id} has no PHQ settings configured")
+        questions_per_category = phq_settings.questions_per_category
+
+        # Get all predefined categories
+        categories = PHQCategoryType.get_all_categories()
+
+        questions_dict = {}
+        question_number = 1
+
+        # Use session ID for consistent randomization (same session = same questions)
+        session_seed = hash(phq_record.session_id) % (2**32)
+
+        # For each category, randomly select N questions
+        for category in categories:
+            # Get all active questions in this category
+            category_questions = db.query(PHQQuestion).filter_by(
+                category_name_id=category['name_id'],
+                is_active=True
+            ).all()
+
+            if not category_questions:
+                continue  # Skip empty categories
+
+            # Randomize questions with session-based seed for consistency
+            category_seed = session_seed + hash(category['name_id'])  # Add category variation
+            random.seed(category_seed)
+            random.shuffle(category_questions)
+            random.seed()  # Reset to default random state
+
+            # Select the required number of questions per category
+            selected_count = min(questions_per_category, len(category_questions))
+            selected_from_category = category_questions[:selected_count]
+
+            # Add to questions dict with metadata
+            for question in selected_from_category:
+                question_id = str(question.id)
+                questions_dict[question_id] = {
+                    "question_id": question.id,
+                    "question_number": question_number,
+                    "question_text": question.question_text_id,
+                    "question_text_en": question.question_text_en,
+                    "category_name_id": category['name_id'],
+                    "category_name": category['name_id'],
+                    "category_display": category['name'],
+                    "order_index": question.order_index
+                }
+                question_number += 1
+
+        # Get scale information and add to all questions
+        scale = phq_settings.scale
+        if scale:
+            scale_labels = scale.scale_labels
+            for question_data in questions_dict.values():
+                question_data.update({
+                    "scale_min": scale.min_value,
+                    "scale_max": scale.max_value,
+                    "scale_labels": scale_labels,
+                    "instructions": phq_settings.instructions
+                })
+
+        # Save questions to PHQ record
+        phq_record.questions = questions_dict
 
     @staticmethod
     def save_session_responses(session_id: str, responses_data: List[Dict[str, Any]]) -> PHQResponse:

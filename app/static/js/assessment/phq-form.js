@@ -14,6 +14,8 @@ function phqAssessment(sessionId) {
     totalScore: 0,
     scoreAnalysis: "",
     cameraManager: null,
+    isResuming: false,
+    resumedFromQuestion: 0,
     
     // Assessment timing variables
     assessmentStartTime: null,
@@ -133,17 +135,31 @@ function phqAssessment(sessionId) {
         const result = await apiCall(`/assessment/phq/start/${this.sessionId}`);
         if (result && result.status === "OLKORECT") {
           this.questions = result.data.questions;
-          this.assessmentId = result.data.assessment_id; // Get assessment_id from backend
+          this.assessmentId = result.data.assessment_id;
 
-          // Update camera manager with assessment_id (assessment-first approach)
+          // Update camera manager with assessment_id
           if (this.cameraManager) {
             this.cameraManager.assessmentId = this.assessmentId;
           }
 
+          // Set resume position from backend calculation
+          this.currentQuestionIndex = result.data.current_question_index || 0;
+          const completedCount = result.data.completed_responses_count || 0;
+          const resumedFromPrevious = result.data.resumed_from_previous || false;
+
+          // Set resume state
+          if (resumedFromPrevious && completedCount > 0) {
+            this.isResuming = true;
+            this.resumedFromQuestion = this.currentQuestionIndex + 1;
+            console.log(`PHQ Resume: Resuming from question ${this.currentQuestionIndex + 1} (${completedCount} responses completed)`);
+          }
+
+          // Load responses from backend (simplified - no separate API call needed)
+          await this.loadExistingResponses();
           await this.loadCurrentResponse();
-          // Trigger camera capture when first question loads
+
+          // Trigger camera capture when question loads
           if (this.cameraManager) {
-            // Pass timing data to camera capture
             const currentTime = Date.now();
             const questionStart = Math.floor((currentTime - this.assessmentStartTime) / 1000);
             const timing = {
@@ -181,6 +197,33 @@ function phqAssessment(sessionId) {
                 };
                 await this.cameraManager.onQuestionStart(timing);
               }
+      }
+    },
+
+    async loadExistingResponses() {
+      try {
+        // Get existing responses for this session (already calculated by backend)
+        const responsesResult = await apiCall(`/assessment/phq/responses/${this.sessionId}`);
+        
+        if (responsesResult && responsesResult.status === "OLKORECT" && responsesResult.data.responses) {
+          const savedResponses = responsesResult.data.responses;
+          
+          // Convert saved responses to frontend format
+          this.responses = {};
+          for (const responseData of savedResponses) {
+            const questionId = responseData.question_id;
+            this.responses[questionId] = {
+              question_id: questionId,
+              question_number: responseData.question_number,
+              response_value: responseData.response_value,
+              response_text: responseData.response_text,
+              response_time_ms: responseData.response_time_ms
+            };
+          }
+        }
+      } catch (error) {
+        console.log("No existing responses found, starting fresh:", error.message);
+        // Continue with fresh start if no responses exist
       }
     },
 
@@ -230,6 +273,25 @@ function phqAssessment(sessionId) {
 
     async nextQuestion() {
       if (!this.currentResponse) return;
+
+      // Auto-save current response before moving to next question
+      try {
+        await apiCall(
+          `/assessment/phq/response/${this.sessionId}/${this.currentQuestion.question_id}`,
+          "PUT",
+          {
+            question_id: this.currentQuestion.question_id,
+            question_number: this.currentQuestion.question_number,
+            response_value: this.currentResponse.response_value,
+            response_text: this.currentResponse.response_text,
+            response_time_ms: this.currentResponse.response_time_ms,
+            timing: this.currentResponse.timing
+          }
+        );
+        console.log(`PHQ Auto-save SUCCESS: saved response for question ${this.currentQuestion.question_id}`);
+      } catch (error) {
+        console.error("PHQ Auto-save FAILED:", error);
+      }
 
       if (this.currentQuestionIndex < this.questions.length - 1) {
         this.currentQuestionIndex++;

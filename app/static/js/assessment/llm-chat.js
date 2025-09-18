@@ -40,22 +40,12 @@ function chatInterface(sessionId) {
       this.assessmentStartTime = Date.now();
       this.startConversationTimer();
       await this.initCamera();
-      await this.initializeChat();
+      await this.loadProgress(); // Use new progress endpoint instead
       this.setupAbandonTracking();
-      this.addGreetingMessage();
+      // No more greeting message - will be loaded from progress if needed
     },
 
-    addGreetingMessage() {
-      // Add initial greeting from Sindi
-      this.messages.push({
-        id: this.messageId++,
-        type: "ai",
-        content: "Halo aku Sindi, bagaimana kabar kamu ?",
-        streaming: true,
-        timestamp: new Date(),
-      });
-      this.scrollToBottom();
-    },
+    // Removed addGreetingMessage - greeting now comes from backend LangChain template
 
     onMessageInput() {
       // Track when user starts typing for accurate timing
@@ -123,11 +113,68 @@ function chatInterface(sessionId) {
       };
     },
 
-    async initializeChat() {
+    async loadProgress() {
       try {
-        // Start chat session
-        const url = `/assessment/llm/start-chat/${this.sessionId}`;
+        const result = await apiCall(`/assessment/llm/progress/${this.sessionId}`);
+        
+        if (result && result.status === "OLKORECT") {
+          // Get conversation state from backend
+          this.conversationId = result.data.conversation_id;
+          this.conversationEnded = result.data.conversation_ended;
+          this.exchangeCount = result.data.exchange_count;
+          
+          // Load existing conversation messages
+          this.messages = result.data.conversation_messages.map(msg => ({
+            id: msg.id,
+            type: msg.type,
+            content: msg.content,
+            streaming: msg.streaming || false,
+            timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+            turn_number: msg.turn_number,
+            is_greeting: msg.is_greeting || false
+          }));
+          
+          // Set messageId counter to be higher than existing messages
+          const existingIds = this.messages.map(m => m.id).filter(id => typeof id === 'number');
+          this.messageId = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
+          
+          // Update camera manager with conversation_id
+          if (this.cameraManager && this.conversationId) {
+            this.cameraManager.setConversationId(this.conversationId);
+          }
+          
+          // If conversation is not active and can start, initialize it
+          if (result.data.can_start) {
+            console.log("Initializing new conversation...");
+            await this.initializeConversation();
+          } else if (result.data.can_continue) {
+            console.log("Resuming existing conversation...");
+            // Conversation can continue - no need to initialize
+          } else {
+            console.log("Conversation state:", {
+              can_start: result.data.can_start,
+              can_continue: result.data.can_continue,
+              conversation_active: result.data.conversation_active,
+              conversation_ended: result.data.conversation_ended
+            });
+          }
+          
+        } else {
+          alert("Error loading conversation: " + (result?.error || "Unknown error"));
+        }
+      } catch (error) {
+        console.error("Error loading progress:", error);
+        alert("Error loading conversation. Please refresh the page.");
+      } finally {
+        this.loading = false;
+        this.scrollToBottom();
+      }
+    },
 
+    async initializeConversation() {
+      try {
+        // Start chat session using the existing endpoint
+        const url = `/assessment/llm/start-chat/${this.sessionId}`;
         const response = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -138,21 +185,18 @@ function chatInterface(sessionId) {
         if (result.status !== "success") {
           console.error("Start chat failed:", result.message);
         } else {
-          // Get conversation_id for assessment-first camera approach
-          this.conversationId = result.conversation_id;
-
-          // Update camera manager with conversation_id
-          if (this.cameraManager) {
-            this.cameraManager.setConversationId(this.conversationId);
+          // Update conversation_id if needed
+          if (result.conversation_id) {
+            this.conversationId = result.conversation_id;
+            
+            // Update camera manager
+            if (this.cameraManager) {
+              this.cameraManager.setConversationId(this.conversationId);
+            }
           }
         }
-
-        this.loading = false;
-        this.scrollToBottom();
       } catch (error) {
-        console.error("Error initializing chat:", error);
-        this.loading = false;
-        alert("Error starting conversation. Please refresh the page.");
+        console.error("Error initializing conversation:", error);
       }
     },
 
@@ -167,6 +211,12 @@ function chatInterface(sessionId) {
     },
 
     async sendMessage() {
+      console.log("sendMessage called:", {
+        currentMessage: this.currentMessage?.trim(),
+        isTyping: this.isTyping,
+        conversationEnded: this.conversationEnded
+      });
+      
       if (
         !this.currentMessage.trim() ||
         this.isTyping ||
@@ -262,6 +312,7 @@ function chatInterface(sessionId) {
         params.append("user_timing", JSON.stringify(userTiming));
 
         const streamUrl = `/assessment/stream/?${params}`;
+        console.log("Opening SSE stream:", streamUrl);
         const eventSource = new EventSource(streamUrl);
 
         // Get reference to the bot message we just added
@@ -417,47 +468,40 @@ function chatInterface(sessionId) {
       this.isFinishing = true;
 
       try {
-        // Add timeout for the finish request
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
-        const response = await fetch(
-          `/assessment/llm/finish-chat/${this.sessionId}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            signal: controller.signal,
+        // Link camera captures to conversation first
+        if (this.cameraManager && this.conversationId) {
+          try {
+            const linkResult = await apiCall(
+              `/assessment/camera/link-to-assessment/${this.sessionId}`,
+              "POST",
+              {
+                assessment_id: this.conversationId,
+                assessment_type: "LLM",
+              }
+            );
+          } catch (error) {
+            // console.log("Camera linking failed:", error);
           }
+        }
+
+        // Use new completion endpoint
+        const result = await apiCall(
+          `/assessment/llm/complete/${this.sessionId}`,
+          "POST"
         );
 
-        clearTimeout(timeoutId); // Clear timeout on success
-        const result = await response.json();
-
-        // Handle API response wrapper
-        const actualResult =
-          result.status === "OLKORECT" ? result.data : result;
-
-        if (result.status === "OLKORECT" && actualResult.next_redirect) {
+        if (result && result.status === "OLKORECT") {
           this.markAsCompleted();
-
-          // Camera captures are automatically linked by backend - no frontend action needed
-
-          window.location.href = actualResult.next_redirect;
+          window.location.href = result.data.next_redirect;
         } else {
           alert(
-            "Error finishing conversation: " +
-              (actualResult.message || "Unknown error")
+            "Error completing conversation: " +
+              (result?.error || "Unknown error")
           );
           this.isFinishing = false;
         }
       } catch (error) {
-        if (error.name === "AbortError") {
-          alert(
-            "Waktu koneksi habis saat menyelesaikan percakapan. Silakan coba lagi."
-          );
-        } else {
-          alert("Error finishing conversation. Please try again.");
-        }
+        alert("Error completing conversation. Please try again.");
         this.isFinishing = false;
       }
     },
@@ -567,7 +611,4 @@ function chatInterface(sessionId) {
   };
 }
 
-// Initialize refresh detection for this session
-function initializeLLMRefreshDetection(sessionId) {
-  setupRefreshDetection(sessionId);
-}
+// Removed refresh detection - users can now continue where they left off

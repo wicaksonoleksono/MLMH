@@ -61,13 +61,13 @@ class CameraManager {
         },
       };
 
-      // Add resolution preference if available in settings (not required)
+      // Force exact resolution if specified in admin settings
       if (this.cameraSettings.resolution) {
         const [width, height] = this.cameraSettings.resolution
           .split("x")
           .map(Number);
-        constraints.video.width = { ideal: width };
-        constraints.video.height = { ideal: height };
+        constraints.video.width = { exact: width };
+        constraints.video.height = { exact: height };
       }
 
       this.stream = await navigator.mediaDevices.getUserMedia(constraints);

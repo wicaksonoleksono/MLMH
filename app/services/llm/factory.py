@@ -163,7 +163,6 @@ class LLMFactory:
         return ChatOpenAI(
             api_key=api_key,
             model=model,
-            temperature=temperature,
             streaming=streaming,
             **kwargs
         )

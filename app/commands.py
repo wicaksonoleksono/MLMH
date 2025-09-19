@@ -1285,6 +1285,114 @@ def register_commands(app):
                 click.echo(f"\n❌ Error during deletion: {str(e)}", err=True)
                 raise
 
+    @app.cli.command("cleanup-unlinked-images")
+    @click.option('--dry-run', is_flag=True, help='Show what would be deleted without actually deleting')
+    @click.option('--older-than-hours', default=24, help='Only delete unlinked images older than X hours (default: 24)')
+    def cleanup_unlinked_images(dry_run, older_than_hours):
+        """
+        Delete unlinked camera images and their database records.
+        
+        Unlinked images are camera captures where assessment_id is NULL,
+        meaning they were uploaded but never associated with a completed assessment.
+        """
+        from datetime import datetime, timedelta
+        import os
+        
+        click.echo(f"[OLKORECT] Cleaning up unlinked camera images (older than {older_than_hours} hours)...")
+        
+        try:
+            cutoff_time = datetime.utcnow() - timedelta(hours=older_than_hours)
+            
+            with get_session() as db:
+                # Find unlinked camera captures older than the cutoff time
+                unlinked_captures = db.query(CameraCapture).filter(
+                    CameraCapture.assessment_id.is_(None),
+                    CameraCapture.created_at < cutoff_time
+                ).all()
+                
+                if not unlinked_captures:
+                    click.echo("✅ No unlinked camera images found to clean up")
+                    return
+                
+                total_files = 0
+                total_captures = len(unlinked_captures)
+                
+                # Count total files
+                for capture in unlinked_captures:
+                    if capture.filenames and isinstance(capture.filenames, list):
+                        total_files += len(capture.filenames)
+                
+                click.echo(f"🔍 Found {total_captures} unlinked camera captures")
+                click.echo(f"🗂️  Total files to delete: {total_files}")
+                
+                # Show detailed breakdown
+                if total_captures > 0:
+                    click.echo("\n📊 Breakdown by session:")
+                    session_summary = {}
+                    for capture in unlinked_captures:
+                        session_id = capture.session_id
+                        file_count = len(capture.filenames) if capture.filenames else 0
+                        created = capture.created_at.strftime('%Y-%m-%d %H:%M')
+                        
+                        if session_id not in session_summary:
+                            session_summary[session_id] = {'files': 0, 'captures': 0, 'created': created}
+                        session_summary[session_id]['files'] += file_count
+                        session_summary[session_id]['captures'] += 1
+                    
+                    for session_id, info in session_summary.items():
+                        click.echo(f"   📋 Session {session_id[:8]}: {info['captures']} captures, {info['files']} files ({info['created']})")
+                
+                if dry_run:
+                    click.echo("\n🧪 DRY RUN - No files or database records were actually deleted")
+                    return
+                
+                # Perform cleanup
+                click.echo("\n🗑️  Starting cleanup...")
+                
+                files_deleted = 0
+                files_not_found = 0
+                captures_deleted = 0
+                
+                # Get media path
+                media_path = current_app.media_save if hasattr(current_app, 'media_save') else os.path.join(current_app.root_path, 'static', 'uploads')
+                
+                for capture in unlinked_captures:
+                    if capture.filenames and isinstance(capture.filenames, list):
+                        # Delete physical files
+                        for filename in capture.filenames:
+                            if not filename:  # Skip empty filenames
+                                continue
+                            
+                            file_path = os.path.join(media_path, filename)
+                            try:
+                                if os.path.exists(file_path):
+                                    os.remove(file_path)
+                                    files_deleted += 1
+                                else:
+                                    files_not_found += 1
+                            except Exception as e:
+                                click.echo(f"   ⚠️  Could not delete file {filename}: {str(e)}")
+                    
+                    # Delete database record
+                    db.delete(capture)
+                    captures_deleted += 1
+                
+                # Commit all changes
+                db.commit()
+                
+                # Summary
+                click.echo(f"\n✅ Cleanup completed:")
+                click.echo(f"   🗂️  Files deleted: {files_deleted}")
+                click.echo(f"   📂 Files not found: {files_not_found}")
+                click.echo(f"   🗃️  Database records deleted: {captures_deleted}")
+                
+                if files_not_found > 0:
+                    click.echo(f"\n📝 Note: {files_not_found} files were already missing from filesystem")
+                
+        except Exception as e:
+            click.echo(f"\n❌ Error during cleanup: {str(e)}", err=True)
+            raise
+
     @app.cli.command("check-user-data")
     @click.argument('username')
     def check_user_data(username):

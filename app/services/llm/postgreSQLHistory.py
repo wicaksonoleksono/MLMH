@@ -2,7 +2,7 @@
 from typing import List
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
-from ..assessment.llmService import LLMConversationService
+from app.services.assessment.llmService import LLMConversationService
 from ...db import get_session
 
 

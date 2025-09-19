@@ -1287,8 +1287,7 @@ def register_commands(app):
 
     @app.cli.command("cleanup-unlinked-images")
     @click.option('--dry-run', is_flag=True, help='Show what would be deleted without actually deleting')
-    @click.option('--older-than-hours', default=24, help='Only delete unlinked images older than X hours (default: 24)')
-    def cleanup_unlinked_images(dry_run, older_than_hours):
+    def cleanup_unlinked_images(dry_run):
         """
         Delete unlinked camera images and their database records.
         
@@ -1298,16 +1297,17 @@ def register_commands(app):
         from datetime import datetime, timedelta
         import os
         
-        click.echo(f"[OLKORECT] Cleaning up unlinked camera images (older than {older_than_hours} hours)...")
+        click.echo(f"[OLKORECT] Cleaning up unlinked camera images from completed/abandoned sessions...")
         
         try:
-            cutoff_time = datetime.utcnow() - timedelta(hours=older_than_hours)
-            
             with get_session() as db:
-                # Find unlinked camera captures older than the cutoff time
-                unlinked_captures = db.query(CameraCapture).filter(
+                # Find unlinked captures from sessions that are completed or abandoned
+                from sqlalchemy.orm import join
+                unlinked_captures = db.query(CameraCapture).join(
+                    AssessmentSession, CameraCapture.session_id == AssessmentSession.id
+                ).filter(
                     CameraCapture.assessment_id.is_(None),
-                    CameraCapture.created_at < cutoff_time
+                    AssessmentSession.status.in_(['completed', 'abandoned'])
                 ).all()
                 
                 if not unlinked_captures:

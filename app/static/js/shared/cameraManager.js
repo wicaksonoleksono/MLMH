@@ -23,6 +23,7 @@ class CameraManager {
     try {
       await this.createVideoElements();
       await this.requestCameraAccess();
+      await this.loadProgress(); // Load existing camera state for resumability
       this.setupCaptureMode();
       this.isInitialized = true;
     } catch (error) {
@@ -56,13 +57,15 @@ class CameraManager {
       // Simple constraints - let camera use its natural resolution
       const constraints = {
         video: {
-          facingMode: "user"
-        }
+          facingMode: "user",
+        },
       };
 
       // Add resolution preference if available in settings (not required)
       if (this.cameraSettings.resolution) {
-        const [width, height] = this.cameraSettings.resolution.split("x").map(Number);
+        const [width, height] = this.cameraSettings.resolution
+          .split("x")
+          .map(Number);
         constraints.video.width = { ideal: width };
         constraints.video.height = { ideal: height };
       }
@@ -78,7 +81,6 @@ class CameraManager {
       if (window.ImageCapture && videoTrack) {
         this.imageCapture = new ImageCapture(videoTrack);
       }
-
     } catch (error) {
       throw new Error("Camera access is required for assessment");
     }
@@ -182,13 +184,20 @@ class CameraManager {
       formData.append("timing", JSON.stringify(timing));
     }
 
-    const response = await fetch(
-      `/assessment/camera/upload-single/${this.sessionId}`,
-      {
-        method: "POST",
-        body: formData,
-      }
-    );
+    // Use PUT-style upload with assessment_id if available (assessment-first approach)
+    let uploadUrl;
+    if (this.assessmentId) {
+      uploadUrl = `/assessment/camera/upload-with-assessment/${this.sessionId}/${this.assessmentId}`;
+      formData.append("assessment_type", this.assessmentType.toUpperCase());
+    } else {
+      // Fallback to incremental upload (old approach)
+      uploadUrl = `/assessment/camera/upload-single/${this.sessionId}`;
+    }
+
+    const response = await fetch(uploadUrl, {
+      method: "POST",
+      body: formData,
+    });
 
     const result = await response.json();
 
@@ -241,6 +250,44 @@ class CameraManager {
 
   setConversationId(conversationId) {
     this.assessmentId = conversationId;
+  }
+
+  async loadProgress() {
+    /**
+     * Load existing camera capture state for resumability
+     * Similar to PHQ/LLM progress endpoints
+     */
+    try {
+      const response = await fetch(
+        `/assessment/camera/progress/${this.sessionId}`
+      );
+      const result = await response.json();
+
+      if (result.status === "OLKORECT") {
+        // Store progress data for reference
+        this.captureProgress = result.data;
+
+        // Log resumable state for debugging
+        const summary = result.data.summary;
+        if (summary.total_files > 0) {
+          console.log(
+            `Camera Resume: Found ${summary.total_files} existing captures`
+          );
+          console.log(
+            `  PHQ: ${summary.total_phq_files} files, LLM: ${summary.total_llm_files} files`
+          );
+          console.log(`  Unlinked: ${summary.total_unlinked_files} files`);
+        }
+
+        return result.data;
+      } else {
+        throw new Error(result.error || "Failed to load camera progress");
+      }
+    } catch (error) {
+      console.error("Camera progress load failed:", error);
+      // Don't throw - camera should work even if progress fails
+      return null;
+    }
   }
 
   // Note: uploadBatch() removed - using incremental backend approach instead

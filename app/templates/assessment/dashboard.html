@@ -179,19 +179,8 @@ block content %}
       sessionType: "{{ session.is_first }}",
 
       async init() {
-        // Check if we're coming from a refresh
-        await this.handleRefreshRedirect();
       },
 
-      async handleRefreshRedirect() {
-        // Check if we're coming from a refresh
-        const refreshingSession = sessionStorage.getItem("refreshingSession");
-        if (refreshingSession === this.sessionId) {
-          sessionStorage.removeItem("refreshingSession");
-          // Redirect to dashboard with reset parameter
-          window.location.href = `/assessment/?reset_session=${this.sessionId}`;
-        }
-      },
 
       async resetSession() {
         if (
@@ -235,8 +224,5 @@ block content %}
       },
     };
   }
-  // Initialize refresh detection for this session
-  setupRefreshDetection("{{ session.id }}");
 </script>
-<script src="{{ url_for('static', filename='js/refreshDetection.js') }}"></script>
 {% endblock %}

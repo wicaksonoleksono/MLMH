@@ -64,48 +64,21 @@ function chatInterface(sessionId) {
         this.cameraManager = new CameraManager(
           this.sessionId,
           "llm",
-          cameraSettings
+          cameraSettings,
+          this.conversationId  // Pass conversation ID as assessment ID
         );
         await this.cameraManager.initialize();
         
         // Give camera extra time to be fully ready before any captures
         await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (error) {
-        console.error("LLM Camera initialization failed:", error);
         // Camera initialization failed - continue without camera
       }
     },
 
     setupAbandonTracking() {
-      // Track when user leaves the page
-      let assessmentCompleted = false;
-      window.addEventListener("beforeunload", () => {
-        if (!assessmentCompleted && !this.conversationEnded) {
-          // Use sendBeacon for reliable tracking when page unloads
-          navigator.sendBeacon(
-            `/assessment/abandon/${this.sessionId}`,
-            JSON.stringify({ reason: "User left LLM assessment page" })
-          );
-        }
-      });
-
-      // Track when user navigates away
-      window.addEventListener("pagehide", () => {
-        if (!assessmentCompleted && !this.conversationEnded) {
-          fetch(`/assessment/abandon/${this.sessionId}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              reason: "User navigated away from LLM assessment",
-            }),
-            keepalive: true,
-          }).catch(() => {}); // Ignore errors
-        }
-      });
-
-      // Set completion flag to prevent abandon calls on successful redirect
+      // Only handle camera cleanup on completion - no abandon tracking
       this.markAsCompleted = () => {
-        assessmentCompleted = true;
         // Clean up camera when assessment completes
         if (this.cameraManager) {
           this.cameraManager.cleanup();
@@ -138,32 +111,19 @@ function chatInterface(sessionId) {
           const existingIds = this.messages.map(m => m.id).filter(id => typeof id === 'number');
           this.messageId = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
           
-          // Update camera manager with conversation_id
-          if (this.cameraManager && this.conversationId) {
-            this.cameraManager.setConversationId(this.conversationId);
-          }
           
           // If conversation is not active and can start, initialize it
           if (result.data.can_start) {
-            console.log("Initializing new conversation...");
             await this.initializeConversation();
           } else if (result.data.can_continue) {
-            console.log("Resuming existing conversation...");
             // Conversation can continue - no need to initialize
           } else {
-            console.log("Conversation state:", {
-              can_start: result.data.can_start,
-              can_continue: result.data.can_continue,
-              conversation_active: result.data.conversation_active,
-              conversation_ended: result.data.conversation_ended
-            });
           }
           
         } else {
           alert("Error loading conversation: " + (result?.error || "Unknown error"));
         }
       } catch (error) {
-        console.error("Error loading progress:", error);
         alert("Error loading conversation. Please refresh the page.");
       } finally {
         this.loading = false;
@@ -183,20 +143,14 @@ function chatInterface(sessionId) {
         const result = await response.json();
 
         if (result.status !== "success") {
-          console.error("Start chat failed:", result.message);
         } else {
           // Update conversation_id if needed
           if (result.conversation_id) {
             this.conversationId = result.conversation_id;
             
-            // Update camera manager
-            if (this.cameraManager) {
-              this.cameraManager.setConversationId(this.conversationId);
-            }
           }
         }
       } catch (error) {
-        console.error("Error initializing conversation:", error);
       }
     },
 
@@ -211,11 +165,6 @@ function chatInterface(sessionId) {
     },
 
     async sendMessage() {
-      console.log("sendMessage called:", {
-        currentMessage: this.currentMessage?.trim(),
-        isTyping: this.isTyping,
-        conversationEnded: this.conversationEnded
-      });
       
       if (
         !this.currentMessage.trim() ||
@@ -251,7 +200,6 @@ function chatInterface(sessionId) {
 
           await this.cameraManager.onMessageSend(timing);
         } catch (error) {
-          console.error("Camera onMessageSend error:", error);
         }
       }
 
@@ -312,7 +260,6 @@ function chatInterface(sessionId) {
         params.append("user_timing", JSON.stringify(userTiming));
 
         const streamUrl = `/assessment/stream/?${params}`;
-        console.log("Opening SSE stream:", streamUrl);
         const eventSource = new EventSource(streamUrl);
 
         // Get reference to the bot message we just added
@@ -419,7 +366,6 @@ function chatInterface(sessionId) {
 
     async sendAiTiming(userMessage, userTiming, aiStartTime, aiEndTime) {
       if (!aiStartTime || !aiEndTime) {
-        console.log("No AI timing - missing start/end time");
         return;
       }
 
@@ -434,12 +380,6 @@ function chatInterface(sessionId) {
         duration: aiEnd - aiStart,
       };
 
-      console.log("Sending AI timing:", {
-        userMessage: userMessage.substring(0, 20),
-        turn: this.exchangeCount,
-        userTiming,
-        aiTiming,
-      });
 
       try {
         const response = await fetch(
@@ -456,9 +396,7 @@ function chatInterface(sessionId) {
           }
         );
         const result = await response.json();
-        console.log("AI timing response:", result);
       } catch (error) {
-        console.error("Failed to send AI timing:", error);
       }
     },
 
@@ -576,38 +514,12 @@ function chatInterface(sessionId) {
           const result = await response.json();
           if (result.status === "OLKORECT") {
           } else {
-            console.error("Failed to link camera batch:", result);
           }
         }
       } catch (error) {
-        console.error("Error linking camera to conversations:", error);
       }
     },
 
-    async resetAssessment() {
-      if (
-        confirm(
-          "Apakah Anda yakin ingin mereset assessment ini dan memulai dari awal? Semua jawaban yang belum disimpan akan hilang."
-        )
-      ) {
-        try {
-          await fetch(
-            `/assessment/reset-session-on-refresh/${this.sessionId}`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-            }
-          );
-
-          // Redirect to main menu
-          window.location.href = "/";
-        } catch (error) {
-          alert("Gagal mereset assessment: " + error.message);
-        }
-      }
-    },
   };
 }
 

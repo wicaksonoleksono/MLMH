@@ -184,11 +184,6 @@ content %}
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/core/api.js') }}?v=1757248263&bust={{ range(1000,9999)|random }}"></script>
-<script src="{{ url_for('static', filename='js/shared/refreshDetection.js') }}?v=1757248263&bust={{ range(1000,9999)|random }}"></script>
 <script src="{{ url_for('static', filename='js/shared/cameraManager.js') }}?v=1757248263&bust={{ range(1000,9999)|random }}"></script>
 <script src="{{ url_for('static', filename='js/assessment/phq-form.js') }}?v=1757248263&bust={{ range(1000,9999)|random }}"></script>
-<script>
-  // Initialize refresh detection for this session
-  setupRefreshDetection("{{ session.id }}");
-</script>
 {% endblock %}

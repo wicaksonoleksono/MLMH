@@ -138,7 +138,7 @@ class StatsService:
                         session1_response_record = all_phq_responses.get(user_sessions[0].id)
                         if session1_response_record and session1_response_record.responses:
                             session1_phq_score = sum(
-                                response_data.get('response_value', 0) 
+                                response_data.get('response_value') or 0
                                 for response_data in session1_response_record.responses.values()
                             )
                     
@@ -146,7 +146,7 @@ class StatsService:
                         session2_response_record = all_phq_responses.get(user_sessions[1].id)
                         if session2_response_record and session2_response_record.responses:
                             session2_phq_score = sum(
-                                response_data.get('response_value', 0) 
+                                response_data.get('response_value') or 0
                                 for response_data in session2_response_record.responses.values()
                             )
                 
@@ -263,7 +263,7 @@ class StatsService:
                     ).first()
                     if response_record and response_record.responses:
                         score = sum(
-                            response_data.get('response_value', 0) 
+                            response_data.get('response_value') or 0
                             for response_data in response_record.responses.values()
                         )
                         phq_scores.append(score)

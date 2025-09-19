@@ -54,56 +54,6 @@ class CameraAssessmentService:
             }
         }
 
-    @staticmethod
-    def process_single_upload(session_id: str, request) -> Dict[str, Any]:
-        """Process single image upload - STORE FILE ONLY, NO DB RECORD"""
-        camera_settings = CameraCaptureService.get_camera_settings_for_session(session_id)
-        if not camera_settings:
-            return {"status": "SNAFU", "error": "No camera settings configured"}
-        file = request.files.get('image')
-        if not file or not file.filename:
-            return {"status": "SNAFU", "error": "No image file provided"}
-        trigger = request.form.get('trigger', 'unknown')
-        timing_str = request.form.get('timing')
-        timing_data = None
-        if timing_str:
-            try:
-                import json
-                timing_data = json.loads(timing_str)
-            except:
-                pass
-        
-        try:
-            # Save file to disk AND incrementally add to database JSON array
-            file_data = file.read()
-            filename = CameraStorageService.save_image_locally(
-                session_id=session_id,
-                file_data=file_data
-            )
-            
-            # INCREMENTAL: Add filename to database JSON array immediately with timing data
-            CameraStorageService.add_filename_to_session_incrementally(
-                session_id=session_id,
-                filename=filename,
-                trigger=trigger,
-                assessment_timing=timing_data
-            )
-            
-            # Return filename for frontend to track locally
-            upload_response = {
-                "status": "OLKORECT",
-                "data": {
-                    "filename": filename,
-                    "trigger": trigger,
-                    "timestamp": datetime.now().isoformat()
-                }
-            }
-            
-            
-            return upload_response
-            
-        except Exception as e:
-            return {"status": "SNAFU", "error": f"Failed to save image: {str(e)}"}
 
     @staticmethod
     def validate_assessment_access(assessment_id: str, user_id: str) -> bool:
@@ -149,12 +99,6 @@ class CameraAssessmentService:
             if not session_id:
                 raise ValueError(f"Assessment {assessment_id} not found or invalid type {capture_type}")
 
-            # DEBUG: Log what we're passing to storage service
-            print(f" CAMERA SERVICE DEBUG:")
-            print(f"   session_id: {session_id}")
-            print(f"   assessment_id: {assessment_id}")  
-            print(f"   filenames: {filenames} (type: {type(filenames)}, length: {len(filenames)})")
-            print(f"   capture_type: {capture_type}")
             
             capture_record = CameraStorageService.create_batch_capture_with_assessment_id(
                 session_id=session_id,
@@ -164,11 +108,6 @@ class CameraAssessmentService:
                 capture_metadata=capture_metadata
             )
             
-            # DEBUG: Log what we got back from database
-            print(f" AFTER DB SAVE:")
-            print(f"   capture_record.id: {capture_record.id}")
-            print(f"   capture_record.filenames: {capture_record.filenames} (type: {type(capture_record.filenames)})")
-            print(f"   capture_record.assessment_id: {capture_record.assessment_id}")
             
             return {
                 "status": "OLKORECT",
@@ -182,7 +121,6 @@ class CameraAssessmentService:
             }
             
         except Exception as e:
-            print(f"Error creating batch capture with assessment_id: {e}")
             return {"status": "SNAFU", "error": str(e)}
 
     @staticmethod
@@ -215,7 +153,6 @@ class CameraAssessmentService:
                     "error": "No unlinked captures found for session"
                 }
         except Exception as e:
-            print(f"Error linking captures: {e}")
             return {"status": "SNAFU", "error": str(e)}
 
     @staticmethod
@@ -244,7 +181,6 @@ class CameraAssessmentService:
                 }
             }
             
-            print(f" BACKEND RESPONSE: {response_data}")
             return response_data
             
         except Exception as e:
@@ -269,17 +205,6 @@ class CameraAssessmentService:
                 if not assessment_record:
                     return {"status": "SNAFU", "error": f"No {assessment_type} record found for session {session_id}"}
                 
-                # Debug: Log what we're looking for
-                print(f" Auto-link debug - session_id: {session_id}, assessment_type: {assessment_type}")
-                print(f" Auto-link debug - assessment record ID: {assessment_record.id}")
-                
-                # Find ALL captures for this session first (for debugging)
-                all_session_captures = db.query(CameraCapture).filter(
-                    CameraCapture.session_id == session_id
-                ).all()
-                print(f" Auto-link debug - Total captures for session: {len(all_session_captures)}")
-                for capture in all_session_captures:
-                    print(f"  - Capture {capture.id}: type={capture.capture_type}, assessment_id={capture.assessment_id}")
                 
                 # Find unlinked captures for this session and assessment type
                 unlinked_captures = db.query(CameraCapture).filter(
@@ -288,17 +213,13 @@ class CameraAssessmentService:
                     CameraCapture.assessment_id.is_(None)
                 ).all()
                 
-                print(f" Auto-link debug - Unlinked {assessment_type} captures found: {len(unlinked_captures)}")
-                
                 linked_count = 0
                 for capture in unlinked_captures:
-                    print(f"   Linking capture {capture.id} to assessment {assessment_record.id}")
                     capture.assessment_id = assessment_record.id
                     linked_count += 1
                 
                 db.commit()
                 
-                print(f" Auto-linking completed - linked {linked_count} captures")
                 
                 return {
                     "status": "OLKORECT",
@@ -311,8 +232,120 @@ class CameraAssessmentService:
                 }
                 
         except Exception as e:
-            print(f" Auto-linking failed: {str(e)}")
             return {"status": "SNAFU", "error": f"Failed to auto-link captures: {str(e)}"}
+
+    @staticmethod
+    def get_camera_progress(session_id: str) -> Dict[str, Any]:
+        """Get camera capture progress for resumability - assessment-first approach"""
+        try:
+            with get_session() as db:
+                # Get all camera captures for this session, grouped by assessment_id
+                captures = db.query(CameraCapture).filter(
+                    CameraCapture.session_id == session_id
+                ).all()
+                
+                # Group captures by assessment type and ID
+                phq_captures = []
+                llm_captures = []
+                unlinked_captures = []
+                
+                for capture in captures:
+                    capture_data = {
+                        "id": capture.id,
+                        "assessment_id": capture.assessment_id,
+                        "filenames": capture.filenames,
+                        "capture_type": capture.capture_type,
+                        "capture_metadata": capture.capture_metadata,
+                        "created_at": capture.created_at.isoformat() if capture.created_at else None
+                    }
+                    
+                    if capture.assessment_id is None:
+                        unlinked_captures.append(capture_data)
+                    elif capture.capture_type == 'PHQ':
+                        phq_captures.append(capture_data)
+                    elif capture.capture_type == 'LLM':
+                        llm_captures.append(capture_data)
+                
+                # Calculate totals
+                total_phq_files = sum(len(cap["filenames"]) for cap in phq_captures)
+                total_llm_files = sum(len(cap["filenames"]) for cap in llm_captures)
+                total_unlinked_files = sum(len(cap["filenames"]) for cap in unlinked_captures)
+                
+                return {
+                    "status": "OLKORECT",
+                    "data": {
+                        "session_id": session_id,
+                        "phq_captures": phq_captures,
+                        "llm_captures": llm_captures,
+                        "unlinked_captures": unlinked_captures,
+                        "summary": {
+                            "total_phq_captures": len(phq_captures),
+                            "total_llm_captures": len(llm_captures),
+                            "total_unlinked_captures": len(unlinked_captures),
+                            "total_phq_files": total_phq_files,
+                            "total_llm_files": total_llm_files,
+                            "total_unlinked_files": total_unlinked_files,
+                            "total_files": total_phq_files + total_llm_files + total_unlinked_files
+                        }
+                    }
+                }
+        except Exception as e:
+            return {"status": "SNAFU", "error": f"Failed to get camera progress: {str(e)}"}
+
+    @staticmethod
+    def process_upload_with_assessment_id(session_id: str, assessment_id: str, request) -> Dict[str, Any]:
+        """Process single image upload with assessment_id directly - PUT-style approach"""
+        camera_settings = CameraCaptureService.get_camera_settings_for_session(session_id)
+        if not camera_settings:
+            return {"status": "SNAFU", "error": "No camera settings configured"}
+        
+        file = request.files.get('image')
+        if not file or not file.filename:
+            return {"status": "SNAFU", "error": "No image file provided"}
+        
+        trigger = request.form.get('trigger', 'unknown')
+        assessment_type = request.form.get('assessment_type', 'PHQ')  # Default to PHQ
+        timing_str = request.form.get('timing')
+        timing_data = None
+        
+        if timing_str:
+            try:
+                import json
+                timing_data = json.loads(timing_str)
+            except:
+                pass
+        
+        try:
+            # Save file to disk
+            file_data = file.read()
+            filename = CameraStorageService.save_image_locally(
+                session_id=session_id,
+                file_data=file_data
+            )
+            
+            # Add to database with assessment_id immediately (PUT-style)
+            capture_record = CameraStorageService.add_filename_with_assessment_id(
+                session_id=session_id,
+                assessment_id=assessment_id,
+                filename=filename,
+                trigger=trigger,
+                assessment_type=assessment_type,
+                assessment_timing=timing_data
+            )
+            
+            return {
+                "status": "OLKORECT",
+                "data": {
+                    "filename": filename,
+                    "assessment_id": assessment_id,
+                    "capture_id": capture_record.id if capture_record else None,
+                    "trigger": trigger,
+                    "timestamp": datetime.now().isoformat()
+                }
+            }
+            
+        except Exception as e:
+            return {"status": "SNAFU", "error": f"Failed to save image with assessment_id: {str(e)}"}
 
     @staticmethod
     def cleanup_unlinked_captures(session_id: str) -> Dict[str, Any]:
@@ -333,7 +366,6 @@ class CameraAssessmentService:
                         db.delete(capture)
                     
                     db.commit()
-                    print(f" Cleaned up {cleaned_count} unlinked camera captures from session {session_id}")
                 
                 return {
                     "status": "OLKORECT",

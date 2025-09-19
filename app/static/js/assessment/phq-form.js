@@ -31,8 +31,6 @@ function phqAssessment(sessionId) {
       await this.loadProgress(); // Use progress endpoint instead of loadQuestions
       await this.initCamera();
       this.setupAbandonTracking();
-      // Check if this is a legitimate refresh that should trigger reset
-      await this.checkForRefreshReset();
     },
 
     async initCamera() {
@@ -45,7 +43,8 @@ function phqAssessment(sessionId) {
         this.cameraManager = new CameraManager(
           this.sessionId,
           "phq",
-          cameraSettings
+          cameraSettings,
+          this.assessmentId  // Pass assessment ID to constructor
         );
         await this.cameraManager.initialize();
         
@@ -56,73 +55,10 @@ function phqAssessment(sessionId) {
       }
     },
 
-    async checkForRefreshReset() {
-      // Check if this is a legitimate refresh that should trigger a session reset
-      const isRefreshing = sessionStorage.getItem(
-        `refreshingSession_${this.sessionId}`
-      );
-      if (isRefreshing === "true") {
-        sessionStorage.removeItem(`refreshingSession_${this.sessionId}`);
-
-        // Only reset if we're not in the middle of a normal navigation flow
-        // Check if we're coming from another assessment page (normal navigation)
-        const referrer = document.referrer;
-        const isFromAssessmentPage =
-          referrer.includes("/assessment/phq") ||
-          referrer.includes("/assessment/llm");
-
-        if (!isFromAssessmentPage) {
-          // console.log(`Resetting session ${this.sessionId} due to page refresh`);
-          try {
-            await fetch(
-              `/assessment/reset-session-on-refresh/${this.sessionId}`,
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-              }
-            );
-          } catch (error) {
-            // console.log('Session reset failed:', error);
-          } finally {
-            // Redirect to main menu
-            window.location.href = `/`;
-          }
-        }
-      }
-    },
 
     setupAbandonTracking() {
-      // Track when user leaves the page
-      let assessmentCompleted = false;
-      window.addEventListener("beforeunload", () => {
-        if (!assessmentCompleted && !this.submitted) {
-          // Use sendBeacon for reliable tracking when page unloads
-          navigator.sendBeacon(
-            `/assessment/abandon/${this.sessionId}`,
-            JSON.stringify({ reason: "User left PHQ assessment page" })
-          );
-        }
-      });
-
-      // Track when user navigates away
-      window.addEventListener("pagehide", () => {
-        if (!assessmentCompleted && !this.submitted) {
-          fetch(`/assessment/abandon/${this.sessionId}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              reason: "User navigated away from PHQ assessment",
-            }),
-            keepalive: true,
-          }).catch(() => {}); // Ignore errors
-        }
-      });
-
-      // Set completion flag to prevent abandon calls on successful redirect
+      // Only handle camera cleanup on completion - no abandon tracking
       this.markAsCompleted = () => {
-        assessmentCompleted = true;
         // Clean up camera when assessment completes
         if (this.cameraManager) {
           this.cameraManager.cleanup();
@@ -134,16 +70,11 @@ function phqAssessment(sessionId) {
       try {
         const result = await apiCall(`/assessment/phq/progress/${this.sessionId}`);
         if (result && result.status === "OLKORECT") {
-          console.log("DEBUG JS: Received progress from backend:", result.data);
           
           // Get assessment state from progress endpoint
           this.questions = result.data.questions;
           this.assessmentId = result.data.assessment_id;
           
-          // Update camera manager with assessment_id
-          if (this.cameraManager) {
-            this.cameraManager.assessmentId = this.assessmentId;
-          }
 
           // Set resume position from backend calculation
           this.currentQuestionIndex = result.data.current_question_index || 0;
@@ -154,15 +85,12 @@ function phqAssessment(sessionId) {
           if (resumedFromPrevious && completedCount > 0) {
             this.isResuming = true;
             this.resumedFromQuestion = this.currentQuestionIndex + 1;
-            console.log(`PHQ Resume: Resuming from question ${this.currentQuestionIndex + 1} (${completedCount} responses completed)`);
           }
 
           // Populate responses from questions data (questions already include response_value/response_text)
           this.responses = {};
           this.questions.forEach(question => {
-            console.log(`DEBUG JS: Question ${question.question_id} response_value:`, question.response_value);
             if (question.response_value !== null) {
-              console.log(`DEBUG JS: Adding response for question ${question.question_id}`);
               this.responses[question.question_id] = {
                 question_id: question.question_id,
                 question_number: question.question_number,
@@ -172,15 +100,12 @@ function phqAssessment(sessionId) {
               };
             }
           });
-          console.log("DEBUG JS: Final this.responses:", this.responses);
 
           // If assessment can start (no questions generated yet), initialize it
           if (result.data.can_start) {
-            console.log("Initializing new PHQ assessment...");
             // The progress endpoint already creates the assessment record
             // Just need to load current response
           } else if (result.data.can_continue) {
-            console.log("Resuming existing PHQ assessment...");
           }
 
           await this.loadCurrentResponse();
@@ -305,9 +230,7 @@ function phqAssessment(sessionId) {
             timing: this.currentResponse.timing
           }
         );
-        console.log(`PHQ Auto-save SUCCESS: saved response for question ${this.currentQuestion.question_id}`);
       } catch (error) {
-        console.error("PHQ Auto-save FAILED:", error);
       }
 
       if (this.currentQuestionIndex < this.questions.length - 1) {
@@ -383,34 +306,6 @@ function phqAssessment(sessionId) {
       }
     },
 
-    async resetAssessment() {
-      if (
-        confirm(
-          "Apakah Anda yakin ingin mereset assessment ini dan memulai dari awal? Semua jawaban yang belum disimpan akan hilang."
-        )
-      ) {
-        try {
-          const response = await fetch(
-            `/assessment/reset-session-on-refresh/${this.sessionId}`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-            }
-          );
-
-          // Redirect to main menu
-          window.location.href = "/";
-        } catch (error) {
-          alert("Gagal mereset assessment: " + error.message);
-        }
-      }
-    },
   };
 }
 
-// Initialize refresh detection for this session
-function initializePHQRefreshDetection(sessionId) {
-  setupRefreshDetection(sessionId);
-}

@@ -22,13 +22,6 @@ def get_phq_questions(session_id):
     # GET OR CREATE PHQ ASSESSMENT RECORD with questions saved to DB
     phq_assessment_record = PHQResponseService.get_or_create_assessment_record(session_id)
     
-    # DEBUG: Log what we found
-    print(f"DEBUG /start: Session ID: {session_id}")
-    print(f"DEBUG /start: Assessment ID: {phq_assessment_record.id}")
-    print(f"DEBUG /start: Responses count: {len(phq_assessment_record.responses) if phq_assessment_record.responses else 0}")
-    if phq_assessment_record.responses:
-        for q_id, q_data in phq_assessment_record.responses.items():
-            print(f"DEBUG /start: Question {q_id} response_value: {q_data.get('response_value')}")
     
     # Convert responses dict to questions list for frontend
     questions_list = []
@@ -185,10 +178,7 @@ def update_phq_response(session_id, question_id):
         return {"message": "No valid fields to update"}, 400
     
     try:
-        print(f"DEBUG PUT: Session ID: {session_id}")
-        print(f"DEBUG PUT: Updating question {question_id}, updates: {updates}")
         updated_response_record = PHQResponseService.update_response(session_id, question_id, updates)
-        print(f"DEBUG PUT: Updated successfully, assessment ID: {updated_response_record.id}")
         
         # Get the specific response data from the JSON structure
         question_key = str(question_id)

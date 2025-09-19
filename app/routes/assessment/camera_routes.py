@@ -21,15 +21,6 @@ def get_camera_settings(session_id):
     return CameraAssessmentService.get_session_settings(session_id)
 
 
-@camera_assessment_bp.route('/upload-single/<session_id>', methods=['POST'])
-@user_required
-@api_response
-def upload_single_image(session_id):
-    """Upload single image immediately - CLEAN BATCH APPROACH"""
-    if not SessionService.validate_user_session(session_id, current_user.id):
-        return {"message": "Session not found or access denied"}, 403
-    
-    return CameraAssessmentService.process_single_upload(session_id, request)
 
 
 @camera_assessment_bp.route('/create-batch/<assessment_id>', methods=['POST'])
@@ -89,3 +80,29 @@ def get_session_captures(session_id):
         return {"message": "Session not found or access denied"}, 403
     
     return CameraAssessmentService.get_session_captures(session_id)
+
+
+@camera_assessment_bp.route('/progress/<session_id>', methods=['GET'])
+@user_required
+@api_response
+def get_camera_progress(session_id):
+    """Get camera capture progress for resumability - similar to PHQ/LLM progress pattern"""
+    if not SessionService.validate_user_session(session_id, current_user.id):
+        return {"message": "Session not found or access denied"}, 403
+    
+    return CameraAssessmentService.get_camera_progress(session_id)
+
+
+@camera_assessment_bp.route('/upload-with-assessment/<session_id>/<assessment_id>', methods=['POST'])
+@user_required
+@api_response
+def upload_with_assessment_id(session_id, assessment_id):
+    """Upload single image with assessment_id immediately - PUT-style approach"""
+    if not SessionService.validate_user_session(session_id, current_user.id):
+        return {"message": "Session not found or access denied"}, 403
+    
+    # Validate assessment belongs to current user
+    if not CameraAssessmentService.validate_assessment_access(assessment_id, current_user.id):
+        return {"message": "Assessment not found or access denied"}, 403
+    
+    return CameraAssessmentService.process_upload_with_assessment_id(session_id, assessment_id, request)

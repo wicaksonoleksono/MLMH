@@ -17,10 +17,6 @@ import time
 from flask import Response
 
 
-
-# Removed duplicate /start route - using /start-chat instead
-
-
 @llm_assessment_bp.route('/conversation/<session_id>', methods=['GET'])
 @user_required
 @api_response
@@ -228,14 +224,6 @@ def check_conversation_complete(session_id):
         "analysis_available": analysis is not None,
         "analysis_id": analysis.id if analysis else None
     }
-
-
-
-
-
-
-
-
 @llm_assessment_bp.route('/save-conversation/<session_id>', methods=['POST'])
 @user_required
 @api_response
@@ -277,14 +265,11 @@ def save_conversation(session_id):
             "message": f"Failed to save conversation: {str(e)}"
         }, 500
 
-
-
-
 @llm_assessment_bp.route('/start-chat/<session_id>', methods=['POST'])
 @user_required
 @api_response
 def start_chat(session_id):
-    """DEPRECATED: Use /progress endpoint instead. Initialize LLM chat - CREATE EMPTY CONVERSATION RECORD IMMEDIATELY (assessment-first approach)"""
+    """Initialize LLM chat - CREATE EMPTY CONVERSATION RECORD IMMEDIATELY (assessment-first approach)"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
@@ -352,7 +337,7 @@ def chat_stream_new(session_id):
 @user_required
 @api_response
 def finish_chat(session_id):
-    """DEPRECATED: Use /complete endpoint instead. Finish conversation and prepare for completion handler"""
+    """Finish conversation and prepare for completion handler"""
     # Validate session belongs to current user
     session = SessionService.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
@@ -360,10 +345,8 @@ def finish_chat(session_id):
     
     try:
         result = LLMChatService.finish_conversation(session.id)
-        print(f"LLM FINISH RESULT: session={session_id}, result={result}")
         return result
     except Exception as e:
-        print(f"LLM FINISH ERROR: session={session_id}, error={str(e)}")
         return {"status": "error", "message": str(e)}, 500
 
 
@@ -395,63 +378,6 @@ def llm_instructions():
     except Exception as e:
         flash(f'Error loading LLM instructions: {str(e)}', 'error')
         return redirect(url_for('main.serve_index'))
-
-
-
-
-
-
-# @llm_assessment_bp.route('/debug/validate-config', methods=['GET'])
-# @user_required
-# @api_response
-# def validate_llm_config():
-#     """Validate LLM configuration for debugging"""
-#     try:
-#         chat_service = LLMChatService()
-#         settings = chat_service._load_llm_settings()
-        
-#         return {
-#             "status": "success", 
-#             "message": "LLM configuration is valid",
-#             "config": {
-#                 "has_api_key": bool(settings.get('openai_api_key_unmasked')),
-#                 "chat_model": settings.get('chat_model'),
-#                 "analysis_model": settings.get('analysis_model'),
-#                 "aspects_count": len(settings.get('depression_aspects', [])),
-#                 "analysis_scale_configured": bool(settings.get('analysis_scale'))
-#             }
-#         }
-#     except Exception as e:
-#         return {
-#             "status": "error",
-#             "message": str(e),
-#             "error_type": type(e).__name__
-#         }
-
-# @llm_assessment_bp.route('/debug-session/<session_id>', methods=['GET'])
-# @user_required
-# @api_response
-# def debug_session_status(session_id):
-#     """Debug endpoint to check session status"""
-#     # Validate session belongs to current user
-#     session = SessionService.get_session(session_id)
-#     if not session or int(session.user_id) != int(current_user.id):
-#         return {"message": "Session not found or access denied"}, 403
-
-#     return {
-#         "session_id": session.id,
-#         "status": session.status,
-#         "is_first": session.is_first,
-#         "consent_completed": session.consent_completed_at is not None,
-#         "camera_completed": session.camera_completed,
-#         "phq_completed": session.phq_completed_at is not None,
-#         "llm_completed": session.llm_completed_at is not None,
-#         "next_assessment_type": session.next_assessment_type,
-#         "can_start_assessment": session.can_start_assessment,
-#         "session_metadata_keys": list(session.session_metadata.keys()) if session.session_metadata else [],
-#         "assessment_order": session.assessment_order
-#     }
-
 
 # ============================================================================
 # NEW INCREMENTAL AUTO-SAVE ROUTES FOR LLM
@@ -665,24 +591,18 @@ def save_timing_data(session_id):
     # Find the most recent turn that matches this user message or turn number
     existing_turns = LLMConversationService.get_session_conversations(session_id)
     
-    # Debug logging
-    print(f"DEBUG: Looking for turn with user_message: '{user_message[:50]}...'")
-    print(f"DEBUG: Available turns: {[(t.get('turn_number'), t.get('user_message')[:30] if t.get('user_message') else 'None') for t in existing_turns]}")
-    
     target_turn = None
     if turn_number is not None:
         # Use turn_number for more reliable matching
         for turn in existing_turns:
             if turn.get('turn_number') == turn_number:
                 target_turn = turn
-                print(f"DEBUG: Found matching turn {turn_number} by turn_number")
                 break
     else:
         # Fallback to user_message matching for backward compatibility
         for turn in reversed(existing_turns):
             if turn.get('user_message') == user_message:
                 target_turn = turn
-                print(f"DEBUG: Found matching turn {turn.get('turn_number')} by user_message")
                 break
     
     if target_turn:
@@ -692,8 +612,6 @@ def save_timing_data(session_id):
             updates['user_timing'] = user_timing
         if ai_timing:
             updates['ai_timing'] = ai_timing
-            
-        print(f"DEBUG: Updating turn {target_turn.get('turn_number')} with timing: user={bool(user_timing)}, ai={bool(ai_timing)}")
         
         if updates:
             LLMConversationService.update_conversation_turn(
@@ -701,11 +619,8 @@ def save_timing_data(session_id):
                 turn_number=target_turn.get('turn_number'),
                 updates=updates
             )
-            print(f"DEBUG: Successfully updated turn {target_turn.get('turn_number')} with timing data")
             return {"message": "Timing data saved successfully"}
         else:
-            print("DEBUG: No timing updates provided")
             return {"message": "No timing data provided"}, 400
     else:
-        print(f"DEBUG: No matching turn found for user_message: '{user_message[:50]}...' or turn_number: {turn_number}")
         return {"message": f"No matching turn found for message or turn number"}, 404

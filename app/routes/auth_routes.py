@@ -226,6 +226,7 @@ def profile():
 @raw_response
 def verify_email(token):
     """Verify email address using verification token."""
+    # from ..services import Email
     result = EmailVerificationService.verify_email_token(token)
     
     if result["status"] == "success":

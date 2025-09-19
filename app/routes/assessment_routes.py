@@ -43,7 +43,6 @@ def start_assessment():
 
         # Create new session with improved system
         session = SessionService.create_session(current_user.id)
-        print(f"Created new session {session.id}")
         
         flash('Assessment baru berhasil dibuat!', 'success')
         return redirect(url_for('assessment.assessment_dashboard'))
@@ -57,7 +56,6 @@ def start_assessment():
             flash(error_message, 'error')
             return redirect(url_for('main.serve_index'))
     except Exception as e:
-        print(f"Error creating session: {str(e)}")
         flash(str(e), 'error')
         return redirect(url_for('main.serve_index'))
 
@@ -80,25 +78,12 @@ def assessment_dashboard():
 
     session = active_session
     
-    # Check if this is a reset request from refresh
-    reset_session_id = request.args.get('reset_session')
-    if reset_session_id and reset_session_id == str(session.id):
-        try:
-            # Reset the session to new attempt
-            result = SessionService.reset_session_to_new_attempt(session.id, "PAGE_REFRESH")
-            flash("Session berhasil direset. Anda dapat memulai assessment baru.", "success")
-            return redirect(url_for('assessment.assessment_dashboard'))
-        except Exception as e:
-            flash(f"Gagal mereset session: {str(e)}", "error")
-            return redirect(url_for('assessment.assessment_dashboard'))
 
     # Direct redirect logic based on session flow
     if not session.consent_completed_at:
-        print(" No consent - redirecting to consent")
         return redirect(url_for('assessment.consent_page'))
 
     if session.status == 'CONSENT' and not session.camera_completed:
-        print(" No camera check - redirecting to camera")
         return redirect(url_for('assessment.camera_check'))
     
     # Handle CAMERA_CHECK status properly
@@ -119,11 +104,9 @@ def assessment_dashboard():
         else:
             return redirect(url_for('assessment.llm_assessment'))
     if session.status != 'COMPLETED':
-        print(f" Unexpected dashboard state - status: {session.status}")
-
-    return render_template('assessment/dashboard.html',
-                           user=current_user,
-                           session=session)
+        return render_template('assessment/dashboard.html',
+                            user=current_user,
+                            session=session)
 
 
 @assessment_bp.route('/consent')
@@ -528,7 +511,6 @@ def reset_session_to_new_attempt(session_id):
         flash(str(e), 'error')
         return redirect(url_for('main.serve_index'))
     except Exception as e:
-        print(f" Error resetting session: {str(e)}")
         flash(str(e), 'error')
         return redirect(url_for('main.serve_index'))
 
@@ -698,7 +680,6 @@ def upload_camera_captures():
         })
 
     except Exception as e:
-        print(f"Error uploading captures: {str(e)}")
         return jsonify({"status": "SNAFU", "error": str(e)}), 500
 
 
@@ -731,7 +712,6 @@ def serve_camera_capture(filename):
         return send_from_directory(upload_path, filename)
         
     except Exception as e:
-        print(f"Error serving capture: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -825,26 +805,6 @@ def restart_llm_assessment(session_id):
         return redirect(url_for("assessment.assessment_dashboard"))
 
 
-@assessment_bp.route("/reset-session-on-refresh/<session_id>", methods=["POST"])
-@login_required
-def reset_session_on_refresh(session_id):
-    """Reset session when user refreshes the page"""
-    try:
-        # Validate session belongs to current user
-        session = SessionService.get_session(session_id)
-        if not session or int(session.user_id) != int(current_user.id):
-            flash("Session tidak ditemukan atau akses ditolak.", "error")
-            return redirect(url_for("main.serve_index"))
-
-        # Reset the session to new attempt
-        result = SessionService.reset_session_to_new_attempt(session_id, "PAGE_REFRESH")
-        
-        flash("Session berhasil direset. Silakan refresh browser Anda untuk memulai assessment baru.", "success")
-        return redirect(url_for("main.serve_index"))
-        
-    except Exception as e:
-        flash(f"Gagal mereset session: {str(e)}", "error")
-        return redirect(url_for("assessment.assessment_dashboard"))
 
 
 # Token-based auth functions for SSE

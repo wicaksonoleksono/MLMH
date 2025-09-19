@@ -74,114 +74,6 @@ class CameraStorageService:
         
         return filename
 
-    @staticmethod
-    def add_filename_to_session_incrementally(
-        session_id: str,
-        filename: str,
-        trigger: str,
-        assessment_timing: Optional[Dict[str, int]] = None
-    ) -> CameraCapture:
-        """Add filename to existing session capture record JSON array, or create new one"""
-        # print(f"INCREMENTAL DEBUG - Called with session_id: {session_id}, filename: {filename}, trigger: {trigger}")
-        
-        with get_session() as db:
-            # Find existing capture record for this session (without assessment_id yet)
-            capture = db.query(CameraCapture).filter_by(
-                session_id=session_id,
-                assessment_id=None  # Unlinked captures
-            ).first()
-            
-            # print(f"INCREMENTAL DEBUG - Found existing unlinked capture: {capture.id if capture else 'None'}")
-            
-            # Get current timestamp for this specific capture
-            current_time = datetime.now()
-            timestamp_iso = current_time.isoformat()
-            
-            if not capture:
-                # Create new capture record with first filename
-                capture_entry = {
-                    'filename': filename, 
-                    'trigger': trigger, 
-                    'timestamp': timestamp_iso
-                }
-                
-                # Add assessment timing if provided
-                if assessment_timing:
-                    capture_entry['timing'] = assessment_timing
-                
-                capture = CameraCapture(
-                    session_id=session_id,
-                    assessment_id=None,  # Will be linked later
-                    filenames=[filename],  # JSON array with first file
-                    capture_type='UNKNOWN',  # Will be set when linked
-                    capture_metadata={
-                        'triggers': [{'trigger': trigger, 'timestamp': timestamp_iso}],
-                        'capture_count': 1,
-                        'started_at': timestamp_iso,
-                        'last_updated': timestamp_iso,
-                        'capture_history': [capture_entry]
-                    },
-                    created_at=current_time
-                )
-                db.add(capture)
-                # print(f"INCREMENTAL DEBUG - Creating new capture record with filename: {filename} at {timestamp_iso}")
-            else:
-                # Append to existing JSON array with proper timing
-                current_filenames = capture.filenames or []
-                # print(f"INCREMENTAL DEBUG - Current filenames before append: {current_filenames}")
-                current_filenames.append(filename)
-                capture.filenames = current_filenames
-                
-                # Update metadata with proper timestamps
-                current_metadata = capture.capture_metadata or {}
-                
-                # Add trigger with timestamp
-                triggers = current_metadata.get('triggers', [])
-                triggers.append({'trigger': trigger, 'timestamp': timestamp_iso})
-                
-                # Add to capture history
-                capture_history = current_metadata.get('capture_history', [])
-                capture_entry = {
-                    'filename': filename, 
-                    'trigger': trigger, 
-                    'timestamp': timestamp_iso
-                }
-                
-                # Add assessment timing if provided
-                if assessment_timing:
-                    capture_entry['timing'] = assessment_timing
-                    
-                capture_history.append(capture_entry)
-                
-                # Update metadata
-                capture.capture_metadata = {
-                    **current_metadata,
-                    'triggers': triggers,
-                    'capture_count': len(current_filenames),
-                    'last_updated': timestamp_iso,
-                    'capture_history': capture_history,
-                    'total_duration_seconds': (current_time - datetime.fromisoformat(current_metadata.get('started_at', timestamp_iso))).total_seconds()
-                }
-                
-                # Force SQLAlchemy to detect JSON column changes
-                from sqlalchemy.orm.attributes import flag_modified
-                flag_modified(capture, 'filenames')
-                flag_modified(capture, 'capture_metadata')
-                
-                # print(f"INCREMENTAL DEBUG - After append, filenames: {current_filenames}")
-                # print(f"INCREMENTAL DEBUG - Total files now: {len(current_filenames)}")
-                # print(f"INCREMENTAL DEBUG - Updated at: {timestamp_iso}")
-            
-            db.commit()
-            db.refresh(capture)
-            
-            # Final debug check
-            # print(f"INCREMENTAL DEBUG - Final capture record:")
-            # print(f"  ID: {capture.id}")
-            # print(f"  Filenames: {capture.filenames}")
-            # print(f"  Count: {len(capture.filenames) if capture.filenames else 0}")
-            
-            return capture
 
     @staticmethod
     def create_batch_capture_with_assessment_id(
@@ -373,4 +265,89 @@ class CameraStorageService:
                 db.delete(capture)
             db.commit()
             return deleted_count
+
+    @staticmethod
+    def add_filename_with_assessment_id(
+        session_id: str,
+        assessment_id: str,
+        filename: str,
+        trigger: str,
+        assessment_type: str,
+        assessment_timing: Optional[Dict[str, int]] = None
+    ) -> CameraCapture:
+        """Add filename incrementally to assessment-linked capture record - PUT-style with incremental metadata"""
+        
+        with get_session() as db:
+            # Check if we already have a capture record for this assessment
+            capture = db.query(CameraCapture).filter_by(
+                session_id=session_id,
+                assessment_id=assessment_id,
+                capture_type=assessment_type.upper()
+            ).first()
+            
+            # Get current timestamp for this specific capture
+            current_time = datetime.now()
+            timestamp_iso = current_time.isoformat()
+            
+            if not capture:
+                # Create new capture record with assessment_id and first filename
+                capture = CameraCapture(
+                    session_id=session_id,
+                    assessment_id=assessment_id,  # Link to assessment immediately
+                    filenames=[filename],  # Start with first filename
+                    capture_type=assessment_type.upper(),
+                    capture_metadata={
+                        'triggers': [{'trigger': trigger, 'timestamp': timestamp_iso}],
+                        'capture_count': 1,
+                        'started_at': timestamp_iso,
+                        'last_updated': timestamp_iso,
+                        'created_with_assessment': True
+                    },
+                    created_at=current_time
+                )
+                
+                db.add(capture)
+            else:
+                # Incrementally add filename and update metadata
+                filenames_copy = list(capture.filenames)
+                filenames_copy.append(filename)
+                capture.filenames = filenames_copy
+                
+                # Update metadata incrementally
+                current_metadata = capture.capture_metadata or {}
+                
+                # Add trigger with timestamp
+                triggers = current_metadata.get('triggers', [])
+                triggers.append({'trigger': trigger, 'timestamp': timestamp_iso})
+                
+                # Update metadata
+                capture.capture_metadata = {
+                    **current_metadata,
+                    'triggers': triggers,
+                    'capture_count': len(filenames_copy),
+                    'last_updated': timestamp_iso,
+                    'total_duration_seconds': (current_time - datetime.fromisoformat(current_metadata.get('started_at', timestamp_iso))).total_seconds()
+                }
+                
+                # Add timing if provided
+                if assessment_timing:
+                    if 'capture_timings' not in capture.capture_metadata:
+                        capture.capture_metadata['capture_timings'] = []
+                    capture.capture_metadata['capture_timings'].append({
+                        'filename': filename,
+                        'timing': assessment_timing,
+                        'timestamp': timestamp_iso
+                    })
+                
+                # Force SQLAlchemy to detect JSON field changes
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(capture, 'filenames')
+                flag_modified(capture, 'capture_metadata')
+                
+                capture.updated_at = current_time
+            
+            db.commit()
+            db.refresh(capture)
+            
+            return capture
         

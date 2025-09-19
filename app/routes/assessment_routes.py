@@ -2,7 +2,7 @@
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, Response, stream_with_context
 from flask_login import current_user, login_required
 from ..decorators import raw_response, api_response, user_required
-from ..services.sessionService import SessionService
+from ..services.session.sessionManager import SessionManager
 from ..services.session.sessionManager import SessionManager
 from ..services.admin.phqService import PHQService
 from ..services.admin.llmService import LLMService
@@ -29,7 +29,7 @@ def start_assessment():
         
         if recoverable_session:
             # User has incomplete session - auto-reset it (same as "Coba Lagi" button)
-            result = SessionService.reset_session_to_new_attempt(
+            result = SessionManager.reset_session_to_new_attempt(
                 recoverable_session.id, 
                 "AUTO_RESET_ON_START"
             )
@@ -37,12 +37,12 @@ def start_assessment():
             return redirect(url_for('assessment.assessment_dashboard'))
 
         # No incomplete session - create new session
-        if not SessionService.can_create_new_session(current_user.id):
+        if not SessionManager.can_create_new_session(current_user.id):
             flash('Anda sudah mencapai maksimum 2 sesi assessment.', 'error')
             return redirect(url_for('main.serve_index'))
 
         # Create new session with improved system
-        session = SessionService.create_session(current_user.id)
+        session = SessionManager.create_session(current_user.id)
         print(f"Created new session {session.id}")
         
         flash('Assessment baru berhasil dibuat!', 'success')
@@ -68,12 +68,12 @@ def start_assessment():
 def assessment_dashboard():
     """Assessment dashboard with improved session handling"""
     # Check if settings are configured
-    settings_check = SessionService.check_assessment_settings_configured()
+    settings_check = SessionManager.check_assessment_settings_configured()
     if not settings_check['all_configured']:
         return redirect(url_for('main.settings_not_configured'))
 
     # Check for active session
-    active_session = SessionService.get_active_session(current_user.id)
+    active_session = SessionManager.get_active_session(current_user.id)
 
     if not active_session:
         return redirect(url_for('main.serve_index'))
@@ -85,7 +85,7 @@ def assessment_dashboard():
     if reset_session_id and reset_session_id == str(session.id):
         try:
             # Reset the session to new attempt
-            result = SessionService.reset_session_to_new_attempt(session.id, "PAGE_REFRESH")
+            result = SessionManager.reset_session_to_new_attempt(session.id, "PAGE_REFRESH")
             flash("Session berhasil direset. Anda dapat memulai assessment baru.", "success")
             return redirect(url_for('assessment.assessment_dashboard'))
         except Exception as e:
@@ -131,7 +131,7 @@ def assessment_dashboard():
 @raw_response
 def consent_page():
     """Show consent form"""
-    active_session = SessionService.get_active_session(current_user.id)
+    active_session = SessionManager.get_active_session(current_user.id)
 
     if not active_session:
         return redirect(url_for('main.serve_index'))
@@ -182,7 +182,7 @@ def submit_consent():
             "consent_timestamp": data.get('timestamp')
         }
 
-        SessionService.update_consent_data(session_id, consent_data)
+        SessionManager.update_consent_data(session_id, consent_data)
 
         return jsonify({"status": "OLKORECT", "next_step": "camera_check"})
 
@@ -195,7 +195,7 @@ def submit_consent():
 @raw_response
 def camera_check():
     """Camera permission and functionality check"""
-    active_session = SessionService.get_active_session(current_user.id)
+    active_session = SessionManager.get_active_session(current_user.id)
 
     if not active_session or not active_session.consent_completed_at:
         return redirect(url_for('assessment.consent_page'))
@@ -219,7 +219,7 @@ def submit_camera_check():
             return jsonify({"status": "SNAFU", "error": "Kamera harus berfungsi untuk melanjutkan"}), 400
 
         # Update session with camera completion
-        SessionService.complete_camera_check(session_id)
+        SessionManager.complete_camera_check(session_id)
 
         return jsonify({"status": "OLKORECT", "next_step": "assessment"})
 
@@ -230,10 +230,10 @@ def submit_camera_check():
 @raw_response
 def phq_assessment():
     """PHQ Assessment Page"""
-    settings_check = SessionService.check_assessment_settings_configured()
+    settings_check = SessionManager.check_assessment_settings_configured()
     if not settings_check['all_configured']:
         return redirect(url_for('main.settings_not_configured'))
-    active_session = SessionService.get_active_session(current_user.id)
+    active_session = SessionManager.get_active_session(current_user.id)
 
     if not active_session:
         return redirect(url_for('main.serve_index'))
@@ -256,8 +256,8 @@ def phq_assessment():
     # If camera check just completed, transition session status to proper assessment status
     if session.status == 'CAMERA_CHECK' and session.camera_completed:
         if session.is_first == 'phq':
-            SessionService.complete_camera_check(session.id)
-            session = SessionService.get_session(session.id)
+            SessionManager.complete_camera_check(session.id)
+            session = SessionManager.get_session(session.id)
         else:
             # PHQ is not first, redirect to LLM
             return redirect(url_for('assessment.llm_assessment'))
@@ -285,10 +285,10 @@ def phq_assessment():
 @raw_response
 def phq_assessment_start():
     """Actual PHQ Assessment Page - comes AFTER instructions"""
-    settings_check = SessionService.check_assessment_settings_configured()
+    settings_check = SessionManager.check_assessment_settings_configured()
     if not settings_check['all_configured']:
         return redirect(url_for('main.settings_not_configured'))
-    active_session = SessionService.get_active_session(current_user.id)
+    active_session = SessionManager.get_active_session(current_user.id)
 
     if not active_session:
         return redirect(url_for('main.serve_index'))
@@ -311,8 +311,8 @@ def phq_assessment_start():
     # If camera check just completed, transition session status to proper assessment status
     if session.status == 'CAMERA_CHECK' and session.camera_completed:
         if session.is_first == 'phq':
-            SessionService.complete_camera_check(session.id)
-            session = SessionService.get_session(session.id)
+            SessionManager.complete_camera_check(session.id)
+            session = SessionManager.get_session(session.id)
         else:
             # PHQ is not first, redirect to LLM
             return redirect(url_for('assessment.llm_assessment'))
@@ -343,11 +343,11 @@ def llm_assessment():
     """LLM Chat Assessment Page"""
 
     # Check if settings are configured
-    settings_check = SessionService.check_assessment_settings_configured()
+    settings_check = SessionManager.check_assessment_settings_configured()
     if not settings_check['all_configured']:
         return redirect(url_for('main.settings_not_configured'))
 
-    active_session = SessionService.get_active_session(current_user.id)
+    active_session = SessionManager.get_active_session(current_user.id)
 
     if not active_session:
         return redirect(url_for('main.serve_index'))
@@ -365,9 +365,9 @@ def llm_assessment():
     # If camera check just completed, transition session status to proper assessment status
     if session.status == 'CAMERA_CHECK' and session.camera_completed:
         if session.is_first == 'llm':
-            SessionService.complete_camera_check(session.id)
+            SessionManager.complete_camera_check(session.id)
             # Refresh session after status change
-            session = SessionService.get_session(session.id)
+            session = SessionManager.get_session(session.id)
         else:
             # LLM is not first, redirect to PHQ
             return redirect(url_for('assessment.phq_assessment'))
@@ -398,11 +398,11 @@ def llm_assessment_start():
     """Actual LLM Chat Assessment Page - comes AFTER instructions"""
 
     # Check if settings are configured
-    settings_check = SessionService.check_assessment_settings_configured()
+    settings_check = SessionManager.check_assessment_settings_configured()
     if not settings_check['all_configured']:
         return redirect(url_for('main.settings_not_configured'))
 
-    active_session = SessionService.get_active_session(current_user.id)
+    active_session = SessionManager.get_active_session(current_user.id)
 
     if not active_session:
         return redirect(url_for('main.serve_index'))
@@ -420,9 +420,9 @@ def llm_assessment_start():
     # If camera check just completed, transition session status to proper assessment status
     if session.status == 'CAMERA_CHECK' and session.camera_completed:
         if session.is_first == 'llm':
-            SessionService.complete_camera_check(session.id)
+            SessionManager.complete_camera_check(session.id)
             # Refresh session after status change
-            session = SessionService.get_session(session.id)
+            session = SessionManager.get_session(session.id)
         else:
             # LLM is not first, redirect to PHQ
             return redirect(url_for('assessment.phq_assessment'))
@@ -457,18 +457,18 @@ def llm_assessment_start():
 @raw_response
 def complete_assessment(assessment_type, session_id):
     """Universal completion handler for any assessment type"""
-    session = SessionService.get_session(session_id)
+    session = SessionManager.get_session(session_id)
 
     # Complete the specified assessment
     if assessment_type == 'phq':
-        SessionService.complete_phq_assessment(session.id)
+        SessionManager.complete_phq_assessment(session.id)
     elif assessment_type == 'llm':
-        SessionService.complete_llm_assessment(session.id)
+        SessionManager.complete_llm_assessment(session.id)
     else:
         return jsonify({"status": "SNAFU", "error": "Invalid assessment type"}), 400
 
     # Get updated session and flow plan
-    updated_session = SessionService.get_session(session.id)
+    updated_session = SessionManager.get_session(session.id)
     flow_plan = updated_session.assessment_order.get('flow_plan', {}) if updated_session.assessment_order else {}
 
     # Determine next redirect based on pre-planned flow
@@ -508,7 +508,7 @@ def complete_assessment(assessment_type, session_id):
 def reset_session_to_new_attempt(session_id):
     """Reset session to new attempt with version increment (using UUID)"""
     try:
-        session = SessionService.get_session(session_id)
+        session = SessionManager.get_session(session_id)
         if not session:
             flash('Session tidak ditemukan.', 'error')
             return redirect(url_for('main.serve_index'))
@@ -519,7 +519,7 @@ def reset_session_to_new_attempt(session_id):
             return redirect(url_for('main.serve_index'))
         
         reason = request.form.get('reason', 'USER_INITIATED_RESET')
-        result = SessionService.reset_session_to_new_attempt(session.id, reason)
+        result = SessionManager.reset_session_to_new_attempt(session.id, reason)
         
         flash(f'Session berhasil direset. Memulai assessment baru.', 'success')
         return redirect(url_for('assessment.assessment_dashboard'))
@@ -540,7 +540,7 @@ def reset_session_to_new_attempt(session_id):
 def get_user_sessions():
     """Get all sessions for current user with status indicators"""
     try:
-        sessions_with_status = SessionService.get_user_sessions_with_status(current_user.id)
+        sessions_with_status = SessionManager.get_user_sessions_with_status(current_user.id)
 
         # Convert datetime objects to ISO format for JSON serialization
         for session in sessions_with_status:
@@ -636,7 +636,7 @@ def upload_camera_captures():
             return jsonify({"status": "SNAFU", "error": "session_id required"}), 400
 
         # Verify session belongs to current user
-        session = SessionService.get_session(session_id)
+        session = SessionManager.get_session(session_id)
         if not session or int(session.user_id) != int(current_user.id):
             return jsonify({"status": "SNAFU", "error": "Session not found or access denied"}), 403
 
@@ -724,7 +724,7 @@ def serve_camera_capture(filename):
                 return jsonify({"error": "File not found"}), 404
                 
             # Check if user owns this capture's session
-            session = SessionService.get_session(capture.session_id)
+            session = SessionManager.get_session(capture.session_id)
             if not session or int(session.user_id) != int(current_user.id):
                 return jsonify({"error": "Access denied"}), 403
         
@@ -744,7 +744,7 @@ def get_session_camera_captures(session_id):
         from ..services.camera.cameraCaptureService import CameraCaptureService
         
         # Verify session belongs to current user
-        session = SessionService.get_session(session_id)
+        session = SessionManager.get_session(session_id)
         if not session or int(session.user_id) != int(current_user.id):
             return jsonify({"status": "SNAFU", "error": "Session not found or access denied"}), 403
 
@@ -767,7 +767,7 @@ def restart_phq_assessment(session_id):
     """Restart PHQ assessment by clearing previous data"""
     try:
         # Validate session belongs to current user
-        session = SessionService.get_session(session_id)
+        session = SessionManager.get_session(session_id)
         if not session or int(session.user_id) != int(current_user.id):
             flash("Session tidak ditemukan atau akses ditolak.", "error")
             return redirect(url_for("assessment.assessment_dashboard"))
@@ -779,7 +779,7 @@ def restart_phq_assessment(session_id):
         PHQResponseService.clear_session_responses(session_id)
         
         # Reset PHQ completion status
-        SessionService.reset_phq_completion(session_id)
+        SessionManager.reset_phq_completion(session_id)
         
         flash("PHQ assessment berhasil direset. Silakan mulai ulang.", "success")
         return redirect(url_for("main.serve_index"))
@@ -795,7 +795,7 @@ def restart_llm_assessment(session_id):
     """Restart LLM assessment by clearing previous data"""
     try:
         # Validate session belongs to current user
-        session = SessionService.get_session(session_id)
+        session = SessionManager.get_session(session_id)
         if not session or int(session.user_id) != int(current_user.id):
             flash("Session tidak ditemukan atau akses ditolak.", "error")
             return redirect(url_for("assessment.assessment_dashboard"))
@@ -815,7 +815,7 @@ def restart_llm_assessment(session_id):
             del store[str(session_id)]
         
         # Reset LLM completion status
-        SessionService.reset_llm_completion(session_id)
+        SessionManager.reset_llm_completion(session_id)
         
         flash(f"LLM assessment berhasil direset. Silakan mulai ulang.", "success")
         return redirect(url_for("main.serve_index"))
@@ -831,13 +831,13 @@ def reset_session_on_refresh(session_id):
     """Reset session when user refreshes the page"""
     try:
         # Validate session belongs to current user
-        session = SessionService.get_session(session_id)
+        session = SessionManager.get_session(session_id)
         if not session or int(session.user_id) != int(current_user.id):
             flash("Session tidak ditemukan atau akses ditolak.", "error")
             return redirect(url_for("main.serve_index"))
 
         # Reset the session to new attempt
-        result = SessionService.reset_session_to_new_attempt(session_id, "PAGE_REFRESH")
+        result = SessionManager.reset_session_to_new_attempt(session_id, "PAGE_REFRESH")
         
         flash("Session berhasil direset. Silakan refresh browser Anda untuk memulai assessment baru.", "success")
         return redirect(url_for("main.serve_index"))
@@ -889,7 +889,7 @@ def validate_stream_token(token: str, max_age: int = 300) -> tuple[bool, int, st
 @api_response  
 def get_stream_token(session_id):
     """Generate a temporary token for SSE streaming"""
-    session = SessionService.get_session(session_id)
+    session = SessionManager.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
@@ -905,7 +905,7 @@ def get_stream_token(session_id):
 def thank_you():
     """Thank you page after assessment completion - no validation needed"""
     # Get user's most recent session for the summary
-    user_sessions = SessionService.get_user_sessions_with_status(current_user.id)
+    user_sessions = SessionManager.get_user_sessions_with_status(current_user.id)
     last_session = user_sessions[0] if user_sessions else None
     
     # Invalidate the current session in background (token cleanup)
@@ -953,7 +953,7 @@ def stream_sse_optimized():
                 return
             
             # Validate session ownership  
-            session = SessionService.get_session(session_id)
+            session = SessionManager.get_session(session_id)
             if not session or int(session.user_id) != int(validated_user_id):
                 yield sse({'type': 'error', 'message': 'Session access denied'})
                 return

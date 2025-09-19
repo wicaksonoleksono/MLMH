@@ -313,3 +313,350 @@ class SessionManager:
         """Get session by ID"""
         with get_session() as db:
             return db.query(AssessmentSession).filter_by(id=session_id).first()
+
+    @staticmethod
+    def validate_user_session(session_id: str, user_id: int) -> bool:
+        """Validate that session belongs to user"""
+        with get_session() as db:
+            session = db.query(AssessmentSession).filter_by(id=session_id, user_id=user_id).first()
+            return session is not None
+
+    @staticmethod
+    def update_consent_data(session_id: str, consent_data: Dict[str, Any]) -> AssessmentSession:
+        """Update session consent data"""
+        with get_session() as db:
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                raise ValueError("Session not found")
+            session.complete_consent(consent_data)
+            db.commit()
+            return session
+
+    @staticmethod
+    def complete_phq_and_get_next_step(session_id: str) -> Dict[str, Any]:
+        """Complete PHQ assessment and determine next step"""
+        with get_session() as db:
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                raise ValueError("Session not found")
+            
+            session.complete_phq()
+            db.commit()
+            
+            updated_session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            
+            if updated_session.status == 'LLM_IN_PROGRESS':
+                next_redirect = '/assessment/llm'
+                message = "PHQ selesai! Lanjut ke LLM assessment..."
+            elif updated_session.status == 'COMPLETED':
+                next_redirect = '/assessment/thank-you'
+                message = "Semua assessment selesai!"
+            else:
+                next_redirect = '/assessment/'
+                message = "PHQ assessment selesai!"
+            
+            return {
+                "session_id": session_id,
+                "assessment_completed": "phq",
+                "session_status": updated_session.status,
+                "next_redirect": next_redirect,
+                "message": message
+            }
+
+    @staticmethod
+    def complete_llm_and_get_next_step(session_id: str) -> Dict[str, Any]:
+        """Complete LLM assessment and determine next step"""
+        with get_session() as db:
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                raise ValueError("Session not found")
+            
+            session.complete_llm()
+            db.commit()
+            
+            updated_session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            
+            if updated_session.status == 'PHQ_IN_PROGRESS':
+                next_redirect = '/assessment/phq'
+                message = "LLM selesai! Lanjut ke PHQ assessment..."
+            elif updated_session.status == 'COMPLETED':
+                next_redirect = '/assessment/thank-you'
+                message = "Semua assessment selesai!"
+            else:
+                next_redirect = '/assessment/'
+                message = "LLM assessment selesai!"
+            
+            return {
+                "session_id": session_id,
+                "assessment_completed": "llm", 
+                "session_status": updated_session.status,
+                "next_redirect": next_redirect,
+                "message": message
+            }
+
+    @staticmethod
+    def can_create_new_session(user_id: int) -> bool:
+        """Check if user can create a new session (max 2 sessions, smart about incomplete)"""
+        with get_session() as db:
+            active_sessions = db.query(AssessmentSession).filter(
+                AssessmentSession.user_id == user_id,
+                AssessmentSession.status.in_(['CREATED', 'CONSENT', 'CAMERA_CHECK',
+                                             'PHQ_IN_PROGRESS', 'LLM_IN_PROGRESS', 'BOTH_IN_PROGRESS'])
+            ).count()
+            
+            if active_sessions > 0:
+                return False
+            
+            completed_sessions = db.query(AssessmentSession).filter(
+                AssessmentSession.user_id == user_id,
+                AssessmentSession.status == 'COMPLETED'
+            ).count()
+            
+            if completed_sessions >= SessionManager.MAX_SESSIONS_PER_USER:
+                return False
+                
+            total_sessions = db.query(AssessmentSession).filter_by(user_id=user_id).count()
+            return total_sessions < SessionManager.MAX_SESSIONS_PER_USER
+
+    @staticmethod
+    def create_session(user_id: int) -> AssessmentSession:
+        """Alias for create_new_session"""
+        return SessionManager.create_new_session(user_id)
+
+    @staticmethod
+    def get_active_session(user_id: int) -> Optional[AssessmentSession]:
+        """Alias for get_user_active_session"""
+        return SessionManager.get_user_active_session(user_id)
+
+    @staticmethod
+    def complete_camera_check(session_id: str) -> AssessmentSession:
+        """Complete camera check step"""
+        with get_session() as db:
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                raise ValueError("Session not found")
+            session.complete_camera_check()
+            db.commit()
+            return session
+
+    @staticmethod
+    def reset_session_to_new_attempt(session_id: str, reason: str = "MANUAL_RESET") -> Dict[str, Any]:
+        """Reset session to new attempt"""
+        with get_session() as db:
+            from ...model.assessment.sessions import PHQResponse, LLMConversation, CameraCapture
+            
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                raise ValueError("Session not found")
+            
+            # Delete assessment records
+            db.query(PHQResponse).filter_by(session_id=session_id).delete()
+            db.query(LLMConversation).filter_by(session_id=session_id).delete()
+            db.query(CameraCapture).filter_by(session_id=session_id).delete()
+            
+            # Reset session
+            session.reset_to_new_attempt(reason)
+            db.commit()
+            
+            return {
+                "session_id": session_id,
+                "status": "reset",
+                "message": f"Session reset: {reason}"
+            }
+
+    @staticmethod
+    def delete_session(session_id: str) -> Dict[str, Any]:
+        """Delete session with cascading cleanup of all related data"""
+        with get_session() as db:
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                raise ValueError("Session not found")
+            
+            # Get counts for reporting BEFORE deletion using explicit queries
+            from ...model.assessment.sessions import PHQResponse, LLMConversation, CameraCapture
+            phq_count = db.query(PHQResponse).filter_by(session_id=session_id).count()
+            llm_count = db.query(LLMConversation).filter_by(session_id=session_id).count()
+            camera_count = db.query(CameraCapture).filter_by(session_id=session_id).count()
+            
+            # Clean up camera capture files first
+            from ...services.camera.cameraStorageService import CameraStorageService
+            CameraStorageService.cleanup_session_captures(session_id)
+            
+            # Database cascading delete will handle all related records
+            db.delete(session)
+            db.commit()
+            
+            return {
+                "success": True,
+                "session_id": session_id,
+                "user_id": session.user_id,
+                "session_number": getattr(session, 'session_number', 'N/A'),
+                "deleted_counts": {
+                    "phq_responses": phq_count,
+                    "llm_conversations": llm_count,
+                    "camera_captures": camera_count
+                },
+                "message": f"Session {getattr(session, 'session_number', session_id)} for user {session.user_id} deleted successfully"
+            }
+
+    @staticmethod
+    def is_session_valid(session: AssessmentSession) -> bool:
+        """Check if session is valid (completed successfully)"""
+        return session.status == 'COMPLETED' and session.is_completed
+    
+    @staticmethod
+    def get_valid_user_sessions(user_id: int) -> list[AssessmentSession]:
+        """Get only valid (completed) sessions for user"""
+        with get_session() as db:
+            from sqlalchemy import desc
+            return db.query(AssessmentSession).filter(
+                AssessmentSession.user_id == user_id,
+                AssessmentSession.status == 'COMPLETED',
+                AssessmentSession.is_completed == True
+            ).order_by(desc(AssessmentSession.created_at)).all()
+    
+    @staticmethod
+    def get_user_session_count(user_id: int) -> int:
+        """Get total number of sessions for a user"""
+        with get_session() as db:
+            return db.query(AssessmentSession).filter_by(user_id=user_id).count()
+    
+    @staticmethod
+    def get_user_sessions(user_id: int) -> list[AssessmentSession]:
+        """Get all sessions for user"""
+        with get_session() as db:
+            from sqlalchemy import desc
+            return db.query(AssessmentSession).filter_by(user_id=user_id).order_by(desc(AssessmentSession.created_at)).all()
+    
+    @staticmethod
+    def get_user_sessions_with_status(user_id: int) -> list[dict]:
+        """Get user sessions with human-readable status indicators"""
+        with get_session() as db:
+            from sqlalchemy import desc
+            sessions = db.query(AssessmentSession).filter_by(user_id=user_id).order_by(desc(AssessmentSession.created_at)).all()
+            
+            result = []
+            for session in sessions:
+                # Simplified status display - only "Berhasil" or "Gagal" for users
+                if session.status == 'COMPLETED':
+                    status_indicator = ''
+                    status_text = 'Berhasil'
+                    status_class = 'success'
+                else:
+                    # All other statuses show as "Gagal" for users
+                    status_indicator = ''
+                    status_text = 'Gagal'
+                    status_class = 'failed'
+                
+                # Determine what's completed
+                completed_assessments = []
+                if session.phq_completed_at:
+                    completed_assessments.append('PHQ')
+                if session.llm_completed_at:
+                    completed_assessments.append('LLM')
+                
+                result.append({
+                    'id': session.id,  # UUID serves as both ID and secure token
+                    'status': session.status,
+                    'status_indicator': status_indicator,
+                    'status_text': status_text,
+                    'status_class': status_class,
+                    'completion_percentage': session.completion_percentage,
+                    'completed_assessments': completed_assessments,
+                    'failure_reason': session.failure_reason,
+                    'is_first': session.is_first,
+                    'created_at': session.created_at,
+                    'completed_at': session.end_time,
+                    'duration_minutes': session.duration_seconds // 60 if session.duration_seconds else None,
+                    'consent_completed': session.consent_completed_at is not None,
+                    'phq_completed': session.phq_completed_at is not None,
+                    'llm_completed': session.llm_completed_at is not None,
+                    # Session versioning fields
+                    'session_number': getattr(session, 'session_number', 1),
+                    'session_display_name': getattr(session, 'session_display_name', f'Sesi #{session.id}'),
+                    'session_attempt': session.session_attempt,
+                    'reset_count': session.reset_count,
+                    'can_reset': session.can_reset_to_new_attempt() if hasattr(session, 'can_reset_to_new_attempt') else False
+                })
+            
+            return result
+    
+    @staticmethod
+    def complete_phq_assessment(session_id: str) -> AssessmentSession:
+        """Mark PHQ assessment as completed"""
+        with get_session() as db:
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                raise ValueError("Session not found")
+            
+            session.complete_phq()
+            db.commit()
+            return session
+    
+    @staticmethod
+    def complete_llm_assessment(session_id: str) -> AssessmentSession:
+        """Mark LLM assessment as completed"""
+        with get_session() as db:
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                raise ValueError("Session not found")
+            
+            session.complete_llm()
+            db.commit()
+            return session
+    
+    @staticmethod
+    def get_all_sessions(page: int = 1, per_page: int = 20) -> Dict[str, Any]:
+        """Get all sessions with pagination (admin)"""
+        with get_session() as db:
+            from sqlalchemy import desc, func
+            sessions = db.query(AssessmentSession).order_by(desc(AssessmentSession.created_at)).offset((page-1)*per_page).limit(per_page).all()
+            total = db.query(func.count(AssessmentSession.id)).scalar()
+            return {'sessions': sessions, 'total': total, 'page': page, 'per_page': per_page}
+    
+    @staticmethod
+    def get_sessions_by_status(status: str, page: int = 1, per_page: int = 20) -> Dict[str, Any]:
+        """Get sessions by status (admin)"""
+        with get_session() as db:
+            from sqlalchemy import desc, func
+            sessions = db.query(AssessmentSession).filter_by(status=status).order_by(desc(AssessmentSession.created_at)).offset((page-1)*per_page).limit(per_page).all()
+            total = db.query(func.count(AssessmentSession.id)).filter_by(status=status).scalar()
+            return {'sessions': sessions, 'total': total, 'page': page, 'per_page': per_page}
+
+    @staticmethod
+    def reset_phq_completion(session_id: str) -> bool:
+        """Reset PHQ completion status - used for restart functionality"""
+        with get_session() as db:
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                return False
+            
+            session.phq_completed_at = None
+            
+            # Update session status based on what's still completed
+            if session.llm_completed_at:
+                session.status = 'PHQ_IN_PROGRESS'
+            else:
+                session.status = 'BOTH_IN_PROGRESS'
+                
+            db.commit()
+            return True
+
+    @staticmethod
+    def reset_llm_completion(session_id: str) -> bool:
+        """Reset LLM completion status - used for restart functionality"""
+        with get_session() as db:
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                return False
+            
+            session.llm_completed_at = None
+            
+            # Update session status based on what's still completed
+            if session.phq_completed_at:
+                session.status = 'LLM_IN_PROGRESS'
+            else:
+                session.status = 'BOTH_IN_PROGRESS'
+                
+            db.commit()
+            return True

@@ -3,7 +3,7 @@ from flask import Blueprint, request, jsonify, send_file
 from flask_login import login_required, current_user
 from ...decorators import admin_required, raw_response, api_response
 from ...services.admin.exportService import ExportService
-from ...services.sessionService import SessionService
+from ...services.session.sessionManager import SessionManager
 
 export_bp = Blueprint('export', __name__, url_prefix='/admin/export')
 
@@ -85,7 +85,7 @@ def export_all_sessions():
 def delete_session(session_id):
     """Delete a session with all related data"""
     try:
-        result = SessionService.delete_session(session_id)
+        result = SessionManager.delete_session(session_id)
         return result, 200
     except ValueError as e:
         return {"success": False, "message": str(e)}, 404

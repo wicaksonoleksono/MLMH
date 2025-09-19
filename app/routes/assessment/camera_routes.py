@@ -2,7 +2,7 @@
 from flask import Blueprint, request
 from flask_login import current_user
 from ...decorators import api_response, user_required
-from ...services.sessionService import SessionService
+from ...services.session.sessionManager import SessionManager
 from ...services.assessment.cameraAssessmentService import CameraAssessmentService
 from ...db import get_session
 from ...model.assessment.sessions import CameraCapture
@@ -15,7 +15,7 @@ camera_assessment_bp = Blueprint('camera_assessment', __name__, url_prefix='/ass
 @api_response
 def get_camera_settings(session_id):
     """Get camera settings for assessment session - clean SOC"""
-    if not SessionService.validate_user_session(session_id, current_user.id):
+    if not SessionManager.validate_user_session(session_id, current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     return CameraAssessmentService.get_session_settings(session_id)
@@ -26,7 +26,7 @@ def get_camera_settings(session_id):
 @api_response
 def upload_single_image(session_id):
     """Upload single image immediately - CLEAN BATCH APPROACH"""
-    if not SessionService.validate_user_session(session_id, current_user.id):
+    if not SessionManager.validate_user_session(session_id, current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     return CameraAssessmentService.process_single_upload(session_id, request)
@@ -64,7 +64,7 @@ def create_batch_capture(assessment_id):
 @api_response
 def link_captures_to_assessment(session_id):
     """Link existing camera captures to assessment - INCREMENTAL APPROACH"""
-    if not SessionService.validate_user_session(session_id, current_user.id):
+    if not SessionManager.validate_user_session(session_id, current_user.id):
         return {"message": "Session not found or access denied"}, 403
     data = request.get_json()
     assessment_id = data.get('assessment_id')
@@ -80,12 +80,13 @@ def link_captures_to_assessment(session_id):
     )
 
 
+
 @camera_assessment_bp.route('/captures/<session_id>', methods=['GET'])
 @user_required
 @api_response
 def get_session_captures(session_id):
     """Get all camera captures for a session - clean SOC"""
-    if not SessionService.validate_user_session(session_id, current_user.id):
+    if not SessionManager.validate_user_session(session_id, current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
     return CameraAssessmentService.get_session_captures(session_id)

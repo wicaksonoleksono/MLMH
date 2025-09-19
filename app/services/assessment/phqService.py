@@ -74,12 +74,16 @@ class PHQResponseService:
 
     @staticmethod
     def get_session_questions(session_id: str) -> List[Dict[str, Any]]:
-        """Get randomized PHQ questions per category for a session"""
+        """Get consistent PHQ questions per session (cached in session metadata)"""
         with get_session() as db:
             # Get session and PHQ settings
             session = db.query(AssessmentSession).filter_by(id=session_id).first()
             if not session:
                 raise ValueError(f"Session {session_id} not found")
+
+            # Check if questions already generated and cached
+            if session.session_metadata and 'phq_questions' in session.session_metadata:
+                return session.session_metadata['phq_questions']
 
             phq_settings = session.phq_settings
             if not phq_settings:
@@ -146,6 +150,17 @@ class PHQResponseService:
                     "scale_labels": scale_labels,
                     "instructions": phq_settings.instructions
                 })
+
+            # Cache questions in session metadata for consistency
+            if not session.session_metadata:
+                session.session_metadata = {}
+            session.session_metadata['phq_questions'] = selected_questions
+            session.session_metadata['phq_questions_generated_at'] = datetime.now().isoformat()
+            
+            # Force SQLAlchemy to detect JSON column changes
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(session, 'session_metadata')
+            db.commit()
 
             return selected_questions
 

@@ -1,7 +1,7 @@
 from flask import Blueprint, request, render_template, redirect, url_for
 from flask_login import current_user, login_required
 from ..decorators import raw_response
-from ..services.sessionService import SessionService
+from ..services.session.sessionManager import SessionManager
 from ..services.admin.statsService import StatsService
 
 main_bp = Blueprint('main', __name__)
@@ -29,7 +29,7 @@ def auth_page():
 @raw_response
 def settings_not_configured():
     """Error page for missing assessment settings"""
-    settings_check = SessionService.check_assessment_settings_configured()
+    settings_check = SessionManager.check_assessment_settings_configured()
     return render_template('error/settings_not_configured.html', 
                          missing_settings=settings_check['missing_settings'])
 

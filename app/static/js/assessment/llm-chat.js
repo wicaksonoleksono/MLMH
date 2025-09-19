@@ -77,9 +77,9 @@ function chatInterface(sessionId) {
           cameraSettings
         );
         await this.cameraManager.initialize();
-        
+
         // Give camera extra time to be fully ready before any captures
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       } catch (error) {
         console.error("LLM Camera initialization failed:", error);
         // Camera initialization failed - continue without camera
@@ -432,16 +432,10 @@ function chatInterface(sessionId) {
 
         clearTimeout(timeoutId); // Clear timeout on success
         const result = await response.json();
-
-        // Handle API response wrapper
         const actualResult =
           result.status === "OLKORECT" ? result.data : result;
-
         if (result.status === "OLKORECT" && actualResult.next_redirect) {
           this.markAsCompleted();
-
-          // Camera captures are automatically linked by backend - no frontend action needed
-
           window.location.href = actualResult.next_redirect;
         } else {
           alert(
@@ -511,35 +505,6 @@ function chatInterface(sessionId) {
       }
     },
 
-    async linkCameraToConversations(capture_id, conversation_ids) {
-      try {
-        // Link camera batch to first conversation record
-        if (conversation_ids.length > 0) {
-          const linkData = {
-            assessment_id: conversation_ids[0],
-            assessment_type: "LLM",
-          };
-
-          const response = await fetch(
-            `/assessment/camera/link-batch/${capture_id}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(linkData),
-            }
-          );
-
-          const result = await response.json();
-          if (result.status === "OLKORECT") {
-          } else {
-            console.error("Failed to link camera batch:", result);
-          }
-        }
-      } catch (error) {
-        console.error("Error linking camera to conversations:", error);
-      }
-    },
-
     async resetAssessment() {
       if (
         confirm(
@@ -556,8 +521,6 @@ function chatInterface(sessionId) {
               },
             }
           );
-
-          // Redirect to main menu
           window.location.href = "/";
         } catch (error) {
           alert("Gagal mereset assessment: " + error.message);

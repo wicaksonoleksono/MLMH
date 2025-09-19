@@ -112,15 +112,15 @@ class CameraAssessmentService:
             # Check PHQ assessment
             phq_record = db.query(PHQResponse).filter_by(id=assessment_id).first()
             if phq_record:
-                from ..sessionService import SessionService
-                session = SessionService.get_session(phq_record.session_id)
+                from ..session.sessionManager import SessionManager
+                session = SessionManager.get_session(phq_record.session_id)
                 return session and str(session.user_id) == str(user_id)
             
             # Check LLM assessment
             llm_record = db.query(LLMConversation).filter_by(id=assessment_id).first()
             if llm_record:
-                from ..sessionService import SessionService
-                session = SessionService.get_session(llm_record.session_id)
+                from ..session.sessionManager import SessionManager
+                session = SessionManager.get_session(llm_record.session_id)
                 return session and str(session.user_id) == str(user_id)
                 
             return False
@@ -260,9 +260,9 @@ class CameraAssessmentService:
             with get_session() as db:
                 # Get the latest assessment record for this session and type
                 if assessment_type == 'PHQ':
-                    assessment_record = db.query(PHQResponse).filter_by(session_id=session_id).first()
+                    assessment_record = db.query(PHQResponse).filter_by(session_id=session_id).order_by(PHQResponse.created_at.desc()).first()
                 elif assessment_type == 'LLM':
-                    assessment_record = db.query(LLMConversation).filter_by(session_id=session_id).first()
+                    assessment_record = db.query(LLMConversation).filter_by(session_id=session_id).order_by(LLMConversation.created_at.desc()).first()
                 else:
                     return {"status": "SNAFU", "error": f"Invalid assessment type: {assessment_type}"}
                 

@@ -5,7 +5,7 @@ from ...decorators import api_response, user_required
 # Removed deprecated service imports - using LLMChatService directly
 from ...services.llm.chatService import LLMChatService
 from ...services.assessment.llmService import LLMConversationService
-from ...services.sessionService import SessionService
+from ...services.session.sessionManager import SessionManager
 from ...services.admin.llmService import LLMService
 from datetime import datetime
 
@@ -26,7 +26,7 @@ from flask import Response
 def get_conversation_history(session_id):
     """Get conversation history for a session"""
     # Validate session belongs to current user
-    session = SessionService.get_session(session_id)
+    session = SessionManager.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
 
@@ -62,7 +62,7 @@ def get_conversation_turn(turn_id):
         return {"message": "Conversation turn not found"}, 404
 
     # Validate session belongs to current user
-    session = SessionService.get_session(turn.session_id)
+    session = SessionManager.get_session(turn.session_id)
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Access denied"}, 403
 
@@ -87,7 +87,7 @@ def get_conversation_turn(turn_id):
 def update_conversation_turn(session_id, turn_number):
     """Update a conversation turn"""
     # Validate session belongs to current user
-    session = SessionService.get_session(session_id)
+    session = SessionManager.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Access denied"}, 403
 
@@ -138,7 +138,7 @@ def update_conversation_turn(session_id, turn_number):
 @api_response
 def delete_conversation_turn(session_id, turn_number):
     """Delete a conversation turn"""
-    session = SessionService.get_session(session_id)
+    session = SessionManager.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Access denied"}, 403
     try:
@@ -152,7 +152,7 @@ def delete_conversation_turn(session_id, turn_number):
 @api_response
 def get_conversation_status_route(session_id):
     """Get conversation status for a session"""
-    session = SessionService.get_session(session_id)
+    session = SessionManager.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     status = {
@@ -184,7 +184,7 @@ def get_conversation_status_route(session_id):
 def cleanup_session_route(session_id):
     """Cleanup session resources"""
     # Validate session belongs to current user
-    session = SessionService.get_session(session_id)
+    session = SessionManager.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
 
@@ -199,7 +199,7 @@ def cleanup_session_route(session_id):
 def force_refresh_settings_route(session_id):
     """Force refresh LLM settings for a session"""
     # Validate session belongs to current user
-    session = SessionService.get_session(session_id)
+    session = SessionManager.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
 
@@ -214,7 +214,7 @@ def force_refresh_settings_route(session_id):
 def check_conversation_complete(session_id):
     """Check if conversation has ended"""
     # Validate session belongs to current user
-    session = SessionService.get_session(session_id)
+    session = SessionManager.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
 
@@ -241,7 +241,7 @@ def check_conversation_complete(session_id):
 def save_conversation(session_id):
     """Save conversation to database (matches reference pattern)"""
     # Validate session belongs to current user
-    session = SessionService.get_session(session_id)
+    session = SessionManager.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
 
@@ -285,7 +285,7 @@ def save_conversation(session_id):
 def start_chat(session_id):
     """Initialize LLM chat - CREATE EMPTY CONVERSATION RECORD IMMEDIATELY (assessment-first approach)"""
     # Validate session belongs to current user
-    session = SessionService.get_session(session_id)
+    session = SessionManager.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
@@ -310,7 +310,7 @@ def start_chat(session_id):
 def chat_stream_new(session_id):
     """SSE streaming endpoint for real-time chat"""
     # Validate session belongs to current user
-    session = SessionService.get_session(session_id)
+    session = SessionManager.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
         return Response("data: " + json.dumps({'type': 'error', 'message': 'Session not found or access denied'}, ensure_ascii=False) + "\n\n",
                        mimetype='text/event-stream'), 403
@@ -353,7 +353,7 @@ def chat_stream_new(session_id):
 def finish_chat(session_id):
     """Finish conversation and prepare for completion handler"""
     # Validate session belongs to current user
-    session = SessionService.get_session(session_id)
+    session = SessionManager.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
@@ -433,7 +433,7 @@ def llm_instructions():
 # def debug_session_status(session_id):
 #     """Debug endpoint to check session status"""
 #     # Validate session belongs to current user
-#     session = SessionService.get_session(session_id)
+#     session = SessionManager.get_session(session_id)
 #     if not session or int(session.user_id) != int(current_user.id):
 #         return {"message": "Session not found or access denied"}, 403
 
@@ -458,7 +458,7 @@ def llm_instructions():
 def save_timing_data(session_id):
     """Save timing data for user and AI messages"""
     # Validate session belongs to current user
-    session = SessionService.get_session(session_id)
+    session = SessionManager.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Access denied"}, 403
         

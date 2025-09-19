@@ -1,7 +1,7 @@
 # app/services/llm/chatService.py
 from typing import Generator, Dict, Any, List
 from datetime import datetime
-from ...services.sessionService import SessionService
+from ...services.session.sessionManager import SessionManager
 from ...services.admin.llmService import LLMService
 from ...services.assessment.llmService import LLMConversationService
 from ...model.assessment.sessions import AssessmentSession
@@ -121,7 +121,7 @@ class LLMChatService:
         try:
             settings = self._load_llm_settings()
             self._init_langchain(settings)
-            session = SessionService.get_session(session_id)
+            session = SessionManager.get_session(session_id)
             if not session:
                 raise ValueError(f"Session {session_id} not found")
             
@@ -199,8 +199,8 @@ class LLMChatService:
             
             # Automatically complete the LLM assessment when conversation ends
             try:
-                from ...services.sessionService import SessionService
-                SessionService.complete_llm_assessment(session_id)
+                from ...services.session.sessionManager import SessionManager
+                SessionManager.complete_llm_assessment(session_id)
             except Exception as e:
                 # Log the error but don't fail the conversation save
                 print(f"Warning: Failed to auto-complete LLM assessment for session {session_id}: {e}")
@@ -283,7 +283,7 @@ class LLMChatService:
                 except Exception as e:
                     print(f"LLM camera auto-linking failed: {e}")
             
-            completion_result = SessionService.complete_llm_and_get_next_step(session_id)
+            completion_result = SessionManager.complete_llm_and_get_next_step(session_id)
             return {
                 'status': 'success',
                 'conversation_completed': True,

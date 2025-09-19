@@ -120,12 +120,7 @@ def create_app():
     app.register_blueprint(main_bp)
     register_commands(app)
     
-    # Add explicit static file serving for production
-    if os.path.exists('/var/www/MLMH'):
-        @app.route('/static/<path:filename>')
-        def static_files(filename):
-            from flask import send_from_directory
-            return send_from_directory('/var/www/MLMH/app/static', filename)
+    # Static files handled by nginx in production
     
     # Initialize APScheduler for background tasks
     from .services.schedulerService import init_scheduler

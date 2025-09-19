@@ -9,38 +9,19 @@ from ...db import get_session
 
 # Langchain imports for enhanced chat management
 from langchain_core.chat_history import BaseChatMessageHistory
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import ConfigurableFieldSpec
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI
 from langchain_openai.chat_models.base import ChatOpenAI
-from typing import List
 
-
-class InMemoryHistory(BaseChatMessageHistory):
-    """In memory implementation of chat message history."""
-    
-    def __init__(self):
-        self.messages: List[BaseMessage] = []
-
-    def add_messages(self, messages: List[BaseMessage]) -> None:
-        """Add a list of messages to the store"""
-        self.messages.extend(messages)
-
-    def clear(self) -> None:
-        self.messages = []
-
-
-# Global store for chat message history (cleared after conversation ends)
-store = {}
+# PostgreSQL-based history implementation (replaces in-memory store)
+from .postgreSQLHistory import get_postgresql_history_by_session_id
 
 
 def get_by_session_id(session_id: str) -> BaseChatMessageHistory:
-    """Get chat history by session ID"""
-    if session_id not in store:
-        store[session_id] = InMemoryHistory()
-    return store[session_id]
+    """Get PostgreSQL-based chat history by session ID - no memory storage"""
+    return get_postgresql_history_by_session_id(session_id)
 
 
 class LLMChatService:
@@ -192,11 +173,6 @@ class LLMChatService:
         # More robust end conversation detection
         normalized_response = ai_response.lower().strip()
         if "</end_conversation>" in normalized_response or "<end_conversation>" in normalized_response or "\\u003c/end_conversation\\u003e" in normalized_response:
-            history = get_by_session_id(str(session_id))
-            history.clear()
-            if session_id in store:
-                del store[str(session_id)]
-            
             # Automatically complete the LLM assessment when conversation ends
             try:
                 from ...services.session.sessionManager import SessionManager

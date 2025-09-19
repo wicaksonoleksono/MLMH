@@ -305,6 +305,15 @@ class SessionManager:
                 raise ValueError("Session not found")
 
             session.mark_abandoned(reason or "User abandoned session")
+            
+            # Clean up LLM conversation memory store if exists
+            try:
+                from ..llm.chatService import store
+                if str(session_id) in store:
+                    del store[str(session_id)]
+            except Exception as e:
+                print(f"Warning: Failed to cleanup LLM store during abandon: {e}")
+            
             db.commit()
             return session
 

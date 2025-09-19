@@ -151,9 +151,23 @@ class CameraManager {
       const video = this.videoElement;
       const canvas = this.canvasElement;
 
-      // Use actual video dimensions
-      canvas.width = video.videoWidth || video.width || 640;
-      canvas.height = video.videoHeight || video.height || 480;
+      // Priority: Admin settings -> Hardcoded fallback -> Native video dimensions
+      let canvasWidth = 640;
+      let canvasHeight = 480;
+      
+      // First try admin settings
+      if (this.cameraSettings.resolution) {
+        const [width, height] = this.cameraSettings.resolution.split("x").map(Number);
+        canvasWidth = width;
+        canvasHeight = height;
+      } else {
+        // Fallback to native video dimensions if available
+        canvasWidth = video.videoWidth || video.width || 640;
+        canvasHeight = video.videoHeight || video.height || 480;
+      }
+      
+      canvas.width = canvasWidth;
+      canvas.height = canvasHeight;
 
       const ctx = canvas.getContext("2d");
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);

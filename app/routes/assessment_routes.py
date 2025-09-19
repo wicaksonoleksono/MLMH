@@ -7,6 +7,7 @@ from ..services.session.sessionManager import SessionManager
 from ..services.admin.phqService import PHQService
 from ..services.admin.llmService import LLMService
 from ..services.llm.chatService import LLMChatService
+from asgiref.sync import sync_to_async
 import json
 import time
 import hashlib
@@ -14,6 +15,20 @@ import hmac
 import logging
 
 assessment_bp = Blueprint('assessment', __name__, url_prefix='/assessment')
+
+# Async wrappers for heavy I/O operations to prevent blocking with 60+ users
+@sync_to_async
+def _save_camera_capture_sync(session_id, file_data, capture_trigger, assessment_id, capture_type, camera_settings_snapshot):
+    """Async wrapper for camera capture saving - runs in thread pool"""
+    from ..services.camera.cameraCaptureService import CameraCaptureService
+    return CameraCaptureService.save_capture(
+        session_id=session_id,
+        file_data=file_data,
+        capture_trigger=capture_trigger,
+        assessment_id=assessment_id,
+        capture_type=capture_type,
+        camera_settings_snapshot=camera_settings_snapshot
+    )
 
 
 @assessment_bp.route('/start', methods=['POST'])
@@ -625,7 +640,7 @@ def abandon_session(session_id):
 @assessment_bp.route('/camera/upload', methods=['POST'])
 @login_required
 @raw_response
-def upload_camera_captures():
+async def upload_camera_captures():
     """Upload camera captures via AJAX"""
     try:
         from ..services.camera.cameraCaptureService import CameraCaptureService
@@ -673,9 +688,9 @@ def upload_camera_captures():
                     if camera_settings and not CameraCaptureService.should_capture_on_trigger(camera_settings, trigger):
                         continue  # Skip this capture
                     
-                    # Save capture
+                    # Save capture (async to prevent blocking other users)
                     file_data = file.read()
-                    capture = CameraCaptureService.save_capture(
+                    capture = await _save_camera_capture_sync(
                         session_id=session_id,
                         file_data=file_data,
                         capture_trigger=trigger,

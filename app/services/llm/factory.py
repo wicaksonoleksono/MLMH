@@ -143,7 +143,7 @@ class LLMFactory:
     def create_custom_llm(
         api_key: str,
         model: str,
-        temperature: float = 0,
+        temperature: float = 0.1,
         streaming: bool = False,
         **kwargs
     ) -> ChatOpenAI:

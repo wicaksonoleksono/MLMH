@@ -1,9 +1,7 @@
 // app/static/js/assessment/llm-chat.js
 // Exact copy of LLM chat JavaScript from template
 
-// Global timer variables need to be declared outside the function
-let timerInterval;
-let conversationTimer = 0;
+// Timer variables moved inside chatInterface to prevent global leaks
 
 function chatInterface(sessionId) {
   return {
@@ -25,6 +23,13 @@ function chatInterface(sessionId) {
     // Assessment timing variables
     assessmentStartTime: null,
     currentMessageStartTime: null,
+
+    // Timer variables (per instance to prevent memory leaks)
+    timerInterval: null,
+    conversationTimer: 0,
+
+    // EventSource tracking to prevent connection leaks
+    currentEventSource: null,
 
     // Initialization guard
     isInitialized: false,
@@ -91,6 +96,11 @@ function chatInterface(sessionId) {
       let assessmentCompleted = false;
       window.addEventListener("beforeunload", () => {
         if (!assessmentCompleted && !this.conversationEnded) {
+          // Close any active EventSource connections to prevent server-side leaks
+          if (this.currentEventSource) {
+            this.currentEventSource.close();
+            this.currentEventSource = null;
+          }
           // Use sendBeacon for reliable tracking when page unloads
           navigator.sendBeacon(
             `/assessment/abandon/${this.sessionId}`,
@@ -102,6 +112,11 @@ function chatInterface(sessionId) {
       // Track when user navigates away
       window.addEventListener("pagehide", () => {
         if (!assessmentCompleted && !this.conversationEnded) {
+          // Close any active EventSource connections to prevent server-side leaks
+          if (this.currentEventSource) {
+            this.currentEventSource.close();
+            this.currentEventSource = null;
+          }
           fetch(`/assessment/abandon/${this.sessionId}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -120,6 +135,8 @@ function chatInterface(sessionId) {
         if (this.cameraManager) {
           this.cameraManager.cleanup();
         }
+        // Clean up timer to prevent memory leaks
+        this.stopConversationTimer();
       };
     },
 
@@ -263,6 +280,7 @@ function chatInterface(sessionId) {
 
         const streamUrl = `/assessment/stream/?${params}`;
         const eventSource = new EventSource(streamUrl);
+        this.currentEventSource = eventSource; // Track for cleanup
 
         // Get reference to the bot message we just added
         const botMessage = this.messages[this.messages.length - 1];
@@ -275,6 +293,7 @@ function chatInterface(sessionId) {
           botMessage.streaming = false;
           this.isTyping = false;
           eventSource.close();
+          this.currentEventSource = null; // Clear reference
         }, 30000);
 
         eventSource.onmessage = (event) => {
@@ -311,6 +330,8 @@ function chatInterface(sessionId) {
                 aiEndTime
               );
               eventSource.close();
+          this.currentEventSource = null; // Clear reference
+              this.currentEventSource = null; // Clear reference
               this.isTyping = false;
               botMessage.streaming = false;
               this.finishConversation();
@@ -324,6 +345,8 @@ function chatInterface(sessionId) {
             this.isTyping = false;
             this.exchangeCount++;
             eventSource.close();
+          this.currentEventSource = null; // Clear reference
+            this.currentEventSource = null; // Clear reference
 
             // Send AI timing to backend
             this.sendAiTiming(userMessage, userTiming, aiStartTime, aiEndTime);
@@ -339,6 +362,7 @@ function chatInterface(sessionId) {
             botMessage.streaming = false;
             this.isTyping = false;
             eventSource.close();
+          this.currentEventSource = null; // Clear reference
           } else if (data.type === "stream_start") {
             // Stream started - record AI start time
             if (aiStartTime === null) {
@@ -357,6 +381,7 @@ function chatInterface(sessionId) {
           botMessage.streaming = false;
           this.isTyping = false;
           eventSource.close();
+          this.currentEventSource = null; // Clear reference
         };
       } catch (error) {
         const botMessage = this.messages[this.messages.length - 1];
@@ -488,10 +513,10 @@ function chatInterface(sessionId) {
 
     // Timer functions
     startConversationTimer() {
-      timerInterval = setInterval(() => {
-        conversationTimer++;
-        const minutes = Math.floor(conversationTimer / 60);
-        const seconds = conversationTimer % 60;
+      this.timerInterval = setInterval(() => {
+        this.conversationTimer++;
+        const minutes = Math.floor(this.conversationTimer / 60);
+        const seconds = this.conversationTimer % 60;
         document.getElementById("conversation-timer").textContent = `${minutes
           .toString()
           .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
@@ -499,9 +524,9 @@ function chatInterface(sessionId) {
     },
 
     stopConversationTimer() {
-      if (timerInterval) {
-        clearInterval(timerInterval);
-        timerInterval = null;
+      if (this.timerInterval) {
+        clearInterval(this.timerInterval);
+        this.timerInterval = null;
       }
     },
 

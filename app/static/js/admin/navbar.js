@@ -15,19 +15,21 @@ function navbar() {
       { name: "Pengaturan LLM", href: "/admin/llm" },
       { name: "Pengaturan Kamera", href: "/admin/camera" },
     ],
-
+    // sss
     isActive(href) {
       // Normalize paths by removing trailing slashes
-      const currentPath = window.location.pathname.replace(/\/$/, '');
-      const targetPath = href.replace(/\/$/, '');
-      
+      const currentPath = window.location.pathname.replace(/\/$/, "");
+      const targetPath = href.replace(/\/$/, "");
+
       // Special case for dashboard - only exact match
-      if (targetPath === '/admin') {
-        return currentPath === '/admin';
+      if (targetPath === "/admin") {
+        return currentPath === "/admin";
       }
-      
+
       // For other routes, allow exact match or nested routes
-      return currentPath === targetPath || currentPath.startsWith(targetPath + '/');
+      return (
+        currentPath === targetPath || currentPath.startsWith(targetPath + "/")
+      );
     },
   };
 }

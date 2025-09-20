@@ -98,7 +98,9 @@ function confirmDelete(sessionId, username, sessionNumber) {
 
 function deleteSession(sessionId, username, sessionNumber) {
   // Show loading state on the delete button - use data attribute selector
-  const deleteBtn = document.querySelector(`button[data-session-id="${sessionId}"]`);
+  const deleteBtn = document.querySelector(
+    `button[data-session-id="${sessionId}"]`
+  );
 
   if (!deleteBtn) {
     console.error(`Delete button not found for session ${sessionId}`);
@@ -182,7 +184,7 @@ function updateSessionStateToDeleted(sessionId, username, sessionNumber) {
             </span>
         </div>
     `;
-
+  // sss
   // Add visual feedback - fade out and red tint
   sessionRow.style.transition = "all 0.3s ease";
   sessionRow.style.backgroundColor = "#fef2f2";
@@ -238,10 +240,10 @@ function performSearchAjax(query, page = 1) {
 
       // Handle API response wrapper format from @api_response decorator
       const actualData = data.status === "OLKORECT" ? data.data : data;
-      
+
       if (actualData.status === "success" || actualData.data) {
         const responseData = actualData.data || actualData;
-        
+
         // Update table content
         updateUserTable(responseData);
 
@@ -360,7 +362,9 @@ function updateUserTable(data) {
                         ${
                           user_session.session1 === "COMPLETED" &&
                           user_session.session1_id
-                            ? `<a href=\"/admin/export/session/${user_session.session1_id}\" 
+                            ? `<a href=\"/admin/export/session/${
+                                user_session.session1_id
+                              }\" 
                                class=\"inline-flex items-center justify-center px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 transition-colors duration-200 shadow-sm flex-shrink-0 w-20\">
                                 <svg class=\"w-3.5 h-3.5 mr-1.5\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\">
                                     <path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4\"></path>
@@ -368,8 +372,12 @@ function updateUserTable(data) {
                                 Download
                             </a>
                             <button class="inline-flex items-center justify-center px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 transition-colors duration-200 shadow-sm flex-shrink-0 w-16 delete-session-btn" 
-                                    data-session-id="${user_session.session1_id}" 
-                                    data-username="${encodeURIComponent(user_session.username)}" 
+                                    data-session-id="${
+                                      user_session.session1_id
+                                    }" 
+                                    data-username="${encodeURIComponent(
+                                      user_session.username
+                                    )}" 
                                     data-session-number="1">
                                 <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
@@ -426,7 +434,9 @@ function updateUserTable(data) {
                         ${
                           user_session.session2 === "COMPLETED" &&
                           user_session.session2_id
-                            ? `<a href=\"/admin/export/session/${user_session.session2_id}\" 
+                            ? `<a href=\"/admin/export/session/${
+                                user_session.session2_id
+                              }\" 
                                class=\"inline-flex items-center justify-center px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 transition-colors duration-200 shadow-sm flex-shrink-0 w-20\">
                                 <svg class=\"w-3.5 h-3.5 mr-1.5\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\">
                                     <path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4\"></path>
@@ -434,8 +444,12 @@ function updateUserTable(data) {
                                 Download
                             </a>
                             <button class="inline-flex items-center justify-center px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 transition-colors duration-200 shadow-sm flex-shrink-0 w-16 delete-session-btn" 
-                                    data-session-id="${user_session.session2_id}" 
-                                    data-username="${encodeURIComponent(user_session.username)}" 
+                                    data-session-id="${
+                                      user_session.session2_id
+                                    }" 
+                                    data-username="${encodeURIComponent(
+                                      user_session.username
+                                    )}" 
                                     data-session-number="2">
                                 <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
@@ -467,30 +481,37 @@ function updateUserTable(data) {
 }
 
 function updatePaginationControls(pagination, searchQuery = "") {
-  console.log('updatePaginationControls called with:', { pagination, searchQuery });
-  
-  const paginationContainer = document.querySelector('.pagination-controls') || 
-                              document.getElementById('paginationContainer');
-  
+  console.log("updatePaginationControls called with:", {
+    pagination,
+    searchQuery,
+  });
+
+  const paginationContainer =
+    document.querySelector(".pagination-controls") ||
+    document.getElementById("paginationContainer");
+
   if (!paginationContainer) {
-    console.warn('Pagination container not found');
+    console.warn("Pagination container not found");
     return;
   }
-  
+
   // Show/hide pagination based on page count
   if (pagination.pages <= 1) {
-    paginationContainer.style.display = 'none';
+    paginationContainer.style.display = "none";
     return;
   } else {
-    paginationContainer.style.display = 'flex';
+    paginationContainer.style.display = "flex";
   }
-  
+
   // Build pagination HTML
-  const startItem = ((pagination.page - 1) * pagination.per_page + 1);
-  const endItem = Math.min(pagination.page * pagination.per_page, pagination.total);
-  
-  let buttonsHTML = '';
-  
+  const startItem = (pagination.page - 1) * pagination.per_page + 1;
+  const endItem = Math.min(
+    pagination.page * pagination.per_page,
+    pagination.total
+  );
+
+  let buttonsHTML = "";
+
   // Previous button
   if (pagination.has_prev) {
     buttonsHTML += `<button onclick="loadPage(${pagination.prev_num})" 
@@ -498,26 +519,32 @@ function updatePaginationControls(pagination, searchQuery = "") {
         Previous
     </button>`;
   }
-  
+
   // Page numbers
   for (let pageNum = 1; pageNum <= pagination.pages; pageNum++) {
     if (pageNum === pagination.page) {
       buttonsHTML += `<span class="px-3 py-2 text-sm bg-blue-600 text-white border border-blue-600 rounded-md">
         ${pageNum}
       </span>`;
-    } else if (pageNum <= 2 || pageNum >= pagination.pages - 1 || 
-               (pageNum >= pagination.page - 1 && pageNum <= pagination.page + 1)) {
+    } else if (
+      pageNum <= 2 ||
+      pageNum >= pagination.pages - 1 ||
+      (pageNum >= pagination.page - 1 && pageNum <= pagination.page + 1)
+    ) {
       buttonsHTML += `<button onclick="loadPage(${pageNum})" 
          class="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
           ${pageNum}
       </button>`;
     } else if (pageNum === 3 && pagination.page > 4) {
       buttonsHTML += '<span class="px-3 py-2 text-sm text-gray-500">...</span>';
-    } else if (pageNum === pagination.pages - 2 && pagination.page < pagination.pages - 3) {
+    } else if (
+      pageNum === pagination.pages - 2 &&
+      pagination.page < pagination.pages - 3
+    ) {
       buttonsHTML += '<span class="px-3 py-2 text-sm text-gray-500">...</span>';
     }
   }
-  
+
   // Next button
   if (pagination.has_next) {
     buttonsHTML += `<button onclick="loadPage(${pagination.next_num})" 
@@ -525,7 +552,7 @@ function updatePaginationControls(pagination, searchQuery = "") {
         Next
     </button>`;
   }
-  
+
   // Update container with pagination HTML
   paginationContainer.innerHTML = `
     <div class="flex items-center">
@@ -542,32 +569,34 @@ function updatePaginationControls(pagination, searchQuery = "") {
 // AJAX pagination function
 function loadPage(pageNum) {
   const urlParams = new URLSearchParams(window.location.search);
-  const searchQuery = urlParams.get('q') || '';
-  const perPage = urlParams.get('per_page') || 15;
-  
+  const searchQuery = urlParams.get("q") || "";
+  const perPage = urlParams.get("per_page") || 15;
+
   // Always use AJAX for pagination, regardless of search state
-  const ajaxUrl = `/admin/ajax-data?page=${pageNum}&per_page=${perPage}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ''}`;
-  
+  const ajaxUrl = `/admin/ajax-data?page=${pageNum}&per_page=${perPage}${
+    searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""
+  }`;
+
   fetch(ajaxUrl)
-    .then(response => response.json())
-    .then(data => {
+    .then((response) => response.json())
+    .then((data) => {
       const actualData = data.status === "OLKORECT" ? data.data : data;
-      
+
       if (actualData.status === "success" || actualData.data) {
         const responseData = actualData.data || actualData;
-        
+
         // Update table content
         updateUserTable(responseData);
-        
+
         // Update pagination controls
         updatePaginationControls(responseData.pagination, searchQuery);
-        
+
         // Update URL without refresh
-        urlParams.set('page', pageNum);
-        window.history.replaceState({}, '', `?${urlParams.toString()}`);
-        
+        urlParams.set("page", pageNum);
+        window.history.replaceState({}, "", `?${urlParams.toString()}`);
+
         // Update user count
-        const userCount = document.getElementById('userCount');
+        const userCount = document.getElementById("userCount");
         if (userCount) {
           const countText = searchQuery
             ? `${responseData.pagination.total} users found for "${searchQuery}"`
@@ -576,10 +605,10 @@ function loadPage(pageNum) {
         }
       }
     })
-    .catch(error => {
-      console.error('Error loading page:', error);
+    .catch((error) => {
+      console.error("Error loading page:", error);
       // Fallback to page reload if AJAX fails
-      urlParams.set('page', pageNum);
+      urlParams.set("page", pageNum);
       window.location.search = urlParams.toString();
     });
 }
@@ -587,25 +616,25 @@ function loadPage(pageNum) {
 // Initialize dashboard when DOM is loaded
 document.addEventListener("DOMContentLoaded", function () {
   // Global event delegation for delete buttons using data attributes
-  document.addEventListener('click', function(e) {
-    const btn = e.target.closest('.delete-session-btn');
+  document.addEventListener("click", function (e) {
+    const btn = e.target.closest(".delete-session-btn");
     if (!btn) return;
 
-    console.log('Delete button clicked via data attributes:', btn);
-    
+    console.log("Delete button clicked via data attributes:", btn);
+
     // Extract data from attributes
     const sessionId = btn.dataset.sessionId;
-    const username = decodeURIComponent(btn.dataset.username || '');
-    const sessionNumber = parseInt(btn.dataset.sessionNumber || '0', 10);
+    const username = decodeURIComponent(btn.dataset.username || "");
+    const sessionNumber = parseInt(btn.dataset.sessionNumber || "0", 10);
 
-    console.log('Extracted data:', { sessionId, username, sessionNumber });
-    
+    console.log("Extracted data:", { sessionId, username, sessionNumber });
+
     // Call confirmDelete function
     confirmDelete(sessionId, username, sessionNumber);
   });
-  
-  console.log('Data-attribute delete button handler set up');
-  
+
+  console.log("Data-attribute delete button handler set up");
+
   // Add event listener to bulk download button
   const bulkDownloadBtn = document.querySelector(".bulk-download-btn");
   if (bulkDownloadBtn) {

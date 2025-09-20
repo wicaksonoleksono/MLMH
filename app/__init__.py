@@ -5,7 +5,7 @@ from .db import init_database, create_all_tables
 
 import os       
 login_manager = LoginManager()
-
+from app.ext.cache_buster import init_cache_buster
 def create_app():
     """Application factory pattern."""
     # Configure static folder for production deployment
@@ -20,11 +20,11 @@ def create_app():
     else:
         # Development: default relative paths
         app = Flask(__name__, instance_relative_config=True)
-    
+    init_cache_buster(app)
     app.config.from_object(Config)
-    with app.app_context():
-        init_database(app.config['SQLALCHEMY_DATABASE_URI'])
-        create_all_tables()
+    # with app.app_context():
+        # init_database(app.config['SQLALCHEMY_DATABASE_URI'])
+        # create_all_tables()
     login_manager.init_app(app)
     login_manager.login_view = 'main.auth_page'
     login_manager.login_message = "Silakan login untuk mengakses halaman ini."

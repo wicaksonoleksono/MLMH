@@ -1,7 +1,6 @@
 # app/services/SMTP/firstSessionReminderService.py
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from datetime import datetime, timedelta, timezone
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy import and_, not_, exists
 import os
 
@@ -71,31 +70,33 @@ class FirstSessionReminderService:
                     'phone': user.phone,
                     'registration_date': user.created_at.strftime('%d %B %Y'),
                     'days_since_registration': days_since_registration,
-                    'status': FirstSessionReminderService._get_user_status(user, days_since_registration)
+                    'status': FirstSessionReminderService._get_user_status(days_since_registration)
                 }
                 user_list.append(user_data)
             
             # Calculate pagination info
-            total_pages = (total_count + per_page - 1) // per_page
             has_prev = page > 1
-            has_next = page < total_pages
+            has_next = offset + per_page < total_count
+            pages = (total_count + per_page - 1) // per_page  # Ceiling division
+            prev_num = page - 1 if has_prev else None
+            next_num = page + 1 if has_next else None
             
             return {
                 'items': user_list,
                 'page': page,
-                'pages': total_pages,
+                'pages': pages,
                 'per_page': per_page,
                 'total': total_count,
                 'has_prev': has_prev,
                 'has_next': has_next,
-                'prev_num': page - 1 if has_prev else None,
-                'next_num': page + 1 if has_next else None
+                'prev_num': prev_num,
+                'next_num': next_num
             }
 
     @staticmethod
-    def _get_user_status(user: User, days_since_registration: int) -> str:
-        """Determine user status based on registration time"""
-        if days_since_registration <= 1:
+    def _get_user_status(days_since_registration: int) -> str:
+        """Get user status based on days since registration"""
+        if days_since_registration <= 3:
             return "Baru Mendaftar"
         elif days_since_registration <= 7:
             return "Perlu Diingatkan"
@@ -147,26 +148,16 @@ class FirstSessionReminderService:
                 template_data = {
                     'username': user.uname,
                     'hero_title': f'Siap Memulai Perjalanan Anda, {user.uname}?',
-                    'message_intro': 'Terima kasih sudah bergabung dengan kami! Akun Anda telah berhasil dibuat dan siap digunakan.',
-                    'start_assessment_url': auto_login_url,
-                    'support_email': config.EMAIL_FROM_ADDRESS,
-                    'brand_name': 'Assessment Kesehatan Mental',
-                    'current_year': datetime.utcnow().year,
-                    'preheader_text': 'Akun Anda sudah siap. Saatnya memulai perjalanan untuk memahami kesehatan mental Anda.'
+                    'auto_login_url': auto_login_url,
+                    'base_url': config.BASE_URL,
+                    'assessment_url': f"{config.BASE_URL}/assessment/start"
                 }
                 
-                # Send email using the first session reminder template
-                template_path = os.path.join(
-                    os.path.dirname(__file__), 
-                    'first_session_reminder_template.html'
-                )
-                
-                subject = '🌱 Langkah Pertama Menuju Kesehatan Mental yang Lebih Baik'
-                
-                success = SMTPService.send_template_email(
+                # Send email using SMTPService
+                success = SMTPService.send_templated_email(
                     to_email=user.email,
-                    subject=subject,
-                    template_path=template_path,
+                    subject='Waktunya Memulai - Asesmen Mental Health Menanti Anda!',
+                    template_name='first_session_reminder',
                     template_data=template_data
                 )
                 
@@ -213,6 +204,41 @@ class FirstSessionReminderService:
         
         return results
 
+    @staticmethod 
+    def send_batch_first_session_reminders(user_ids: List[int]) -> List[Dict[str, Any]]:
+        """
+        Send first session reminders to multiple users (let Gunicorn handle threading)
+        
+        Args:
+            user_ids: List of user IDs to send reminders to
+            
+        Returns:
+            List of results for each user with success/failure status
+        """
+        print(f"[DEBUG] Starting batch reminders for {len(user_ids)} users using Gunicorn threading")
+        
+        results = []
+        
+        for user_id in user_ids:
+            try:
+                success = FirstSessionReminderService.send_first_session_reminder(user_id)
+                results.append({
+                    'user_id': user_id,
+                    'success': success,
+                    'error': None if success else f'Failed to send reminder to user {user_id}'
+                })
+            except Exception as e:
+                results.append({
+                    'user_id': user_id, 
+                    'success': False,
+                    'error': f'Error sending to user {user_id}: {str(e)}'
+                })
+        
+        success_count = len([r for r in results if r['success']])
+        print(f"[DEBUG] Batch reminders completed: {success_count}/{len(user_ids)} successful")
+        
+        return results
+
     @staticmethod
     def get_statistics() -> Dict[str, Any]:
         """Get statistics about users without assessments"""
@@ -232,7 +258,7 @@ class FirstSessionReminderService:
             one_week_ago = datetime.now(timezone.utc) - timedelta(days=7)
             one_month_ago = datetime.now(timezone.utc) - timedelta(days=30)
             
-            new_users = db.query(User).filter(
+            recent_registrations = db.query(User).filter(
                 and_(
                     User.email_verified == True,
                     User.email.isnot(None),
@@ -242,29 +268,29 @@ class FirstSessionReminderService:
                 )
             ).count()
             
-            week_old_users = db.query(User).filter(
+            week_old_registrations = db.query(User).filter(
                 and_(
                     User.email_verified == True,
                     User.email.isnot(None),
                     User.email != '',
                     not_(exists().where(AssessmentSession.user_id == User.id)),
-                    User.created_at < one_day_ago,
-                    User.created_at >= one_week_ago
+                    User.created_at >= one_week_ago,
+                    User.created_at < one_day_ago
                 )
             ).count()
             
-            month_old_users = db.query(User).filter(
+            month_old_registrations = db.query(User).filter(
                 and_(
                     User.email_verified == True,
                     User.email.isnot(None),
                     User.email != '',
                     not_(exists().where(AssessmentSession.user_id == User.id)),
-                    User.created_at < one_week_ago,
-                    User.created_at >= one_month_ago
+                    User.created_at >= one_month_ago,
+                    User.created_at < one_week_ago
                 )
             ).count()
             
-            very_old_users = db.query(User).filter(
+            old_registrations = db.query(User).filter(
                 and_(
                     User.email_verified == True,
                     User.email.isnot(None),
@@ -276,8 +302,8 @@ class FirstSessionReminderService:
             
             return {
                 'total_without_assessments': total_without_assessments,
-                'new_users_1_day': new_users,
-                'users_1_week': week_old_users,
-                'users_1_month': month_old_users,
-                'users_very_old': very_old_users
+                'recent_registrations': recent_registrations,
+                'week_old_registrations': week_old_registrations,
+                'month_old_registrations': month_old_registrations,
+                'old_registrations': old_registrations
             }

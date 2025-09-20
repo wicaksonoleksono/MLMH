@@ -421,24 +421,18 @@ def save_timing_data(session_id):
     # Find the most recent turn that matches this user message or turn number
     existing_turns = LLMConversationService.get_session_conversations(session_id)
     
-    # Debug logging
-    print(f"DEBUG: Looking for turn with user_message: '{user_message[:50]}...'")
-    print(f"DEBUG: Available turns: {[(t.get('turn_number'), t.get('user_message')[:30] if t.get('user_message') else 'None') for t in existing_turns]}")
-    
     target_turn = None
     if turn_number is not None:
         # Use turn_number for more reliable matching
         for turn in existing_turns:
             if turn.get('turn_number') == turn_number:
                 target_turn = turn
-                print(f"DEBUG: Found matching turn {turn_number} by turn_number")
                 break
     else:
         # Fallback to user_message matching for backward compatibility
         for turn in reversed(existing_turns):
             if turn.get('user_message') == user_message:
                 target_turn = turn
-                print(f"DEBUG: Found matching turn {turn.get('turn_number')} by user_message")
                 break
     
     if target_turn:

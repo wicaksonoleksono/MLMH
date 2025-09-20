@@ -308,6 +308,90 @@ def send_first_session_reminder():
         }), 500
 
 
+@session_management_bp.route('/send-batch-first-session-reminders', methods=['POST'])
+@login_required
+@admin_required
+@api_response
+def send_batch_first_session_reminders():
+    """Send first session reminder emails to multiple users asynchronously"""
+    try:
+        data = request.get_json()
+        user_ids = data.get('user_ids', [])
+        
+        if not user_ids:
+            return {'error': 'User IDs are required'}, 400
+        
+        print(f"[DEBUG] Batch reminder request for {len(user_ids)} users: {user_ids}")
+        
+        # Send batch reminders asynchronously
+        results = FirstSessionReminderService.send_batch_first_session_reminders(user_ids)
+        
+        success_count = len([r for r in results if r['success']])
+        failed_count = len(results) - success_count
+        
+        return {
+            'total_requested': len(user_ids),
+            'success_count': success_count,
+            'failed_count': failed_count,
+            'results': results,
+            'message': f'Batch reminder completed: {success_count} sent, {failed_count} failed'
+        }
+        
+    except Exception as e:
+        error_msg = f'Failed to send batch reminders: {str(e)}'
+        current_app.logger.error(error_msg)
+        print(f"[ERROR] Batch reminders failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {'error': error_msg}, 500
+
+
+@session_management_bp.route('/send-all-unstarted-reminders', methods=['POST'])
+@login_required
+@admin_required
+@api_response
+def send_all_unstarted_reminders():
+    """Send first session reminder emails to ALL unstarted users"""
+    try:
+        print("[DEBUG] Send all unstarted reminders request")
+        
+        # Get all unstarted users
+        unstarted_data = FirstSessionReminderService.get_users_without_assessments()
+        user_ids = [user['user_id'] for user in unstarted_data['items']]
+        
+        if not user_ids:
+            return {
+                'total_requested': 0,
+                'success_count': 0,
+                'failed_count': 0,
+                'message': 'No unstarted users found'
+            }
+        
+        print(f"[DEBUG] Sending reminders to all {len(user_ids)} unstarted users")
+        
+        # Send batch reminders asynchronously
+        results = FirstSessionReminderService.send_batch_first_session_reminders(user_ids)
+        
+        success_count = len([r for r in results if r['success']])
+        failed_count = len(results) - success_count
+        
+        return {
+            'total_requested': len(user_ids),
+            'success_count': success_count,
+            'failed_count': failed_count,
+            'results': results,
+            'message': f'Sent reminders to all unstarted users: {success_count} sent, {failed_count} failed'
+        }
+        
+    except Exception as e:
+        error_msg = f'Failed to send all reminders: {str(e)}'
+        current_app.logger.error(error_msg)
+        print(f"[ERROR] Send all reminders failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {'error': error_msg}, 500
+
+
 @session_management_bp.route('/api/unstarted-users')
 @login_required
 @admin_required
@@ -324,3 +408,4 @@ def api_get_unstarted_users():
             'status': 'error',
             'message': str(e)
         }), 500
+

@@ -1,0 +1,120 @@
+# Migrating to Flask Async Support: Effort Analysis
+
+## What's Required for Flask Async Migration
+
+### 1. Requirements Changes
+You already have most dependencies:
+- Flask 2.3.3 (supports async)
+- asgiref 3.9.1 (can be removed or minimized)
+- async-timeout 4.0.3 (already installed)
+
+No major new dependencies needed.
+
+### 2. Code Changes Required
+
+#### Minimal Migration (Quick Option):
+- Keep all existing synchronous code
+- Only change specific async endpoints
+- Add `async` to route handlers that need it
+- Use `await` for async operations
+
+Example:
+```python
+# Current:
+@assessment_bp.route('/camera/upload', methods=['POST'])
+@login_required
+@raw_response
+async def upload_camera_captures():  # Already async
+    capture = await _save_camera_capture_sync(...)
+
+# With Flask async, optimize the helper:
+async def _save_camera_capture_async(session_id, file_data, capture_trigger, assessment_id, capture_type, camera_settings_snapshot):
+    from ..services.camera.cameraCaptureService import CameraCaptureService
+    # If CameraCaptureService has async methods, use them
+    # Otherwise, use asyncio.run_in_executor for blocking operations
+    loop = asyncio.get_event_loop()
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        result = await loop.run_in_executor(
+            executor,
+            CameraCaptureService.save_capture,
+            session_id, file_data, capture_trigger, assessment_id, capture_type, camera_settings_snapshot
+        )
+    return result
+
+# Route becomes:
+@assessment_bp.route('/camera/upload', methods=['POST'])
+@login_required
+@raw_response
+async def upload_camera_captures():
+    # ... same validation ...
+    capture = await _save_camera_capture_async(...)
+```
+
+#### Full Migration (Complete Option):
+- Convert all route handlers to async where beneficial
+- Update all service methods to be async-compatible
+- Replace ThreadPoolExecutor patterns with native async equivalents
+- Update database operations to use async SQLAlchemy (major change)
+
+### 3. Effort Estimation
+
+#### Minimal Migration (Recommended for your use case):
+- **Time**: 1-2 days
+- **Changes**: 
+  - 1-2 route handlers (your upload endpoint)
+  - 1-2 service methods
+  - Minor requirements cleanup
+- **Risk**: Very low
+- **Benefit**: Immediate improvement for photo uploads
+
+#### Full Migration:
+- **Time**: 2-4 weeks
+- **Changes**:
+  - 20-30 route handlers
+  - 50+ service methods
+  - Database layer refactoring
+  - Testing updates
+- **Risk**: Medium to high
+- **Benefit**: Full async benefits across entire application
+
+### 4. Gunicorn Configuration
+
+For Flask async, you can keep your current gthread setup:
+```bash
+# Works with Flask async
+WORKER_CLASS="gthread"
+WORKERS=6
+THREADS=16
+```
+
+Or consider async workers for maximum benefit:
+```bash
+# For full async benefits (requires more changes)
+WORKER_CLASS="uvicorn.workers.UvicornWorker"  # Need to add uvicorn
+```
+
+### 5. Recommendation for Your Photo Upload Use Case
+
+**Minimal migration is the best approach** because:
+1. You only need async for specific I/O-heavy operations
+2. Your current gthread setup already handles concurrency well
+3. Major migration would be overkill for your specific need
+4. You can get 80% of the benefits with 20% of the effort
+
+### 6. Implementation Steps for Minimal Migration
+
+1. **Update the upload handler** (1-2 hours):
+   - Optimize the existing async route
+   - Improve the helper function
+
+2. **Test with concurrent uploads** (1-2 hours):
+   - Verify performance improvement
+   - Ensure no regressions
+
+3. **Clean up requirements** (30 minutes):
+   - Remove unnecessary asgiref usage
+   - Keep only what's needed
+
+Total effort: **1-2 days maximum** for significant improvement in your photo upload handling.
+
+This approach gives you the async benefits where you need them most (photo uploads) without the complexity and risk of a full application migration.

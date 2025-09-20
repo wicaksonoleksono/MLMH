@@ -1,0 +1,53 @@
+# Specific Recommendation for Async Implementation
+
+Based on the research and your codebase analysis, here are the specific recommendations for your async implementation:
+
+## Immediate Recommendation: Simplify Current Async Usage
+
+### 1. Replace `async def` route with synchronous version:
+```python
+# Current (in assessment_routes.py):
+@assessment_bp.route('/camera/upload', methods=['POST'])
+@login_required
+@raw_response
+async def upload_camera_captures():
+    # ... existing code
+    capture = await _save_camera_capture_sync(...)
+    
+# Recommended:
+@assessment_bp.route('/camera/upload', methods=['POST'])
+@login_required
+@raw_response
+def upload_camera_captures():
+    # ... existing code
+    # Replace the await call with ThreadPoolExecutor
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future = executor.submit(_save_camera_capture_sync, session_id, file_data, capture_trigger, 
+                                assessment_id, capture_type, camera_settings_snapshot)
+        capture = future.result()
+```
+
+### 2. Remove the `@sync_to_async` wrapper:
+```python
+# Current:
+@sync_to_async
+def _save_camera_capture_sync(session_id, file_data, capture_trigger, assessment_id, capture_type, camera_settings_snapshot):
+    # ... implementation
+
+# Recommended: Keep the function as is, but remove the decorator
+def _save_camera_capture_sync(session_id, file_data, capture_trigger, assessment_id, capture_type, camera_settings_snapshot):
+    # ... same implementation
+```
+
+### 3. Apply the same pattern to PostgreSQLHistory:
+Your `postgreSQLHistory.py` is already using the correct pattern with `ThreadPoolExecutor`, so no changes needed there.
+
+## Why This Approach?
+
+1. **Leverages your existing gthread configuration** - No need to change Gunicorn setup
+2. **Simpler mental model** - No mixing of async/sync paradigms
+3. **Better performance** - Eliminates unnecessary abstraction layers
+4. **Easier debugging** - Standard Flask synchronous debugging tools work
+5. **Maintainable** - Consistent patterns throughout the codebase
+
+This approach keeps 95% of your code synchronous while still allowing non-blocking I/O operations where needed, which seems to be exactly what you want.

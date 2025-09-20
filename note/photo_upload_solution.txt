@@ -1,0 +1,187 @@
+# Specific Recommendation for Photo Upload Handling
+
+## Understanding the Problem
+Multiple users uploading photos simultaneously can block your gthread workers because:
+1. File I/O operations are blocking
+2. Each upload consumes a thread from your thread pool
+3. With 6 workers × 16 threads = 96 concurrent requests, heavy uploads can exhaust available threads
+
+## Recommended Solution: Offload Photo Processing
+
+### 1. Keep the async route but improve the implementation:
+```python
+# In assessment_routes.py, keep the async route but improve it:
+@assessment_bp.route('/camera/upload', methods=['POST'])
+@login_required
+@raw_response
+async def upload_camera_captures():
+    try:
+        from ..services.camera.cameraCaptureService import CameraCaptureService
+        
+        # Get form data
+        session_id = request.form.get('session_id')
+        if not session_id:
+            return jsonify({"status": "SNAFU", "error": "session_id required"}), 400
+
+        # Verify session belongs to current user
+        session = SessionManager.get_session(session_id)
+        if not session or int(session.user_id) != int(current_user.id):
+            return jsonify({"status": "SNAFU", "error": "Session not found or access denied"}), 403
+
+        # Get camera settings for this session
+        camera_settings = CameraCaptureService.get_camera_settings_for_session(session_id)
+        settings_snapshot = CameraCaptureService.create_settings_snapshot(camera_settings)
+
+        captures_saved = []
+        
+        # Process each uploaded file using thread pool to prevent blocking
+        # Use a limited thread pool for file operations
+        loop = asyncio.get_event_loop()
+        
+        for key in request.files:
+            if key.startswith('capture_'):
+                file = request.files[key]
+                if file and file.filename:
+                    # Extract metadata from form
+                    metadata_key = key.replace('capture_', 'metadata_')
+                    metadata_json = request.form.get(metadata_key, '{}')
+                    
+                    try:
+                        import json
+                        metadata = json.loads(metadata_json)
+                    except:
+                        metadata = {}
+                    
+                    # Get capture details
+                    trigger = metadata.get('trigger', 'MANUAL')
+                    phq_response_id = metadata.get('phq_response_id')
+                    llm_conversation_id = metadata.get('llm_conversation_id')
+                    
+                    # Check if we should capture based on settings
+                    if camera_settings and not CameraCaptureService.should_capture_on_trigger(camera_settings, trigger):
+                        continue  # Skip this capture
+                    
+                    # Save capture using thread pool to prevent blocking
+                    file_data = file.read()
+                    
+                    # Use asyncio with thread pool for the blocking operation
+                    capture = await loop.run_in_executor(
+                        None,  # Uses default thread pool
+                        _save_camera_capture_sync,  # Your existing function
+                        session_id,
+                        file_data,
+                        trigger,
+                        phq_response_id or llm_conversation_id,
+                        'PHQ' if phq_response_id else 'LLM' if llm_conversation_id else 'GENERAL',
+                        settings_snapshot
+                    )
+                    
+                    captures_saved.append({
+                        'id': capture.id,
+                        'filename': capture.filename,
+                        'trigger': capture.capture_trigger,
+                        'timestamp': capture.timestamp.isoformat()
+                    })
+
+        return jsonify({
+            "status": "OLKORECT", 
+            "message": f"Uploaded {len(captures_saved)} captures",
+            "captures": captures_saved
+        })
+
+    except Exception as e:
+        print(f"Error uploading captures: {str(e)}")
+        return jsonify({"status": "SNAFU", "error": str(e)}), 500
+```
+
+### 2. Keep your existing sync function:
+```python
+# Keep this function as is (without @sync_to_async decorator)
+def _save_camera_capture_sync(session_id, file_data, capture_trigger, assessment_id, capture_type, camera_settings_snapshot):
+    """Camera capture saving - runs in thread pool"""
+    from ..services.camera.cameraCaptureService import CameraCaptureService
+    return CameraCaptureService.save_capture(
+        session_id=session_id,
+        file_data=file_data,
+        capture_trigger=capture_trigger,
+        assessment_id=assessment_id,
+        capture_type=capture_type,
+        camera_settings_snapshot=camera_settings_snapshot
+    )
+```
+
+## Alternative Approach: Background Task Queue
+
+For even better performance with heavy concurrent uploads, consider using Celery:
+
+1. Install Celery and Redis:
+```
+pip install celery redis
+```
+
+2. Create a Celery task for photo processing:
+```python
+# In app/tasks/photo_tasks.py
+from celery import Celery
+from .services.camera.cameraCaptureService import CameraCaptureService
+
+celery = Celery('photo_tasks', broker='redis://localhost:6379')
+
+@celery.task
+def process_camera_capture(session_id, file_data, capture_trigger, assessment_id, capture_type, camera_settings_snapshot):
+    return CameraCaptureService.save_capture(
+        session_id=session_id,
+        file_data=file_data,
+        capture_trigger=capture_trigger,
+        assessment_id=assessment_id,
+        capture_type=capture_type,
+        camera_settings_snapshot=camera_settings_snapshot
+    )
+```
+
+3. Modify your route to queue tasks:
+```python
+@assessment_bp.route('/camera/upload', methods=['POST'])
+@login_required
+@raw_response
+def upload_camera_captures():
+    # ... validation code ...
+    
+    task_ids = []
+    for key in request.files:
+        # ... processing code ...
+        
+        # Queue the task instead of processing immediately
+        task = process_camera_capture.delay(
+            session_id, file_data, trigger, 
+            phq_response_id or llm_conversation_id,
+            'PHQ' if phq_response_id else 'LLM' if llm_conversation_id else 'GENERAL',
+            settings_snapshot
+        )
+        task_ids.append(task.id)
+    
+    return jsonify({
+        "status": "OLKORECT", 
+        "message": f"Queued {len(task_ids)} captures for processing",
+        "task_ids": task_ids
+    })
+```
+
+## Gunicorn Configuration Tuning
+
+For handling concurrent uploads, consider tuning your gthread settings in manage.sh:
+
+```bash
+# For heavy I/O with concurrent uploads:
+WORKERS=4                 # Fewer workers, more threads per worker
+THREADS=32                # More threads to handle concurrent uploads
+WORKER_CLASS="gthread"
+```
+
+## Why This Approach?
+
+1. **Handles concurrent uploads** - Uses thread pools to prevent blocking
+2. **Scales with load** - Async I/O pattern handles multiple simultaneous uploads
+3. **Minimizes blocking** - File I/O operations run in separate threads
+4. **Maintains responsiveness** - Other requests aren't blocked by photo uploads
+5. **No major refactoring** - Works with your existing Flask/Gunicorn setup

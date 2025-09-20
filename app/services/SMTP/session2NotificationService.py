@@ -1,5 +1,5 @@
 # app/services/SMTP/session2NotificationService.py
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any
 from sqlalchemy import and_, or_, func
 from ...model.shared.users import User
@@ -88,7 +88,9 @@ class Session2NotificationService:
             result = []
             for user in all_users:
                 if user.session_1_end_time:
-                    days_since = (datetime.utcnow() - user.session_1_end_time).days
+                    # Handle timezone conversion for database datetime
+                    session_1_end_utc = user.session_1_end_time.replace(tzinfo=timezone.utc) if user.session_1_end_time.tzinfo is None else user.session_1_end_time
+                    days_since = (datetime.now(timezone.utc) - session_1_end_utc).days
                     
                     # Determine eligibility status
                     has_email = user.email is not None
@@ -197,7 +199,7 @@ class Session2NotificationService:
                                 AutoLoginToken.user_id == user_data['user_id'],
                                 AutoLoginToken.purpose == 'auto_login_session2',
                                 AutoLoginToken.used == False,
-                                AutoLoginToken.expires_at > datetime.utcnow()
+                                AutoLoginToken.expires_at > datetime.now(timezone.utc)
                             )
                         ).first()
                         
@@ -264,7 +266,9 @@ class Session2NotificationService:
                 return False
             
             # Calculate days since Session 1
-            days_since = (datetime.utcnow() - session1.end_time).days
+            # Handle timezone conversion for database datetime
+            session1_end_utc = session1.end_time.replace(tzinfo=timezone.utc) if session1.end_time.tzinfo is None else session1.end_time
+            days_since = (datetime.now(timezone.utc) - session1_end_utc).days
             
             # Check if user already has valid auto-login token for Session 2
             from ...model.shared.auto_login_tokens import AutoLoginToken
@@ -273,7 +277,7 @@ class Session2NotificationService:
                     AutoLoginToken.user_id == user_id,
                     AutoLoginToken.purpose == 'auto_login_session2',
                     AutoLoginToken.used == False,
-                    AutoLoginToken.expires_at > datetime.utcnow()
+                    AutoLoginToken.expires_at > datetime.now(timezone.utc)
                 )
             ).first()
             
@@ -323,7 +327,7 @@ class Session2NotificationService:
                 notification_type='SESSION_2_CONTINUATION',
                 subject='Waktunya Melanjutkan Perjalanan Anda - Sesi 2 Menanti!',
                 template_used='session2_template',
-                scheduled_send_at=datetime.utcnow(),  # Send immediately
+                scheduled_send_at=datetime.now(timezone.utc),  # Send immediately
                 notification_data=notification_data
             )
             
@@ -455,7 +459,9 @@ class Session2NotificationService:
             result = []
             for notif in notifications:
                 if notif.session_1_end_time:
-                    days_since = (datetime.utcnow() - notif.session_1_end_time).days
+                    # Handle timezone conversion for database datetime
+                    session_1_end_utc = notif.session_1_end_time.replace(tzinfo=timezone.utc) if notif.session_1_end_time.tzinfo is None else notif.session_1_end_time
+                    days_since = (datetime.now(timezone.utc) - session_1_end_utc).days
                     
                     notif_data = {
                         'user_id': notif.id,
@@ -501,7 +507,7 @@ class Session2NotificationService:
                 and_(
                     EmailNotification.notification_type == 'SESSION_2_CONTINUATION',
                     EmailNotification.status == 'PENDING',
-                    EmailNotification.scheduled_send_at <= datetime.utcnow()
+                    EmailNotification.scheduled_send_at <= datetime.now(timezone.utc)
                 )
             ).all()
             
@@ -547,7 +553,9 @@ class Session2NotificationService:
                 return {}
             
             # Calculate days since Session 1
-            days_since = (datetime.utcnow() - session1.end_time).days
+            # Handle timezone conversion for database datetime
+            session1_end_utc = session1.end_time.replace(tzinfo=timezone.utc) if session1.end_time.tzinfo is None else session1.end_time
+            days_since = (datetime.now(timezone.utc) - session1_end_utc).days
             
             return {
                 'username': user.uname,

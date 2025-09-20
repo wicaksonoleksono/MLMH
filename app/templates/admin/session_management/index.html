@@ -71,6 +71,33 @@
         </div>
       </div>
 
+      <!-- Batch Actions (show for unstarted and eligible tabs) -->
+      <div id="batch-actions" class="hidden mb-4 p-4 bg-gray-50 rounded-lg border">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-4">
+            <h4 class="text-sm font-medium text-gray-900">Batch Actions:</h4>
+            <button 
+              id="send-batch-reminders-btn" 
+              onclick="handleBatchSend()" 
+              class="px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled
+            >
+              Send Selected Reminders
+            </button>
+            <button 
+              id="send-all-reminders-btn" 
+              onclick="handleSendAll()" 
+              class="px-3 py-2 text-sm bg-green-600 text-white rounded-md hover:bg-green-700"
+            >
+              Send All Reminders
+            </button>
+          </div>
+          <div class="text-xs text-gray-500">
+            <span id="selected-count">0</span> users selected
+          </div>
+        </div>
+      </div>
+
       <!-- Error State -->
       <div id="error-state" class="hidden rounded-md bg-red-50 p-4 mb-6">
         <div class="flex">

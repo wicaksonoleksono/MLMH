@@ -9,7 +9,8 @@
     <meta name="viewport" content="width=device-width" />
     <meta http-equiv="x-ua-compatible" content="ie=edge" />
     <title>
-      {{ subject | default('Langkah Pertama Menuju Kesehatan Mental yang Lebih Baik') }}
+      {{ subject | default('Langkah Pertama Menuju Kesehatan Mental yang Lebih
+      Baik') }}
     </title>
     <!--[if mso]>
       <xml>
@@ -39,7 +40,8 @@
         mso-hide: all;
       "
     >
-      {{ preheader_text | default('Akun Anda sudah siap. Saatnya memulai perjalanan untuk memahami kesehatan mental Anda.') }}
+      {{ preheader_text | default('Akun Anda sudah siap. Saatnya memulai
+      perjalanan untuk memahami kesehatan mental Anda.') }}
     </div>
 
     <table
@@ -47,195 +49,212 @@
       width="100%"
       cellpadding="0"
       cellspacing="0"
-      style="border-collapse: collapse"
+      border="0"
     >
       <tr>
-        <td align="center" style="padding: 40px 20px">
-          <!-- Main Container -->
+        <td align="center" style="padding: 24px">
+          <!-- Container -->
           <table
+            role="presentation"
             width="600"
             cellpadding="0"
             cellspacing="0"
+            border="0"
             style="
-              max-width: 600px;
-              background: white;
-              border-radius: 12px;
-              box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-              border-collapse: collapse;
+              width: 600px;
+              max-width: 100%;
+              background: #ffffff;
+              border: 1px solid #e6e2d3;
+              border-radius: 8px;
             "
           >
-            <!-- Header Section -->
+            <!-- Header -->
             <tr>
               <td
                 style="
-                  background: linear-gradient(135deg, #0F766E 0%, #059669 100%);
-                  border-radius: 12px 12px 0 0;
-                  padding: 40px 30px;
+                  background: #f5f1e6;
+                  border-bottom: 1px solid #e6e2d3;
+                  padding: 24px;
                   text-align: center;
                 "
               >
-                <h1
+                <div
                   style="
-                    color: white;
-                    font-size: 28px;
-                    font-weight: bold;
-                    margin: 0 0 10px 0;
-                    line-height: 1.2;
-                  "
-                >
-                  🌱 {{ hero_title | default('Siap Memulai Perjalanan Anda?') }}
-                </h1>
-                <p
-                  style="
-                    color: #E6FFFA;
-                    font-size: 16px;
-                    margin: 0;
-                    line-height: 1.4;
-                  "
-                >
-                  Langkah pertama adalah yang terpenting
-                </p>
-              </td>
-            </tr>
-
-            <!-- Welcome Message -->
-            <tr>
-              <td style="padding: 40px 30px 30px 30px">
-                <h2
-                  style="
-                    color: #1F2937;
                     font-size: 20px;
-                    margin: 0 0 20px 0;
+                    line-height: 26px;
+                    font-weight: 700;
+                    color: #4a3f35;
+                  "
+                >
+                  {{ brand_name | default('Assesmen Kesehatan Mental') }}
+                </div>
+                <div
+                  style="
+                    font-size: 16px;
+                    line-height: 22px;
+                    color: #6b6156;
+                    margin-top: 6px;
                     font-weight: 600;
                   "
                 >
-                  Halo {{ username | default('Teman') }},
-                </h2>
-                <p
-                  style="
-                    color: #4B5563;
-                    font-size: 16px;
-                    line-height: 1.6;
-                    margin: 0 0 20px 0;
-                  "
-                >
-                  {{ message_intro | default('Terima kasih sudah bergabung dengan kami! Akun Anda telah berhasil dibuat dan siap digunakan.') }}
-                </p>
-                <p
-                  style="
-                    color: #4B5563;
-                    font-size: 16px;
-                    line-height: 1.6;
-                    margin: 0 0 25px 0;
-                  "
-                >
-                  Kami memahami bahwa memulai assessment kesehatan mental membutuhkan keberanian. Tim kami telah menyiapkan proses yang aman, pribadi, dan mudah untuk Anda.
-                </p>
+                  {{ header_tagline | default('Siap Memulai Perjalanan Anda?')
+                  }}
+                </div>
               </td>
             </tr>
 
-            <!-- Benefits Section -->
+            <!-- Greeting & Intro -->
             <tr>
-              <td style="padding: 0 30px 30px 30px">
+              <td style="padding: 24px 24px 8px 24px">
                 <div
                   style="
-                    background: #F0FDF4;
-                    border-left: 4px solid #10B981;
-                    padding: 20px;
-                    border-radius: 8px;
-                    margin-bottom: 25px;
+                    font-size: 18px;
+                    line-height: 24px;
+                    font-weight: 700;
+                    color: #333333;
+                    margin-bottom: 8px;
                   "
                 >
-                  <h3
-                    style="
-                      color: #065F46;
-                      font-size: 16px;
-                      margin: 0 0 12px 0;
-                      font-weight: 600;
-                    "
-                  >
-                    ✨ Yang Akan Anda Dapatkan:
-                  </h3>
-                  <ul style="color: #047857; margin: 0; padding-left: 20px">
-                    <li style="margin-bottom: 8px">Assessment yang dipersonalisasi untuk kondisi Anda</li>
-                    <li style="margin-bottom: 8px">Percakapan santai dengan AI yang memahami</li>
-                    <li style="margin-bottom: 8px">Insight mendalam tentang kesehatan mental Anda</li>
-                    <li style="margin-bottom: 0">Panduan langkah selanjutnya yang sesuai</li>
-                  </ul>
-                </div>
-              </td>
-            </tr>
-
-            <!-- Call-to-Action Button -->
-            <tr>
-              <td style="padding: 0 30px 40px 30px; text-align: center">
-                <div style="margin-bottom: 30px">
-                  <a
-                    href="{{ start_assessment_url | default('#') }}"
-                    style="
-                      display: inline-block;
-                      background: linear-gradient(135deg, #059669 0%, #047857 100%);
-                      color: white;
-                      text-decoration: none;
-                      font-size: 18px;
-                      font-weight: 600;
-                      padding: 16px 32px;
-                      border-radius: 8px;
-                      box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
-                      transition: transform 0.2s ease;
-                    "
-                    onmouseover="this.style.transform='translateY(-2px)'"
-                    onmouseout="this.style.transform='translateY(0)'"
-                  >
-                    🚀 Mulai Assessment Sekarang
-                  </a>
+                  Halo {{ username | default('Teman') }},
                 </div>
                 <p
                   style="
-                    color: #6B7280;
-                    font-size: 14px;
                     margin: 0;
-                    line-height: 1.4;
+                    font-size: 14px;
+                    line-height: 22px;
+                    color: #555555;
                   "
                 >
-                  Klik tombol di atas untuk langsung masuk dan memulai assessment Anda.<br />
-                  <strong>Waktu yang dibutuhkan:</strong> 15-20 menit
+                  {{ message_intro | default('Terima kasih sudah bergabung. Akun
+                  Anda telah berhasil dibuat dan siap digunakan.') }}
+                </p>
+                <p
+                  style="
+                    margin: 12px 0 0 0;
+                    font-size: 14px;
+                    line-height: 22px;
+                    color: #555555;
+                  "
+                >
+                  Kami paham, memulai assessment itu butuh keberanian. Proses
+                  kami dirancang aman, pribadi, dan sederhana—agar Anda bisa
+                  fokus pada diri sendiri.
                 </p>
               </td>
             </tr>
 
-            <!-- Reassurance Section -->
+            <!-- Benefits -->
             <tr>
-              <td
-                style="
-                  background: #FEF3C7;
-                  padding: 25px 30px;
-                  border-top: 1px solid #F3F4F6;
-                "
-              >
-                <div style="text-align: center">
-                  <h3
-                    style="
-                      color: #92400E;
-                      font-size: 16px;
-                      margin: 0 0 12px 0;
-                      font-weight: 600;
-                    "
-                  >
-                    🔒 Privasi & Keamanan Terjamin
-                  </h3>
-                  <p
-                    style="
-                      color: #A16207;
-                      font-size: 14px;
-                      margin: 0;
-                      line-height: 1.5;
-                    "
-                  >
-                    Semua informasi Anda dijaga kerahasiaan dengan enkripsi tingkat tinggi.
-                    Hanya Anda yang memiliki akses ke hasil assessment pribadi Anda.
-                  </p>
+              <td style="padding: 16px 24px 8px 24px">
+                <table
+                  role="presentation"
+                  width="100%"
+                  cellpadding="0"
+                  cellspacing="0"
+                  border="0"
+                  style="
+                    background: #fdfaf3;
+                    border: 1px solid #e6e2d3;
+                    border-radius: 6px;
+                  "
+                >
+                  <tr>
+                    <td style="padding: 16px">
+                      <div
+                        style="
+                          font-size: 14px;
+                          font-weight: 700;
+                          color: #4a3f35;
+                          margin-bottom: 8px;
+                        "
+                      >
+                        ✨ Yang Akan Anda Dapatkan
+                      </div>
+                      <ul
+                        style="
+                          margin: 0;
+                          padding-left: 18px;
+                          color: #6b6156;
+                          font-size: 14px;
+                          line-height: 22px;
+                        "
+                      >
+                        <li>Assessment yang dipersonalisasi</li>
+                        <li>Percakapan santai dengan AI yang memahami</li>
+                        <li>Wawasan ringkas tentang kondisi Anda</li>
+                        <li>Rekomendasi langkah lanjut yang realistis</li>
+                      </ul>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- CTA -->
+            <tr>
+              <td style="padding: 24px; text-align: center">
+                <a
+                  href="{{ start_assessment_url | default('#') }}"
+                  style="
+                    display: inline-block;
+                    background: #d4a373;
+                    color: #ffffff;
+                    text-decoration: none;
+                    font-size: 16px;
+                    font-weight: 700;
+                    padding: 12px 20px;
+                    border-radius: 6px;
+                    border: 1px solid #d4a373;
+                  "
+                >
+                  🚀 Mulai Assessment Sekarang
+                </a>
+                <div style="font-size: 12px; color: #6b6156; margin-top: 10px">
+                  Perkiraan waktu: 15–20 menit
                 </div>
+              </td>
+            </tr>
+
+            <!-- Privacy Note -->
+            <tr>
+              <td style="padding: 8px 24px 24px 24px">
+                <table
+                  role="presentation"
+                  width="100%"
+                  cellpadding="0"
+                  cellspacing="0"
+                  border="0"
+                  style="
+                    background: #f5f1e6;
+                    border: 1px dashed #e6e2d3;
+                    border-radius: 6px;
+                  "
+                >
+                  <tr>
+                    <td style="padding: 14px">
+                      <div
+                        style="
+                          font-size: 14px;
+                          font-weight: 700;
+                          color: #4a3f35;
+                          margin-bottom: 6px;
+                        "
+                      >
+                        🔒 Privasi & Keamanan
+                      </div>
+                      <div
+                        style="
+                          font-size: 13px;
+                          line-height: 20px;
+                          color: #6b6156;
+                        "
+                      >
+                        Data Anda disimpan terenkripsi. Hanya Anda yang bisa
+                        melihat hasil assessment pribadi Anda.
+                      </div>
+                    </td>
+                  </tr>
+                </table>
               </td>
             </tr>
 
@@ -243,56 +262,63 @@
             <tr>
               <td
                 style="
-                  background: #F9FAFB;
-                  padding: 30px;
-                  border-radius: 0 0 12px 12px;
+                  background: #f5f1e6;
+                  border-top: 1px solid #e6e2d3;
+                  padding: 16px;
                   text-align: center;
-                  border-top: 1px solid #E5E7EB;
                 "
               >
-                <p
+                <div
                   style="
-                    color: #6B7280;
-                    font-size: 14px;
-                    margin: 0 0 15px 0;
-                    line-height: 1.5;
+                    font-size: 13px;
+                    color: #6b6156;
+                    line-height: 20px;
+                    margin-bottom: 8px;
                   "
                 >
-                  Butuh bantuan? Tim support kami siap membantu Anda.
-                </p>
-                <p
-                  style="
-                    color: #9CA3AF;
-                    font-size: 12px;
-                    margin: 0;
-                    line-height: 1.4;
-                  "
-                >
-                  Email: {{ support_email | default('support@mentalhealth.id') }}<br />
-                  {{ brand_name | default('Mental Health Assessment Platform') }} © {{ current_year | default('2024') }}
-                </p>
+                  Butuh bantuan? Tim support siap membantu.
+                </div>
+                <div style="font-size: 12px; color: #777777; line-height: 18px">
+                  Email: {{ support_email | default('support@mentalhealth.id')
+                  }}<br />
+                  {{ brand_name | default('Mental Health Assessment Platform')
+                  }} © {{ current_year | default('2025') }}
+                </div>
               </td>
             </tr>
           </table>
 
-          <!-- Alternative Link (below main container) -->
-          <table width="600" style="max-width: 600px; margin-top: 20px">
+          <!-- Plain Link Fallback -->
+          <table
+            role="presentation"
+            width="600"
+            cellpadding="0"
+            cellspacing="0"
+            border="0"
+            style="width: 600px; max-width: 100%; margin-top: 14px"
+          >
             <tr>
               <td style="text-align: center">
                 <p
                   style="
-                    color: #6B7280;
+                    color: #6b6156;
                     font-size: 12px;
+                    line-height: 18px;
                     margin: 0;
-                    line-height: 1.4;
                   "
                 >
-                  Jika tombol tidak berfungsi, salin dan tempel link ini ke browser Anda:<br />
+                  Jika tombol tidak berfungsi, salin dan tempel tautan ini ke
+                  browser Anda:<br />
                   <a
                     href="{{ start_assessment_url | default('#') }}"
-                    style="color: #059669; word-break: break-all"
+                    style="
+                      color: #d4a373;
+                      word-break: break-all;
+                      text-decoration: underline;
+                    "
                   >
-                    {{ start_assessment_url | default('https://example.com/start-assessment') }}
+                    {{ start_assessment_url |
+                    default('https://example.com/start-assessment') }}
                   </a>
                 </p>
               </td>

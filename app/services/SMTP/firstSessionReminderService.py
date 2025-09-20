@@ -152,6 +152,7 @@ class FirstSessionReminderService:
                     'base_url': config.BASE_URL,
                     'assessment_url': f"{config.BASE_URL}/assessment/start"
                 }
+                # Error sending first session reminder to user 59: expected str, bytes or os.PathLike object, not dict
                 template_path = os.path.join(
                     os.path.dirname(__file__), 
                     '../SMTP/first_session_reminder_template.html'
@@ -160,7 +161,7 @@ class FirstSessionReminderService:
                 success = SMTPService.send_template_email(
                     to_email=user.email,
                     subject='Halo! yuk mulai assesmen kamu ',
-                    template_path=template_data,
+                    template_path=template_path,
                     template_data=template_data
                 )
                 

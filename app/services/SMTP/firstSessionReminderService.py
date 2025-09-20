@@ -152,12 +152,15 @@ class FirstSessionReminderService:
                     'base_url': config.BASE_URL,
                     'assessment_url': f"{config.BASE_URL}/assessment/start"
                 }
-                
+                template_path = os.path.join(
+                    os.path.dirname(__file__), 
+                    '../SMTP/first_session_reminder_template.html'
+                )
                 # Send email using SMTPService
                 success = SMTPService.send_template_email(
                     to_email=user.email,
-                    subject='Waktunya Memulai - Asesmen Mental Health Menanti Anda!',
-                    template_name='first_session_reminder',
+                    subject='Halo! yuk mulai assesmen kamu ',
+                    template_path=template_data,
                     template_data=template_data
                 )
                 
@@ -215,6 +218,7 @@ class FirstSessionReminderService:
         Returns:
             List of results for each user with success/failure status
         """
+        print(f"[DEBUG] Starting batch reminders for {len(user_ids)} users using Gunicorn threading")
         
         results = []
         

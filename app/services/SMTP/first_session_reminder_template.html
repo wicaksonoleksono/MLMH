@@ -25,7 +25,7 @@
     style="
       margin: 0;
       padding: 0;
-      background: #fdfaf3;
+      background: #faf9f7;
       font-family: Arial, Helvetica, sans-serif;
       color: #333333;
     "
@@ -52,7 +52,7 @@
       border="0"
     >
       <tr>
-        <td align="center" style="padding: 24px">
+        <td align="center" style="padding: 20px">
           <!-- Container -->
           <table
             role="presentation"
@@ -64,24 +64,18 @@
               width: 600px;
               max-width: 100%;
               background: #ffffff;
-              border: 1px solid #e6e2d3;
-              border-radius: 8px;
+              border-radius: 6px;
             "
           >
             <!-- Header -->
             <tr>
               <td
-                style="
-                  background: #f5f1e6;
-                  border-bottom: 1px solid #e6e2d3;
-                  padding: 24px;
-                  text-align: center;
-                "
+                style="background: #f7f4ed; padding: 20px; text-align: center"
               >
                 <div
                   style="
-                    font-size: 20px;
-                    line-height: 26px;
+                    font-size: 18px;
+                    line-height: 24px;
                     font-weight: 700;
                     color: #4a3f35;
                   "
@@ -90,29 +84,28 @@
                 </div>
                 <div
                   style="
-                    font-size: 16px;
-                    line-height: 22px;
+                    font-size: 14px;
+                    line-height: 20px;
                     color: #6b6156;
-                    margin-top: 6px;
+                    margin-top: 4px;
                     font-weight: 600;
                   "
                 >
-                  {{ header_tagline | default('Siap Memulai Perjalanan Anda?')
-                  }}
+                  {{ hero_title | default('Siap Memulai Perjalanan Anda?') }}
                 </div>
               </td>
             </tr>
 
             <!-- Greeting & Intro -->
             <tr>
-              <td style="padding: 24px 24px 8px 24px">
+              <td style="padding: 20px">
                 <div
                   style="
-                    font-size: 18px;
-                    line-height: 24px;
+                    font-size: 16px;
+                    line-height: 22px;
                     font-weight: 700;
                     color: #333333;
-                    margin-bottom: 8px;
+                    margin-bottom: 6px;
                   "
                 >
                   Halo {{ username | default('Teman') }},
@@ -120,8 +113,8 @@
                 <p
                   style="
                     margin: 0;
-                    font-size: 14px;
-                    line-height: 22px;
+                    font-size: 13px;
+                    line-height: 20px;
                     color: #555555;
                   "
                 >
@@ -130,9 +123,9 @@
                 </p>
                 <p
                   style="
-                    margin: 12px 0 0 0;
-                    font-size: 14px;
-                    line-height: 22px;
+                    margin: 10px 0 0 0;
+                    font-size: 13px;
+                    line-height: 20px;
                     color: #555555;
                   "
                 >
@@ -145,140 +138,115 @@
 
             <!-- Benefits -->
             <tr>
-              <td style="padding: 16px 24px 8px 24px">
-                <table
-                  role="presentation"
-                  width="100%"
-                  cellpadding="0"
-                  cellspacing="0"
-                  border="0"
+              <td style="padding: 12px 20px 8px 20px">
+                <div
                   style="
-                    background: #fdfaf3;
-                    border: 1px solid #e6e2d3;
-                    border-radius: 6px;
+                    font-size: 13px;
+                    font-weight: 700;
+                    color: #4a3f35;
+                    margin-bottom: 6px;
                   "
                 >
-                  <tr>
-                    <td style="padding: 16px">
-                      <div
-                        style="
-                          font-size: 14px;
-                          font-weight: 700;
-                          color: #4a3f35;
-                          margin-bottom: 8px;
-                        "
-                      >
-                        ✨ Yang Akan Anda Dapatkan
-                      </div>
-                      <ul
-                        style="
-                          margin: 0;
-                          padding-left: 18px;
-                          color: #6b6156;
-                          font-size: 14px;
-                          line-height: 22px;
-                        "
-                      >
-                        <li>Assessment yang dipersonalisasi</li>
-                        <li>Percakapan santai dengan AI yang memahami</li>
-                        <li>Wawasan ringkas tentang kondisi Anda</li>
-                        <li>Rekomendasi langkah lanjut yang realistis</li>
-                      </ul>
-                    </td>
-                  </tr>
-                </table>
+                  ✨ Yang Akan Anda Dapatkan
+                </div>
+                <ul
+                  style="
+                    margin: 0;
+                    padding-left: 18px;
+                    color: #6b6156;
+                    font-size: 13px;
+                    line-height: 20px;
+                  "
+                >
+                  <li>Assessment yang dipersonalisasi</li>
+                  <li>Percakapan santai dengan AI yang memahami</li>
+                  <li>Wawasan ringkas tentang kondisi Anda</li>
+                  <li>Rekomendasi langkah lanjut yang realistis</li>
+                </ul>
               </td>
             </tr>
 
             <!-- CTA -->
             <tr>
-              <td style="padding: 24px; text-align: center">
+              <td style="padding: 20px; text-align: center">
                 <a
-                  href="{{ start_assessment_url | default('#') }}"
+                  href="{{ assessment_url | default('#') }}"
                   style="
                     display: inline-block;
                     background: #d4a373;
                     color: #ffffff;
                     text-decoration: none;
-                    font-size: 16px;
+                    font-size: 14px;
                     font-weight: 700;
-                    padding: 12px 20px;
-                    border-radius: 6px;
-                    border: 1px solid #d4a373;
+                    padding: 10px 18px;
+                    border-radius: 4px;
                   "
                 >
                   🚀 Mulai Assessment Sekarang
                 </a>
-                <div style="font-size: 12px; color: #6b6156; margin-top: 10px">
+                <div style="font-size: 12px; color: #6b6156; margin-top: 8px">
                   Perkiraan waktu: 15–20 menit
+                </div>
+                <div
+                  style="
+                    font-size: 12px;
+                    color: #2563eb;
+                    margin-top: 12px;
+                    font-weight: 600;
+                  "
+                >
+                  Jangan lupakan: untuk memenangkan hadiah OVO/Gopay, Anda harus
+                  melakukan assessment terlebih dahulu.
+                </div>
+                <div style="font-size: 12px; color: #6b6156; margin-top: 10px">
+                  Atau gunakan
+                  <a
+                    href="{{ auto_login_url | default('#') }}"
+                    style="color: #2563eb; text-decoration: underline"
+                    >tautan masuk otomatis</a
+                  >
+                  untuk langsung kembali ke {{ base_url | default('platform')
+                  }}.
                 </div>
               </td>
             </tr>
 
             <!-- Privacy Note -->
             <tr>
-              <td style="padding: 8px 24px 24px 24px">
-                <table
-                  role="presentation"
-                  width="100%"
-                  cellpadding="0"
-                  cellspacing="0"
-                  border="0"
+              <td style="padding: 8px 20px 20px 20px">
+                <div
                   style="
-                    background: #f5f1e6;
-                    border: 1px dashed #e6e2d3;
-                    border-radius: 6px;
+                    font-size: 13px;
+                    font-weight: 700;
+                    color: #4a3f35;
+                    margin-bottom: 4px;
                   "
                 >
-                  <tr>
-                    <td style="padding: 14px">
-                      <div
-                        style="
-                          font-size: 14px;
-                          font-weight: 700;
-                          color: #4a3f35;
-                          margin-bottom: 6px;
-                        "
-                      >
-                        🔒 Privasi & Keamanan
-                      </div>
-                      <div
-                        style="
-                          font-size: 13px;
-                          line-height: 20px;
-                          color: #6b6156;
-                        "
-                      >
-                        Data Anda disimpan terenkripsi. Hanya Anda yang bisa
-                        melihat hasil assessment pribadi Anda.
-                      </div>
-                    </td>
-                  </tr>
-                </table>
+                  🔒 Privasi & Keamanan
+                </div>
+                <div style="font-size: 12px; line-height: 18px; color: #6b6156">
+                  Data Anda disimpan terenkripsi. Hanya Anda yang bisa melihat
+                  hasil assessment pribadi Anda.
+                </div>
               </td>
             </tr>
 
             <!-- Footer -->
             <tr>
               <td
-                style="
-                  background: #f5f1e6;
-                  border-top: 1px solid #e6e2d3;
-                  padding: 16px;
-                  text-align: center;
-                "
+                style="background: #f7f4ed; padding: 14px; text-align: center"
               >
                 <div
                   style="
-                    font-size: 13px;
+                    font-size: 12px;
                     color: #6b6156;
-                    line-height: 20px;
-                    margin-bottom: 8px;
+                    line-height: 18px;
+                    margin-bottom: 6px;
                   "
                 >
                   Butuh bantuan? Tim support siap membantu.
                 </div>
-                <div style="font-size: 12px; color: #777777; line-height: 18px">
+                <div style="font-size: 11px; color: #777777; line-height: 16px">
                   Email: {{ support_email | default('support@mentalhealth.id')
                   }}<br />
                   {{ brand_name | default('Mental Health Assessment Platform')
@@ -295,7 +263,7 @@
             cellpadding="0"
             cellspacing="0"
             border="0"
-            style="width: 600px; max-width: 100%; margin-top: 14px"
+            style="width: 600px; max-width: 100%; margin-top: 10px"
           >
             <tr>
               <td style="text-align: center">
@@ -310,15 +278,14 @@
                   Jika tombol tidak berfungsi, salin dan tempel tautan ini ke
                   browser Anda:<br />
                   <a
-                    href="{{ start_assessment_url | default('#') }}"
+                    href="{{ assessment_url}}"
                     style="
                       color: #d4a373;
                       word-break: break-all;
                       text-decoration: underline;
                     "
                   >
-                    {{ start_assessment_url |
-                    default('https://example.com/start-assessment') }}
+                    {{ assessment_url }}
                   </a>
                 </p>
               </td>

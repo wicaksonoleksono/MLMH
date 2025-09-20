@@ -1,8 +1,9 @@
 # app/routes/admin/session_management_routes.py
 from flask import Blueprint, render_template, request, jsonify, current_app, redirect, url_for
 from flask_login import current_user, login_required
-from ...decorators import raw_response, admin_required
+from ...decorators import raw_response, admin_required, api_response
 from ...services.SMTP.session2NotificationService import Session2NotificationService
+from ...services.SMTP.firstSessionReminderService import FirstSessionReminderService
 
 session_management_bp = Blueprint('session_management', __name__, url_prefix='/admin/session-management')
 
@@ -10,48 +11,68 @@ session_management_bp = Blueprint('session_management', __name__, url_prefix='/a
 @session_management_bp.route('/')
 @login_required
 @admin_required
+@raw_response
 def index():
-    """Redirect to eligible users page"""
-    return redirect(url_for('session_management.get_eligible_users'))
+    """Session management main page with AJAX loading"""
+    return render_template('admin/session_management/index.html', user=current_user)
 
 
-@session_management_bp.route('/eligible-users')
+@session_management_bp.route('/ajax-eligible-users')
 @login_required
 @admin_required
-@raw_response
+@api_response
 def get_eligible_users():
-    """Get users who completed Session 1 and are eligible for Session 2 with pagination"""
+    """AJAX endpoint for users eligible for Session 2"""
+    from flask import request
+    
     try:
-        # Get pagination parameters
+        # Get pagination and search parameters
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 15, type=int)
+        search_query = request.args.get('q', '').strip()
+        
+        print(f"[DEBUG] Eligible Users AJAX called: q='{search_query}', page={page}, per_page={per_page}")
+        current_app.logger.info(f"Search request: q='{search_query}', page={page}, per_page={per_page}")
         
         # Limit per_page options
         if per_page not in [10, 15, 20]:
             per_page = 15
         
-        # Get all users with eligibility status (paginated)
-        all_users_page = Session2NotificationService.get_all_users_with_eligibility(page=page, per_page=per_page)
+        # Get all users with eligibility status (paginated with search)
+        all_users_page = Session2NotificationService.get_all_users_with_eligibility(page=page, per_page=per_page, search_query=search_query)
         
         # Get pending notifications count
         pending_count = Session2NotificationService.get_pending_notifications_count()
         
-        return render_template('admin/session_management/eligible_users.html',
-                             user=current_user,
-                             all_users_page=all_users_page,
-                             pending_count=pending_count)
-    except Exception as e:
-        current_app.logger.error(f"Error fetching eligible users: {str(e)}")
-        # Create empty pagination object for error case
-        from collections import namedtuple
-        EmptyPage = namedtuple('EmptyPage', ['items', 'page', 'pages', 'per_page', 'total', 'has_prev', 'has_next', 'prev_num', 'next_num'])
-        empty_page = EmptyPage([], 1, 0, 15, 0, False, False, None, None)
+        result = {
+            'items': all_users_page.items,
+            'pagination': {
+                'page': all_users_page.page,
+                'pages': all_users_page.pages,
+                'per_page': all_users_page.per_page,
+                'total': all_users_page.total,
+                'has_prev': all_users_page.has_prev,
+                'has_next': all_users_page.has_next,
+                'prev_num': all_users_page.prev_num,
+                'next_num': all_users_page.next_num
+            },
+            'stats': {
+                'pending_count': pending_count,
+                'eligible_count': len([u for u in all_users_page.items if u.get('is_eligible')])
+            },
+            'search_query': search_query
+        }
         
-        return render_template('admin/session_management/eligible_users.html',
-                             user=current_user,
-                             all_users_page=empty_page,
-                             pending_count=0,
-                             error="Failed to fetch eligible users")
+        print(f"[DEBUG] Returning {len(all_users_page.items)} items, total: {all_users_page.total}")
+        return result
+        
+    except Exception as e:
+        error_msg = f'Gagal memuat data pengguna yang memenuhi syarat: {str(e)}'
+        current_app.logger.error(f"Error in get_eligible_users: {str(e)}")
+        print(f"[ERROR] Eligible Users AJAX failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {'error': error_msg}, 500
 
 
 @session_management_bp.route('/api/eligible-users')
@@ -140,6 +161,163 @@ def send_all_pending_notifications():
         return jsonify({
             'status': 'success',
             'message': f'Berhasil mengirim {sent_count} notifikasi tertunda'
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+# ========== FIRST SESSION REMINDER ROUTES ==========
+
+@session_management_bp.route('/ajax-unstarted-users')
+@login_required
+@admin_required
+@api_response
+def get_unstarted_users():
+    """AJAX endpoint for users who haven't started assessments"""
+    from flask import request
+    
+    try:
+        # Get pagination and search parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 15, type=int)
+        search_query = request.args.get('q', '').strip()
+        
+        print(f"[DEBUG] Unstarted Users AJAX called: q='{search_query}', page={page}, per_page={per_page}")
+        
+        # Limit per_page options
+        if per_page not in [10, 15, 20]:
+            per_page = 15
+        
+        # Get users without assessments (paginated with search)
+        unstarted_users_page = FirstSessionReminderService.get_users_without_assessments(page=page, per_page=per_page, search_query=search_query)
+        
+        # Get statistics
+        stats = FirstSessionReminderService.get_statistics()
+        
+        # Return data in same format as dashboard (without manual jsonify)
+        return {
+            'items': unstarted_users_page['items'],
+            'pagination': {
+                'page': unstarted_users_page['page'],
+                'pages': unstarted_users_page['pages'],
+                'per_page': unstarted_users_page['per_page'],
+                'total': unstarted_users_page['total'],
+                'has_prev': unstarted_users_page['has_prev'],
+                'has_next': unstarted_users_page['has_next'],
+                'prev_num': unstarted_users_page['prev_num'],
+                'next_num': unstarted_users_page['next_num']
+            },
+            'stats': stats,
+            'search_query': search_query
+        }
+    except Exception as e:
+        current_app.logger.error(f"Error in get_unstarted_users: {str(e)}")
+        print(f"[ERROR] Unstarted Users AJAX failed: {str(e)}")
+        return {'error': f'Gagal memuat data pengguna belum mulai: {str(e)}'}, 500
+
+
+# ========== PENDING NOTIFICATIONS ROUTES ==========
+
+@session_management_bp.route('/ajax-pending-notifications')
+@login_required
+@admin_required
+@api_response
+def get_pending_notifications_ajax():
+    """AJAX endpoint for pending Session 2 notifications"""
+    from flask import request
+    
+    try:
+        # Get pagination and search parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 15, type=int)
+        search_query = request.args.get('q', '').strip()
+        
+        print(f"[DEBUG] Pending Notifications AJAX called: q='{search_query}', page={page}, per_page={per_page}")
+        
+        # Limit per_page options
+        if per_page not in [10, 15, 20]:
+            per_page = 15
+        
+        # Get pending notifications with user details (paginated with search)
+        pending_notifications_page = Session2NotificationService.get_pending_notifications_with_users(page=page, per_page=per_page, search_query=search_query)
+        
+        # Get total pending count for stats
+        total_pending_count = Session2NotificationService.get_pending_notifications_count()
+        
+        # Return data in same format as dashboard (without manual jsonify)
+        return {
+            'items': pending_notifications_page.items,
+            'pagination': {
+                'page': pending_notifications_page.page,
+                'pages': pending_notifications_page.pages,
+                'per_page': pending_notifications_page.per_page,
+                'total': pending_notifications_page.total,
+                'has_prev': pending_notifications_page.has_prev,
+                'has_next': pending_notifications_page.has_next,
+                'prev_num': pending_notifications_page.prev_num,
+                'next_num': pending_notifications_page.next_num
+            },
+            'stats': {
+                'total_pending': total_pending_count,
+                'shown_pending': len(pending_notifications_page.items)
+            },
+            'search_query': search_query
+        }
+    except Exception as e:
+        current_app.logger.error(f"Error in get_pending_notifications: {str(e)}")
+        print(f"[ERROR] Pending Notifications AJAX failed: {str(e)}")
+        return {'error': f'Gagal memuat notifikasi tertunda: {str(e)}'}, 500
+
+
+@session_management_bp.route('/send-first-session-reminder', methods=['POST'])
+@login_required
+@admin_required
+def send_first_session_reminder():
+    """Send first session reminder email to a specific user"""
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        
+        if not user_id:
+            return jsonify({
+                'status': 'error',
+                'message': 'User ID is required'
+            }), 400
+        
+        # Send reminder email immediately
+        success = FirstSessionReminderService.send_first_session_reminder(user_id)
+        
+        if success:
+            return jsonify({
+                'status': 'success',
+                'message': 'Reminder email sent successfully'
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': 'Failed to send reminder email'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+@session_management_bp.route('/api/unstarted-users')
+@login_required
+@admin_required
+def api_get_unstarted_users():
+    """API endpoint to get users who haven't started assessments"""
+    try:
+        unstarted_users = FirstSessionReminderService.get_users_without_assessments()
+        return jsonify({
+            'status': 'success',
+            'data': unstarted_users['items']
         })
     except Exception as e:
         return jsonify({

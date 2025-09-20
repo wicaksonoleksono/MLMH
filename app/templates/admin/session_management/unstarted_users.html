@@ -1,0 +1,268 @@
+{% extends "admin/session_management/base.html" %} {% block tab_content %}
+<div class="space-y-6">
+  <div class="flex justify-between items-center">
+    <h3 class="text-lg font-medium text-gray-900">
+      Pengguna yang Belum Memulai Assessment
+    </h3>
+    <div class="flex items-center space-x-2">
+      <span class="text-sm text-gray-500">{{ unstarted_users_page.total }} total users</span>
+      <label class="text-sm text-gray-600">Per page:</label>
+      <select onchange="changePerPage(this.value)" class="text-sm border border-gray-300 rounded px-2 py-1">
+        <option value="10" {% if request.args.get('per_page')|int == 10 %}selected{% endif %}>10</option>
+        <option value="15" {% if request.args.get('per_page')|int == 15 or not request.args.get('per_page') %}selected{% endif %}>15</option>
+        <option value="20" {% if request.args.get('per_page')|int == 20 %}selected{% endif %}>20</option>
+      </select>
+    </div>
+  </div>
+
+  {% if error %}
+  <div class="rounded-md bg-red-50 p-4">
+    <div class="flex">
+      <div class="flex-shrink-0">
+        <svg
+          class="h-5 w-5 text-red-400"
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+        >
+          <path
+            fill-rule="evenodd"
+            d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+            clip-rule="evenodd"
+          />
+        </svg>
+      </div>
+      <div class="ml-3">
+        <h3 class="text-sm font-medium text-red-800">Error</h3>
+        <div class="mt-2 text-sm text-red-700">
+          <p>{{ error }}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="bg-white overflow-hidden shadow rounded-lg">
+    <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+      <h3 class="text-lg leading-6 font-medium text-gray-900">
+        Pengguna dengan Email Terverifikasi - Belum Assessment
+      </h3>
+      <p class="mt-1 max-w-2xl text-sm text-gray-500">
+        Pengguna yang sudah mendaftar dan memverifikasi email tetapi belum memulai assessment
+      </p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th
+              scope="col"
+              class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+            >
+              Username
+            </th>
+            <th
+              scope="col"
+              class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+            >
+              Email
+            </th>
+            <th
+              scope="col"
+              class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+            >
+              Telepon
+            </th>
+            <th
+              scope="col"
+              class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+            >
+              Tanggal Daftar
+            </th>
+            <th
+              scope="col"
+              class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+            >
+              Hari Sejak Daftar
+            </th>
+            <th
+              scope="col"
+              class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+            >
+              Status
+            </th>
+            <th
+              scope="col"
+              class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+            >
+              Aksi
+            </th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          {% for user in unstarted_users_page.items %}
+          <tr>
+            <td
+              class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900"
+            >
+              {{ user.username }}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {{ user.email }}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {{ user.phone or '-' }}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {{ user.registration_date }}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {{ user.days_since_registration }} hari
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              {% if user.status == "Baru Mendaftar" %}
+              <span
+                class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+              >
+                {{ user.status }}
+              </span>
+              {% elif user.status == "Perlu Diingatkan" %}
+              <span
+                class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"
+              >
+                {{ user.status }}
+              </span>
+              {% elif user.status == "Butuh Dorongan" %}
+              <span
+                class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800"
+              >
+                {{ user.status }}
+              </span>
+              {% else %}
+              <span
+                class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800"
+              >
+                {{ user.status }}
+              </span>
+              {% endif %}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+              <button
+                onclick="sendFirstSessionReminder({{ user.user_id }})"
+                class="text-green-600 hover:text-green-900 font-medium"
+              >
+                Kirim Reminder
+              </button>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7" class="px-6 py-4 text-center text-sm text-gray-500">
+              Tidak ada pengguna yang memenuhi kriteria
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    
+    <!-- Pagination Controls -->
+    {% if unstarted_users_page.pages > 1 %}
+    <div class="flex items-center justify-between mt-4 px-4 py-3 bg-white border-t border-gray-200">
+      <div class="flex items-center">
+        <p class="text-sm text-gray-700">
+          Showing {{ ((unstarted_users_page.page - 1) * unstarted_users_page.per_page + 1) }} to 
+          {{ (unstarted_users_page.page * unstarted_users_page.per_page) if (unstarted_users_page.page * unstarted_users_page.per_page) <= unstarted_users_page.total else unstarted_users_page.total }} 
+          of {{ unstarted_users_page.total }} results
+        </p>
+      </div>
+      <div class="flex items-center space-x-2">
+        {% if unstarted_users_page.has_prev %}
+          <a href="{{ url_for('session_management.get_unstarted_users', page=unstarted_users_page.prev_num, per_page=request.args.get('per_page', 15)) }}" 
+             class="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
+            Previous
+          </a>
+        {% endif %}
+        
+        {% for page_num in range(1, unstarted_users_page.pages + 1) %}
+          {% if page_num == unstarted_users_page.page %}
+            <span class="px-3 py-2 text-sm bg-blue-600 text-white border border-blue-600 rounded-md">
+              {{ page_num }}
+            </span>
+          {% elif page_num <= 2 or page_num >= unstarted_users_page.pages - 1 or (page_num >= unstarted_users_page.page - 1 and page_num <= unstarted_users_page.page + 1) %}
+            <a href="{{ url_for('session_management.get_unstarted_users', page=page_num, per_page=request.args.get('per_page', 15)) }}" 
+               class="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
+              {{ page_num }}
+            </a>
+          {% elif page_num == 3 and unstarted_users_page.page > 4 %}
+            <span class="px-3 py-2 text-sm text-gray-500">...</span>
+          {% elif page_num == unstarted_users_page.pages - 2 and unstarted_users_page.page < unstarted_users_page.pages - 3 %}
+            <span class="px-3 py-2 text-sm text-gray-500">...</span>
+          {% endif %}
+        {% endfor %}
+        
+        {% if unstarted_users_page.has_next %}
+          <a href="{{ url_for('session_management.get_unstarted_users', page=unstarted_users_page.next_num, per_page=request.args.get('per_page', 15)) }}" 
+             class="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
+            Next
+          </a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Statistics Section -->
+  <div class="bg-white overflow-hidden shadow rounded-lg">
+    <div class="px-4 py-5 sm:px-6">
+      <h3 class="text-lg leading-6 font-medium text-gray-900">Statistik First Session Reminders</h3>
+    </div>
+    <div class="border-t border-gray-200 px-4 py-5 sm:p-0">
+      <dl class="sm:divide-y sm:divide-gray-200">
+        <div class="py-4 sm:py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+          <dt class="text-sm font-medium text-gray-500">
+            Total Pengguna Belum Assessment
+          </dt>
+          <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+            {{ stats.total_without_assessments }}
+          </dd>
+        </div>
+        <div class="py-4 sm:py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+          <dt class="text-sm font-medium text-gray-500">Baru Mendaftar (1 hari)</dt>
+          <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+            {{ stats.new_users_1_day }}
+          </dd>
+        </div>
+        <div class="py-4 sm:py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+          <dt class="text-sm font-medium text-gray-500">Perlu Diingatkan (1 minggu)</dt>
+          <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+            {{ stats.users_1_week }}
+          </dd>
+        </div>
+        <div class="py-4 sm:py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+          <dt class="text-sm font-medium text-gray-500">Butuh Dorongan (1 bulan)</dt>
+          <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+            {{ stats.users_1_month }}
+          </dd>
+        </div>
+        <div class="py-4 sm:py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+          <dt class="text-sm font-medium text-gray-500">Perlu Perhatian (>1 bulan)</dt>
+          <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+            {{ stats.users_very_old }}
+          </dd>
+        </div>
+      </dl>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Handle per page change
+  function changePerPage(perPage) {
+    const urlParams = new URLSearchParams(window.location.search);
+    urlParams.set('per_page', perPage);
+    urlParams.set('page', 1); // Reset to first page
+    window.location.search = urlParams.toString();
+  }
+</script>
+{% endblock %}

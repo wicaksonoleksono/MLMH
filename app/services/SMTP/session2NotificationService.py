@@ -14,7 +14,7 @@ class Session2NotificationService:
     """Service for handling Session 2 notifications"""
     
     @staticmethod
-    def get_all_users_with_eligibility(page=None, per_page=None):
+    def get_all_users_with_eligibility(page=None, per_page=None, search_query=None):
         """
         Get ALL users with Session 1 and their Session 2 eligibility status
         Returns all users who completed Session 1, with status indicating if they're eligible for Session 2
@@ -46,7 +46,18 @@ class Session2NotificationService:
                     Session2.user_id == User.id,
                     Session2.session_number == 2
                 )
-            ).order_by(Session1.end_time.desc())
+            )
+            
+            # Add search filter if provided
+            if search_query:
+                query = query.filter(
+                    or_(
+                        User.uname.ilike(f'%{search_query}%'),
+                        User.email.ilike(f'%{search_query}%')
+                    )
+                )
+            
+            query = query.order_by(Session1.end_time.desc())
             
             # If pagination requested, implement manual pagination
             if page and per_page:
@@ -369,6 +380,118 @@ class Session2NotificationService:
             ).count()
             
             return count
+
+    @staticmethod
+    def get_pending_notifications_with_users(page: int = 1, per_page: int = 15, search_query: str = None):
+        """
+        Get pending Session 2 notifications with user details (paginated)
+        Returns users who have been sent emails but haven't done Session 2
+        Only includes regular users (user_type_id = 2), not admins
+        """
+        with get_session() as db:
+            from sqlalchemy.orm import aliased
+            Session1 = aliased(AssessmentSession)
+            Session2 = aliased(AssessmentSession)
+            
+            # Query for users with pending notifications
+            query = db.query(
+                User.id,
+                User.uname,
+                User.email,
+                User.phone,
+                Session1.end_time.label('session_1_end_time'),
+                EmailNotification.scheduled_send_at,
+                EmailNotification.actual_sent_at,
+                EmailNotification.send_attempts,
+                EmailNotification.status.label('notification_status')
+            ).join(
+                EmailNotification,
+                EmailNotification.user_id == User.id
+            ).join(
+                Session1,
+                and_(
+                    Session1.user_id == User.id,
+                    Session1.session_number == 1,
+                    Session1.is_completed == True
+                )
+            ).outerjoin(
+                Session2,
+                and_(
+                    Session2.user_id == User.id,
+                    Session2.session_number == 2
+                )
+            ).filter(
+                and_(
+                    # Only regular users (not admins)
+                    User.user_type_id == 2,
+                    # Only Session 2 continuation notifications
+                    EmailNotification.notification_type == 'SESSION_2_CONTINUATION',
+                    # Only pending notifications
+                    EmailNotification.status == 'PENDING',
+                    # Make sure they haven't done Session 2
+                    Session2.id.is_(None)
+                )
+            )
+            
+            # Add search filter if provided
+            if search_query:
+                query = query.filter(
+                    or_(
+                        User.uname.ilike(f'%{search_query}%'),
+                        User.email.ilike(f'%{search_query}%')
+                    )
+                )
+            
+            query = query.order_by(EmailNotification.scheduled_send_at.desc())
+            
+            # Get total count
+            total_count = query.count()
+            
+            # Apply pagination
+            offset = (page - 1) * per_page
+            notifications = query.offset(offset).limit(per_page).all()
+            
+            # Format notification data
+            result = []
+            for notif in notifications:
+                if notif.session_1_end_time:
+                    days_since = (datetime.utcnow() - notif.session_1_end_time).days
+                    
+                    notif_data = {
+                        'user_id': notif.id,
+                        'username': notif.uname,
+                        'email': notif.email or 'Tidak ada email',
+                        'phone': notif.phone,
+                        'session_1_completion_date': notif.session_1_end_time.strftime('%d %B %Y'),
+                        'days_since_session_1': days_since,
+                        'scheduled_send_at': notif.scheduled_send_at.strftime('%d %B %Y %H:%M') if notif.scheduled_send_at else '',
+                        'actual_sent_at': notif.actual_sent_at.strftime('%d %B %Y %H:%M') if notif.actual_sent_at else 'Belum dikirim',
+                        'send_attempts': notif.send_attempts,
+                        'notification_status': notif.notification_status,
+                        'status': 'Tertunda'
+                    }
+                    result.append(notif_data)
+            
+            # Calculate pagination info
+            total_pages = (total_count + per_page - 1) // per_page
+            has_prev = page > 1
+            has_next = page < total_pages
+            
+            # Create pagination object manually (same as other methods)
+            from collections import namedtuple
+            PageObj = namedtuple('PageObj', ['items', 'page', 'pages', 'per_page', 'total', 'has_prev', 'has_next', 'prev_num', 'next_num'])
+            page_obj = PageObj(
+                items=result,
+                page=page,
+                pages=total_pages,
+                per_page=per_page,
+                total=total_count,
+                has_prev=has_prev,
+                has_next=has_next,
+                prev_num=page - 1 if has_prev else None,
+                next_num=page + 1 if has_next else None
+            )
+            return page_obj
     
     @staticmethod
     def send_pending_notifications() -> int:

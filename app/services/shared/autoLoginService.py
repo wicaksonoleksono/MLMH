@@ -16,7 +16,8 @@ class AutoLoginService:
     VALID_PURPOSES = [
         'auto_login_session2',
         'auto_login_password_reset', 
-        'auto_login_general'
+        'auto_login_general',
+        'auto_login_first_session'  # For registered users who haven't started assessment
     ]
     
     @staticmethod
@@ -197,11 +198,42 @@ class AutoLoginService:
         )
         
         # Build complete URL using BASE_URL
-        base_url = current_app.config.get('BASE_URL', 'http://localhost:5000')
+        base_url = current_app.config.get('BASE_URL')
+        if not base_url:
+            raise ValueError("BASE_URL not configured in application config")
         auto_login_url = f"{base_url.rstrip('/')}/auth/auto-login?token={token}"
         
         return auto_login_url
     
+    @staticmethod
+    def generate_first_session_auto_login_url(user_id: int, redirect_to: str = '/assessment/start') -> str:
+        """
+        Generate auto-login URL for first session reminder emails.
+        
+        Args:
+            user_id: ID of the user
+            redirect_to: Where to redirect after auto-login (defaults to assessment start)
+            
+        Returns:
+            Complete auto-login URL for first session reminder
+        """
+        # Generate auto-login token
+        token = AutoLoginService.generate_auto_login_token(
+            user_id=user_id,
+            purpose='auto_login_first_session',
+            redirect_to=redirect_to,
+            expires_in_hours=72,  # 3 days expiration for first session reminder
+            single_use=True
+        )
+        
+        # Build complete URL using BASE_URL
+        base_url = current_app.config.get('BASE_URL')
+        if not base_url:
+            raise ValueError("BASE_URL not configured in application config")
+        auto_login_url = f"{base_url.rstrip('/')}/auth/auto-login?token={token}"
+        
+        return auto_login_url
+
     @staticmethod
     def generate_password_reset_auto_login_url(user_id: int, redirect_to: str = '/') -> str:
         """
@@ -224,7 +256,9 @@ class AutoLoginService:
         )
         
         # Build complete URL using BASE_URL
-        base_url = current_app.config.get('BASE_URL', 'http://localhost:5000')
+        base_url = current_app.config.get('BASE_URL')
+        if not base_url:
+            raise ValueError("BASE_URL not configured in application config")
         auto_login_url = f"{base_url.rstrip('/')}/auth/auto-login?token={token}"
         
         return auto_login_url

@@ -87,7 +87,7 @@ def register_commands(app):
                             uname="testuser",
                             password="testpass",
                             user_type_id=user_type.id,
-                            email="test@example.com"
+                            email="wicaksonolxn@gmail.com"
                         )
                         test_user.email_verified = True
                         db.add(test_user)

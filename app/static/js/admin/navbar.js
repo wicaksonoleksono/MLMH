@@ -8,7 +8,7 @@ function navbar() {
       { name: "Dasbor", href: "/admin" },
       {
         name: "Manajemen Sesi",
-        href: "/admin/session-management/eligible-users",
+        href: "/admin/session-management",
       },
       { name: "Informed Consent", href: "/admin/consent" },
       { name: "Pengaturan PHQ", href: "/admin/phq" },

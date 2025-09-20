@@ -154,7 +154,7 @@ class FirstSessionReminderService:
                 }
                 
                 # Send email using SMTPService
-                success = SMTPService.send_templated_email(
+                success = SMTPService.send_template_email(
                     to_email=user.email,
                     subject='Waktunya Memulai - Asesmen Mental Health Menanti Anda!',
                     template_name='first_session_reminder',

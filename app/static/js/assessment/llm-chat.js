@@ -330,7 +330,7 @@ function chatInterface(sessionId) {
                 aiEndTime
               );
               eventSource.close();
-          this.currentEventSource = null; // Clear reference
+              this.currentEventSource = null; // Clear reference
               this.currentEventSource = null; // Clear reference
               this.isTyping = false;
               botMessage.streaming = false;
@@ -345,7 +345,7 @@ function chatInterface(sessionId) {
             this.isTyping = false;
             this.exchangeCount++;
             eventSource.close();
-          this.currentEventSource = null; // Clear reference
+            this.currentEventSource = null; // Clear reference
             this.currentEventSource = null; // Clear reference
 
             // Send AI timing to backend
@@ -362,7 +362,7 @@ function chatInterface(sessionId) {
             botMessage.streaming = false;
             this.isTyping = false;
             eventSource.close();
-          this.currentEventSource = null; // Clear reference
+            this.currentEventSource = null; // Clear reference
           } else if (data.type === "stream_start") {
             // Stream started - record AI start time
             if (aiStartTime === null) {

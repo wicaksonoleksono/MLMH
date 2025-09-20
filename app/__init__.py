@@ -22,8 +22,8 @@ def create_app():
         app = Flask(__name__, instance_relative_config=True)
     init_cache_buster(app)
     app.config.from_object(Config)
-    # with app.app_context():
-        # init_database(app.config['SQLALCHEMY_DATABASE_URI'])
+    with app.app_context():
+        init_database(app.config['SQLALCHEMY_DATABASE_URI'])
         # create_all_tables()
     login_manager.init_app(app)
     login_manager.login_view = 'main.auth_page'

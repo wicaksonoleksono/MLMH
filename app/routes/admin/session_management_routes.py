@@ -31,7 +31,6 @@ def get_eligible_users():
         per_page = request.args.get('per_page', 15, type=int)
         search_query = request.args.get('q', '').strip()
         
-        print(f"[DEBUG] Eligible Users AJAX called: q='{search_query}', page={page}, per_page={per_page}")
         current_app.logger.info(f"Search request: q='{search_query}', page={page}, per_page={per_page}")
         
         # Limit per_page options
@@ -63,7 +62,6 @@ def get_eligible_users():
             'search_query': search_query
         }
         
-        print(f"[DEBUG] Returning {len(all_users_page.items)} items, total: {all_users_page.total}")
         return result
         
     except Exception as e:
@@ -185,8 +183,6 @@ def get_unstarted_users():
         per_page = request.args.get('per_page', 15, type=int)
         search_query = request.args.get('q', '').strip()
         
-        print(f"[DEBUG] Unstarted Users AJAX called: q='{search_query}', page={page}, per_page={per_page}")
-        
         # Limit per_page options
         if per_page not in [10, 15, 20]:
             per_page = 15
@@ -234,8 +230,6 @@ def get_pending_notifications_ajax():
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 15, type=int)
         search_query = request.args.get('q', '').strip()
-        
-        print(f"[DEBUG] Pending Notifications AJAX called: q='{search_query}', page={page}, per_page={per_page}")
         
         # Limit per_page options
         if per_page not in [10, 15, 20]:
@@ -321,8 +315,6 @@ def send_batch_first_session_reminders():
         if not user_ids:
             return {'error': 'User IDs are required'}, 400
         
-        print(f"[DEBUG] Batch reminder request for {len(user_ids)} users: {user_ids}")
-        
         # Send batch reminders asynchronously
         results = FirstSessionReminderService.send_batch_first_session_reminders(user_ids)
         
@@ -353,8 +345,6 @@ def send_batch_first_session_reminders():
 def send_all_unstarted_reminders():
     """Send first session reminder emails to ALL unstarted users"""
     try:
-        print("[DEBUG] Send all unstarted reminders request")
-        
         # Get all unstarted users
         unstarted_data = FirstSessionReminderService.get_users_without_assessments()
         user_ids = [user['user_id'] for user in unstarted_data['items']]
@@ -368,7 +358,6 @@ def send_all_unstarted_reminders():
             }
         
         print(f"[DEBUG] Sending reminders to all {len(user_ids)} unstarted users")
-        
         # Send batch reminders asynchronously
         results = FirstSessionReminderService.send_batch_first_session_reminders(user_ids)
         

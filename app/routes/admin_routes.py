@@ -53,7 +53,6 @@ def dashboard_ajax_data():
     per_page = request.args.get('per_page', 15, type=int)
     search_query = request.args.get('q', '').strip()
     
-    print(f"[DEBUG] AJAX Data called: q='{search_query}', page={page}, per_page={per_page}")
     
     # Limit per_page options
     if per_page not in [10, 15, 20]:
@@ -99,8 +98,6 @@ def search_users_ajax():
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 15, type=int)
     search_query = request.args.get('q', '').strip()
-    
-    print(f"[DEBUG] Search API called: q='{search_query}', page={page}, per_page={per_page}")
     
     # Limit per_page options
     if per_page not in [10, 15, 20]:

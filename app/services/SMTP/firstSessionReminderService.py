@@ -215,7 +215,6 @@ class FirstSessionReminderService:
         Returns:
             List of results for each user with success/failure status
         """
-        print(f"[DEBUG] Starting batch reminders for {len(user_ids)} users using Gunicorn threading")
         
         results = []
         

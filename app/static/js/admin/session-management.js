@@ -132,8 +132,6 @@ function performSearch(query) {
   currentSearchQuery = query;
   currentPage = 1; // Reset to first page when searching
 
-  console.log("[DEBUG] Performing search:", query);
-
   // Update URL without refresh (like dashboard.js)
   updateUrlParams();
 
@@ -256,10 +254,6 @@ function loadTableDataOnly(tabName) {
     url += `&q=${encodeURIComponent(currentSearchQuery)}`;
   }
 
-  console.log("[DEBUG] Making request to:", url);
-  console.log("[DEBUG] Current search query:", currentSearchQuery);
-  console.log("[DEBUG] Current page:", currentPage);
-
   fetch(url, {
     headers: {
       "X-Requested-With": "XMLHttpRequest",
@@ -267,8 +261,6 @@ function loadTableDataOnly(tabName) {
   })
     .then((response) => response.json())
     .then((data) => {
-      console.log("[DEBUG] Response received:", data);
-
       // Handle API response wrapper format from @api_response decorator (like dashboard.js)
       const actualData = data.status === "OLKORECT" ? data.data : data;
 
@@ -506,8 +498,6 @@ async function sendBatchFirstSessionReminders() {
     return;
   }
 
-  console.log("[DEBUG] Sending batch reminders to:", selectedUserIds);
-
   try {
     const response = await fetch(
       "/admin/session-management/send-batch-first-session-reminders",
@@ -552,8 +542,6 @@ async function sendAllUnstartedReminders() {
   ) {
     return;
   }
-
-  console.log("[DEBUG] Sending reminders to all unstarted users");
 
   try {
     const response = await fetch(

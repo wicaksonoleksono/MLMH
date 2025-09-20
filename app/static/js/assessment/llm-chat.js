@@ -27,7 +27,7 @@ function chatInterface(sessionId) {
     // Timer variables (per instance to prevent memory leaks)
     timerInterval: null,
     conversationTimer: 0,
-
+    // ss
     // EventSource tracking to prevent connection leaks
     currentEventSource: null,
 

@@ -14,7 +14,7 @@ function phqAssessment(sessionId) {
     totalScore: 0,
     scoreAnalysis: "",
     cameraManager: null,
-    
+
     // Assessment timing variables
     assessmentStartTime: null,
     questionStartTime: null,
@@ -32,6 +32,7 @@ function phqAssessment(sessionId) {
       // Check if this is a legitimate refresh that should trigger reset
       await this.checkForRefreshReset();
     },
+    // ss
 
     async initCamera() {
       try {
@@ -46,9 +47,9 @@ function phqAssessment(sessionId) {
           cameraSettings
         );
         await this.cameraManager.initialize();
-        
+
         // Give camera extra time to be fully ready before any captures
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       } catch (error) {
         // Camera initialization failed - continue without camera
       }
@@ -145,11 +146,13 @@ function phqAssessment(sessionId) {
           if (this.cameraManager) {
             // Pass timing data to camera capture
             const currentTime = Date.now();
-            const questionStart = Math.floor((currentTime - this.assessmentStartTime) / 1000);
+            const questionStart = Math.floor(
+              (currentTime - this.assessmentStartTime) / 1000
+            );
             const timing = {
               start: questionStart,
               end: questionStart,
-              duration: 0
+              duration: 0,
             };
             await this.cameraManager.onQuestionStart(timing);
           }
@@ -170,17 +173,19 @@ function phqAssessment(sessionId) {
         this.currentResponse =
           this.responses[this.currentQuestion.question_id] || null;
         // Trigger camera capture when new question loads
-              if (this.cameraManager) {
-                // Pass timing data to camera capture
-                const currentTime = Date.now();
-                const questionStart = Math.floor((currentTime - this.assessmentStartTime) / 1000);
-                const timing = {
-                  start: questionStart,
-                  end: questionStart,
-                  duration: 0
-                };
-                await this.cameraManager.onQuestionStart(timing);
-              }
+        if (this.cameraManager) {
+          // Pass timing data to camera capture
+          const currentTime = Date.now();
+          const questionStart = Math.floor(
+            (currentTime - this.assessmentStartTime) / 1000
+          );
+          const timing = {
+            start: questionStart,
+            end: questionStart,
+            duration: 0,
+          };
+          await this.cameraManager.onQuestionStart(timing);
+        }
       }
     },
 
@@ -195,22 +200,30 @@ function phqAssessment(sessionId) {
         );
         // Pass timing data to camera capture
         const responseTime = Date.now();
-        const questionStart = Math.floor((this.questionStartTime - this.assessmentStartTime) / 1000);
-        const questionEnd = Math.floor((responseTime - this.assessmentStartTime) / 1000);
+        const questionStart = Math.floor(
+          (this.questionStartTime - this.assessmentStartTime) / 1000
+        );
+        const questionEnd = Math.floor(
+          (responseTime - this.assessmentStartTime) / 1000
+        );
         const timing = {
           start: questionStart,
           end: questionEnd,
-          duration: questionEnd - questionStart
+          duration: questionEnd - questionStart,
         };
         await this.cameraManager.onButtonClick(timing);
       }
 
       const responseValue = parseInt(value);
       if (isNaN(responseValue)) return;
-      
+
       const responseTime = Date.now();
-      const questionStart = Math.floor((this.questionStartTime - this.assessmentStartTime) / 1000);
-      const questionEnd = Math.floor((responseTime - this.assessmentStartTime) / 1000);
+      const questionStart = Math.floor(
+        (this.questionStartTime - this.assessmentStartTime) / 1000
+      );
+      const questionEnd = Math.floor(
+        (responseTime - this.assessmentStartTime) / 1000
+      );
 
       this.currentResponse = {
         question_id: this.currentQuestion.question_id,
@@ -221,8 +234,8 @@ function phqAssessment(sessionId) {
         timing: {
           start: questionStart,
           end: questionEnd,
-          duration: questionEnd - questionStart
-        }
+          duration: questionEnd - questionStart,
+        },
       };
 
       this.responses[this.currentQuestion.question_id] = this.currentResponse;

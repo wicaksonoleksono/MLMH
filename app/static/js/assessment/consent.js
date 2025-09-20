@@ -20,6 +20,7 @@ function consentForm(sessionId, consentData) {
 
     async submitConsent() {
       if (!this.agreed || this.submitting) return;
+      // ss
 
       this.submitting = true;
       try {

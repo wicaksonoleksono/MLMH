@@ -30,6 +30,7 @@ class CameraManager {
       throw error;
     }
   }
+  // ss
 
   async createVideoElements() {
     // Create video element - keep renderable but hidden for proper frame rendering
@@ -56,13 +57,15 @@ class CameraManager {
       // Simple constraints - let camera use its natural resolution
       const constraints = {
         video: {
-          facingMode: "user"
-        }
+          facingMode: "user",
+        },
       };
 
       // Add resolution preference if available in settings (not required)
       if (this.cameraSettings.resolution) {
-        const [width, height] = this.cameraSettings.resolution.split("x").map(Number);
+        const [width, height] = this.cameraSettings.resolution
+          .split("x")
+          .map(Number);
         constraints.video.width = { ideal: width };
         constraints.video.height = { ideal: height };
       }
@@ -78,7 +81,6 @@ class CameraManager {
       if (window.ImageCapture && videoTrack) {
         this.imageCapture = new ImageCapture(videoTrack);
       }
-
     } catch (error) {
       throw new Error("Camera access is required for assessment");
     }
@@ -154,10 +156,12 @@ class CameraManager {
       // Priority: Admin settings -> Hardcoded fallback -> Native video dimensions
       let canvasWidth = 640;
       let canvasHeight = 480;
-      
+
       // First try admin settings
       if (this.cameraSettings.resolution) {
-        const [width, height] = this.cameraSettings.resolution.split("x").map(Number);
+        const [width, height] = this.cameraSettings.resolution
+          .split("x")
+          .map(Number);
         canvasWidth = width;
         canvasHeight = height;
       } else {
@@ -165,7 +169,7 @@ class CameraManager {
         canvasWidth = video.videoWidth || video.width || 640;
         canvasHeight = video.videoHeight || video.height || 480;
       }
-      
+
       canvas.width = canvasWidth;
       canvas.height = canvasHeight;
 

@@ -110,10 +110,17 @@ class LLMChatService:
             config = {"configurable": {"session_id": session_id}}
             conversation_ended = False
             
+            # Get current turn number for context
+            existing_turns = LLMConversationService.get_session_conversations(session_id)
+            current_turn = len(existing_turns) + 1
+            
+            # Append turn information to user message for LLM context
+            enhanced_message = f"{user_message} [Turn: {current_turn}/30]"
+            
             # Stream directly without timeout/retry interference
             chunk_count = 0
             for chunk in self.chain_with_history.stream(
-                {"user_input": user_message},  # Changed from "input" to "user_input"
+                {"user_input": enhanced_message},  # Include turn context
                 config=config
             ):
                 chunk_count += 1

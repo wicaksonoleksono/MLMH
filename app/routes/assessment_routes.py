@@ -717,37 +717,37 @@ async def upload_camera_captures():
         return jsonify({"status": "SNAFU", "error": str(e)}), 500
 
 
-@assessment_bp.route('/camera/file/<filename>')
-@login_required
-def serve_camera_capture(filename):
-    """Serve camera capture file"""
-    try:
-        from flask import send_from_directory
-        from ..services.camera.cameraCaptureService import CameraCaptureService
+# @assessment_bp.route('/camera/file/<filename>')
+# @login_required
+# def serve_camera_capture(filename):
+#     """Serve camera capture file"""
+#     try:
+#         from flask import send_from_directory
+#         from ..services.camera.cameraCaptureService import CameraCaptureService
         
-        # Basic security check - ensure filename doesn't contain path traversal
-        if '..' in filename or '/' in filename or '\\' in filename:
-            return jsonify({"error": "Invalid filename"}), 400
+#         # Basic security check - ensure filename doesn't contain path traversal
+#         if '..' in filename or '/' in filename or '\\' in filename:
+#             return jsonify({"error": "Invalid filename"}), 400
             
-        upload_path = CameraCaptureService.get_upload_path()
+#         upload_path = CameraCaptureService.get_upload_path()
         
-        # Verify the capture belongs to current user
-        with get_session() as db:
-            from ..model.assessment.sessions import CameraCapture
-            capture = db.query(CameraCapture).filter_by(filename=filename).first()
-            if not capture:
-                return jsonify({"error": "File not found"}), 404
+#         # Verify the capture belongs to current user
+#         with get_session() as db:
+#             from ..model.assessment.sessions import CameraCapture
+#             capture = db.query(CameraCapture).filter_by(filename=filename).first()
+#             if not capture:
+#                 return jsonify({"error": "File not found"}), 404
                 
-            # Check if user owns this capture's session
-            session = SessionManager.get_session(capture.session_id)
-            if not session or int(session.user_id) != int(current_user.id):
-                return jsonify({"error": "Access denied"}), 403
+#             # Check if user owns this capture's session
+#             session = SessionManager.get_session(capture.session_id)
+#             if not session or int(session.user_id) != int(current_user.id):
+#                 return jsonify({"error": "Access denied"}), 403
         
-        return send_from_directory(upload_path, filename)
+#         return send_from_directory(upload_path, filename)
         
-    except Exception as e:
-        print(f"Error serving capture: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+#     except Exception as e:
+#         print(f"Error serving capture: {str(e)}")
+#         return jsonify({"error": str(e)}), 500
 
 
 @assessment_bp.route('/camera/session/<session_id>')

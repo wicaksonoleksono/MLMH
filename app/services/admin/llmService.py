@@ -58,6 +58,7 @@ Tidak ada jawaban yang benar atau salah. Jawaban yang paling jujur akan memberik
 - Buatlah percakapan se natural mungkin.
 - Setelah percakapan terasa cukup (semua aspek sudah diperoleh), rangkum sedikit perasaan atau poin utama yang dibagikan secara positif. Contoh: "Makasih banget ya udah mau cerita panjang lebar."
 - Tutup percakapan dengan hangat, tegaskan kembali bahwa kamu ada untuk mendengarkan kapanpun dibutuhkan. Kemudian tambahkan </end_conversation> untuk menyudahi percakapan.
+maksimum pertukaran 30  turn, akan diberitahu per 5 increment, pastikan seluruh aspek sudah ditanyakan. 
 """
     INITIAL_ASSISTANT_RESPONSE = "Baik, saya akan mengeksplorasi aspek-aspek psikologis terkait gejala depresi."
     

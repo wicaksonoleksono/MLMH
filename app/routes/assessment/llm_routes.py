@@ -399,59 +399,6 @@ def llm_instructions():
 
 
 
-
-# @llm_assessment_bp.route('/debug/validate-config', methods=['GET'])
-# @user_required
-# @api_response
-# def validate_llm_config():
-#     """Validate LLM configuration for debugging"""
-#     try:
-#         chat_service = LLMChatService()
-#         settings = chat_service._load_llm_settings()
-        
-#         return {
-#             "status": "success", 
-#             "message": "LLM configuration is valid",
-#             "config": {
-#                 "has_api_key": bool(settings.get('openai_api_key_unmasked')),
-#                 "chat_model": settings.get('chat_model'),
-#                 "analysis_model": settings.get('analysis_model'),
-#                 "aspects_count": len(settings.get('depression_aspects', [])),
-#                 "analysis_scale_configured": bool(settings.get('analysis_scale'))
-#             }
-#         }
-#     except Exception as e:
-#         return {
-#             "status": "error",
-#             "message": str(e),
-#             "error_type": type(e).__name__
-#         }
-
-# @llm_assessment_bp.route('/debug-session/<session_id>', methods=['GET'])
-# @user_required
-# @api_response
-# def debug_session_status(session_id):
-#     """Debug endpoint to check session status"""
-#     # Validate session belongs to current user
-#     session = SessionManager.get_session(session_id)
-#     if not session or int(session.user_id) != int(current_user.id):
-#         return {"message": "Session not found or access denied"}, 403
-
-#     return {
-#         "session_id": session.id,
-#         "status": session.status,
-#         "is_first": session.is_first,
-#         "consent_completed": session.consent_completed_at is not None,
-#         "camera_completed": session.camera_completed,
-#         "phq_completed": session.phq_completed_at is not None,
-#         "llm_completed": session.llm_completed_at is not None,
-#         "next_assessment_type": session.next_assessment_type,
-#         "can_start_assessment": session.can_start_assessment,
-#         "session_metadata_keys": list(session.session_metadata.keys()) if session.session_metadata else [],
-#         "assessment_order": session.assessment_order
-#     }
-
-
 @llm_assessment_bp.route('/save-timing/<session_id>', methods=['POST'])
 @user_required
 @api_response  

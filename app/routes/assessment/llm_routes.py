@@ -266,7 +266,6 @@ def get_llm_progress(session_id):
     except Exception as e:
         return {"message": f"Error getting progress: {str(e)}"}, 500
 
-
 @llm_assessment_bp.route('/cleanup/<session_id>', methods=['POST'])
 @user_required
 @api_response
@@ -387,9 +386,12 @@ def start_chat_async(session_id):
         # Initialize LLM chat service (simple approach)
         result = LLMChatService.start_conversation(session.id)
         
-        # Add conversation_id to result for camera to use
+        # Add conversation_id and greeting to result for camera to use
         if result.get("status") == "success":
             result["conversation_id"] = conversation_record.id
+            # Always provide greeting for frontend consistency
+            from ...services.admin.llmService import LLMService
+            result["greeting_message"] = LLMService.GREETING
         
         return result
     except Exception as e:
@@ -412,9 +414,12 @@ def start_chat(session_id):
         # Initialize LLM chat service
         result = LLMChatService.start_conversation(session.id)
         
-        # Add conversation_id to result for camera to use
+        # Add conversation_id and greeting to result for camera to use
         if result.get("status") == "success":
             result["conversation_id"] = conversation_record.id
+            # Always provide greeting for frontend consistency
+            from ...services.admin.llmService import LLMService
+            result["greeting_message"] = LLMService.GREETING
         
         return result
     except Exception as e:

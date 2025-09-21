@@ -47,7 +47,8 @@ function chatInterface(sessionId) {
       await this.initCamera();
       await this.initializeChatAsync();
       this.setupAbandonTracking();
-      this.addGreetingMessage();
+      // Use greeting from API response
+      this.addGreetingMessage(this.greetingMessage);
     },
 
     // Initialize (ORIGINAL SYNC VERSION)
@@ -63,15 +64,17 @@ function chatInterface(sessionId) {
       await this.initCamera();
       await this.initializeChat();
       this.setupAbandonTracking();
-      this.addGreetingMessage();
+      // Use greeting from API response
+      this.addGreetingMessage(this.greetingMessage);
     },
 
-    addGreetingMessage() {
-      // Add initial greeting from Sindi
+    addGreetingMessage(greetingText = null) {
+      // Add initial greeting from API response or fallback
+      const greetingContent = greetingText || "Halo aku Sindi, bagaimana kabar kamu ?";
       this.messages.push({
         id: this.messageId++,
         type: "ai",
-        content: "Halo aku Sindi, bagaimana kabar kamu ?",
+        content: greetingContent,
         streaming: true,
         timestamp: new Date(),
       });
@@ -179,6 +182,9 @@ function chatInterface(sessionId) {
           if (this.cameraManager) {
             this.cameraManager.setConversationId(this.conversationId);
           }
+          
+          // Store greeting from API response for proper usage
+          this.greetingMessage = result.greeting_message;
         }
 
         this.loading = false;
@@ -213,6 +219,9 @@ function chatInterface(sessionId) {
           if (this.cameraManager) {
             this.cameraManager.setConversationId(this.conversationId);
           }
+          
+          // Store greeting from API response for proper usage
+          this.greetingMessage = result.greeting_message;
         }
 
         this.loading = false;

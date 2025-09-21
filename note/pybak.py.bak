@@ -1,0 +1,98 @@
+
+# @assessment_bp.route('/stream/', methods=['GET'])  # Original sync version
+# def stream_sse_optimized():
+#     """Direct GET SSE endpoint optimized for nginx - matches /assessment/stream/ route"""
+#     session_id = request.args.get('session_id')
+#     message = request.args.get('message', '').strip()
+#     user_token = request.args.get('user_token', '')
+#     user_timing_str = request.args.get('user_timing', '')
+    
+#     def sse(event: dict):
+#         return "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
+    
+#     def generate():
+#         try:
+#             # Validation
+#             if not session_id or not message:
+#                 yield sse({'type': 'error', 'message': 'session_id and message are required'})
+#                 return
+            
+#             # Auth: Try token first, then fallback to session
+#             auth_valid = False
+#             validated_user_id = None
+            
+#             if user_token:
+#                 token_valid, token_user_id, token_session_id = validate_stream_token(user_token)
+#                 if token_valid and token_session_id == session_id:
+#                     auth_valid = True
+#                     validated_user_id = token_user_id
+#             elif current_user.is_authenticated and (current_user.is_admin() or current_user.is_user()):
+#                 auth_valid = True
+#                 validated_user_id = current_user.id
+            
+#             if not auth_valid:
+#                 yield sse({'type': 'error', 'message': 'Authentication required'})
+#                 return
+            
+#             # Validate session ownership
+#             session = SessionManager.get_session(session_id)
+#             if not session or int(session.user_id) != int(validated_user_id):
+#                 yield sse({'type': 'error', 'message': 'Session access denied'})
+#                 return
+            
+#             # Parse user timing data
+#             user_timing = None
+#             if user_timing_str:
+#                 try:
+#                     user_timing = json.loads(user_timing_str)
+#                 except:
+#                     user_timing = None
+            
+#             # Stream response using hybrid async approach
+#             chat_service = LLMChatService()
+#             yield sse({'type': 'stream_start'})
+            
+#             last_beat = time.time()
+#             chunk_count = 0
+            
+#             # Use synchronous streaming (LangChain internally handles async)
+#             for chunk_data in chat_service.stream_ai_response(session_id, message, user_timing):
+#                 chunk_count += 1
+#                 chunk_payload = {
+#                     'type': 'chunk', 
+#                     'data': chunk_data['content'],
+#                     'conversation_ended': chunk_data['conversation_ended']
+#                 }
+#                 yield sse(chunk_payload)
+                
+#                 # If conversation ended, stop streaming immediately
+#                 if chunk_data['conversation_ended']:
+#                     break
+                
+#                 if time.time() - last_beat > 20:
+#                     yield ": ping\n\n"  
+#                     last_beat = time.time()
+            
+#             # Brief delay to ensure database save completes before checking conversation status
+#             time.sleep(0.1)  # 100ms should be enough for database commit
+            
+#             # Check conversation completion
+#             ended = chat_service.is_conversation_complete(session_id)
+#             yield sse({'type': 'complete', 'conversation_ended': ended})
+            
+#         except Exception as e:
+#             logging.exception("SSE stream error")
+#             yield sse({'type': 'error', 'message': str(e)})
+    
+#     return Response(
+#         stream_with_context(generate()),
+#         mimetype='text/event-stream',
+#         headers={
+#             'Cache-Control': 'no-cache, no-transform',
+#             'Connection': 'keep-alive',
+#             'X-Accel-Buffering': 'no',
+#             'Access-Control-Allow-Origin': '*',
+#         },
+#         status=200
+#     )
+

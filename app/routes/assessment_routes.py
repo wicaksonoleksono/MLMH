@@ -3,15 +3,12 @@ from flask import Blueprint, render_template, request, jsonify, redirect, url_fo
 from flask_login import current_user, login_required
 from ..decorators import raw_response, api_response, user_required
 from ..services.session.sessionManager import SessionManager
-from ..services.session.sessionManager import SessionManager
 from ..services.admin.phqService import PHQService
 from ..services.admin.llmService import LLMService
 from ..services.llm.chatService import LLMChatService
-import json
 import time
 import hashlib
 import hmac
-import logging
 
 assessment_bp = Blueprint('assessment', __name__, url_prefix='/assessment')
 def _save_camera_capture_sync(session_id, file_data, capture_trigger, assessment_id, capture_type, camera_settings_snapshot):
@@ -82,32 +79,22 @@ def assessment_dashboard():
     settings_check = SessionManager.check_assessment_settings_configured()
     if not settings_check['all_configured']:
         return redirect(url_for('main.settings_not_configured'))
-
-    # Check for active session
     active_session = SessionManager.get_active_session(current_user.id)
-
     if not active_session:
         return redirect(url_for('main.serve_index'))
-
     session = active_session
-    
-    # Check if this is a reset request from refresh
     reset_session_id = request.args.get('reset_session')
     if reset_session_id and reset_session_id == str(session.id):
         try:
-            # Reset the session to new attempt
             result = SessionManager.reset_session_to_new_attempt(session.id, "PAGE_REFRESH")
             flash("Session berhasil direset. Anda dapat memulai assessment baru.", "success")
             return redirect(url_for('assessment.assessment_dashboard'))
         except Exception as e:
             flash(f"Gagal mereset session: {str(e)}", "error")
             return redirect(url_for('assessment.assessment_dashboard'))
-
-    # Direct redirect logic based on session flow
     if not session.consent_completed_at:
         print(" No consent - redirecting to consent")
         return redirect(url_for('assessment.consent_page'))
-
     if session.status == 'CONSENT' and not session.camera_completed:
         print(" No camera check - redirecting to camera")
         return redirect(url_for('assessment.camera_check'))
@@ -210,7 +197,7 @@ def camera_check():
 
     if not active_session or not active_session.consent_completed_at:
         return redirect(url_for('assessment.consent_page'))
-
+    # problem 2 
     return render_template('assessment/camera_check.html',
                            user=current_user,
                            session=active_session)
@@ -341,6 +328,7 @@ def phq_assessment_start():
             return redirect(url_for('assessment.assessment_dashboard'))
         else:
             return redirect(url_for('assessment.assessment_dashboard'))
+        # problem 3. 
     return render_template('assessment/phq.html',
                            user=current_user,
                            session=session,
@@ -397,7 +385,6 @@ def llm_assessment():
             return redirect(url_for('assessment.assessment_dashboard'))
         else:
             return redirect(url_for('assessment.assessment_dashboard'))
-    
     # AUTO-REDIRECT: If this is a fresh LLM start, show instructions first
     return redirect(url_for('llm_assessment.llm_instructions'))
 
@@ -452,11 +439,9 @@ def llm_assessment_start():
             return redirect(url_for('assessment.assessment_dashboard'))
         else:
             return redirect(url_for('assessment.assessment_dashboard'))
-    # Load camera settings for frontend
     from ..services.camera.cameraCaptureService import CameraCaptureService
     camera_settings = CameraCaptureService.get_camera_settings_for_session(session.id)
     camera_settings_dict = CameraCaptureService.create_settings_snapshot(camera_settings) if camera_settings else {}
-    
     return render_template('assessment/llm.html',
                            user=current_user,
                            session=session,
@@ -517,7 +502,7 @@ def complete_assessment(assessment_type, session_id):
 @assessment_bp.route('/reset-session/<session_id>', methods=['POST'])
 @login_required
 def reset_session_to_new_attempt(session_id):
-    """Reset session to new attempt with version increment (using UUID)"""
+    """Reset session and auto-create new session (improved UX)"""
     try:
         session = SessionManager.get_session(session_id)
         if not session:
@@ -530,9 +515,13 @@ def reset_session_to_new_attempt(session_id):
             return redirect(url_for('main.serve_index'))
         
         reason = request.form.get('reason', 'USER_INITIATED_RESET')
-        result = SessionManager.reset_session_to_new_attempt(session.id, reason)
         
-        flash(f'Session berhasil direset. Memulai assessment baru.', 'success')
+        # Delete old session and create new one (with camera cleanup)
+        delete_result, new_session = SessionManager.delete_and_create_new_session(
+            session.id, current_user.id, reason
+        )
+        
+        flash('Session direset dan session baru telah dibuat. Memulai assessment baru.', 'success')
         return redirect(url_for('assessment.assessment_dashboard'))
         
     except ValueError as e:
@@ -713,38 +702,6 @@ async def upload_camera_captures():
         return jsonify({"status": "SNAFU", "error": str(e)}), 500
 
 
-# @assessment_bp.route('/camera/file/<filename>')
-# @login_required
-# def serve_camera_capture(filename):
-#     """Serve camera capture file"""
-#     try:
-#         from flask import send_from_directory
-#         from ..services.camera.cameraCaptureService import CameraCaptureService
-        
-#         # Basic security check - ensure filename doesn't contain path traversal
-#         if '..' in filename or '/' in filename or '\\' in filename:
-#             return jsonify({"error": "Invalid filename"}), 400
-            
-#         upload_path = CameraCaptureService.get_upload_path()
-        
-#         # Verify the capture belongs to current user
-#         with get_session() as db:
-#             from ..model.assessment.sessions import CameraCapture
-#             capture = db.query(CameraCapture).filter_by(filename=filename).first()
-#             if not capture:
-#                 return jsonify({"error": "File not found"}), 404
-                
-#             # Check if user owns this capture's session
-#             session = SessionManager.get_session(capture.session_id)
-#             if not session or int(session.user_id) != int(current_user.id):
-#                 return jsonify({"error": "Access denied"}), 403
-        
-#         return send_from_directory(upload_path, filename)
-        
-#     except Exception as e:
-#         print(f"Error serving capture: {str(e)}")
-#         return jsonify({"error": str(e)}), 500
-
 
 @assessment_bp.route('/camera/session/<session_id>')
 @login_required
@@ -775,7 +732,7 @@ def get_session_camera_captures(session_id):
 @assessment_bp.route("/restart-phq/<session_id>", methods=["POST"])
 @login_required
 def restart_phq_assessment(session_id):
-    """Restart PHQ assessment by clearing previous data"""
+    """Restart PHQ assessment by creating new session (improved UX)"""
     try:
         # Validate session belongs to current user
         session = SessionManager.get_session(session_id)
@@ -783,17 +740,13 @@ def restart_phq_assessment(session_id):
             flash("Session tidak ditemukan atau akses ditolak.", "error")
             return redirect(url_for("assessment.assessment_dashboard"))
 
-        # Clear PHQ data and reset status
-        from ..services.assessment.phqService import PHQResponseService
+        # Delete old session and create new one (with camera cleanup)
+        delete_result, new_session = SessionManager.delete_and_create_new_session(
+            session_id, current_user.id, "PHQ_RESTART"
+        )
         
-        # Delete existing PHQ responses
-        PHQResponseService.clear_session_responses(session_id)
-        
-        # Reset PHQ completion status
-        SessionManager.reset_phq_completion(session_id)
-        
-        flash("PHQ assessment berhasil direset. Silakan mulai ulang.", "success")
-        return redirect(url_for("main.serve_index"))
+        flash("PHQ assessment direset. Session baru telah dibuat.", "success")
+        return redirect(url_for("assessment.assessment_dashboard"))
         
     except Exception as e:
         flash(f"Gagal mereset PHQ assessment: {str(e)}", "error")
@@ -803,7 +756,7 @@ def restart_phq_assessment(session_id):
 @assessment_bp.route("/restart-llm/<session_id>", methods=["POST"])
 @login_required
 def restart_llm_assessment(session_id):
-    """Restart LLM assessment by clearing previous data"""
+    """Restart LLM assessment by creating new session (improved UX)"""
     try:
         # Validate session belongs to current user
         session = SessionManager.get_session(session_id)
@@ -811,25 +764,23 @@ def restart_llm_assessment(session_id):
             flash("Session tidak ditemukan atau akses ditolak.", "error")
             return redirect(url_for("assessment.assessment_dashboard"))
 
-        # Clear LLM data and reset status
-        from ..services.assessment.llmService import LLMConversationService
-        from ..services.llm.chatService import LLMChatService
-        
-        # Delete existing LLM conversations
-        LLMConversationService.clear_session_conversations(session_id)
-        
-        # Clear LangChain memory
+        # Clear LangChain memory first (before deleting session)
         from ..services.llm.chatService import get_by_session_id, store
-        history = get_by_session_id(str(session_id))
-        history.clear()
-        if str(session_id) in store:
-            del store[str(session_id)]
+        try:
+            history = get_by_session_id(str(session_id))
+            history.clear()
+            if str(session_id) in store:
+                del store[str(session_id)]
+        except Exception:
+            pass  # Ignore if memory doesn't exist
         
-        # Reset LLM completion status
-        SessionManager.reset_llm_completion(session_id)
+        # Delete old session and create new one (with camera cleanup)
+        delete_result, new_session = SessionManager.delete_and_create_new_session(
+            session_id, current_user.id, "LLM_RESTART"
+        )
         
-        flash(f"LLM assessment berhasil direset. Silakan mulai ulang.", "success")
-        return redirect(url_for("main.serve_index"))
+        flash("LLM assessment direset. Session baru telah dibuat.", "success")
+        return redirect(url_for("assessment.assessment_dashboard"))
         
     except Exception as e:
         flash(f"Gagal mereset LLM assessment: {str(e)}", "error")
@@ -839,7 +790,7 @@ def restart_llm_assessment(session_id):
 @assessment_bp.route("/reset-session-on-refresh/<session_id>", methods=["POST"])
 @login_required
 def reset_session_on_refresh(session_id):
-    """Reset session when user refreshes the page"""
+    """Reset session when user refreshes the page (improved UX)"""
     try:
         # Validate session belongs to current user
         session = SessionManager.get_session(session_id)
@@ -847,71 +798,19 @@ def reset_session_on_refresh(session_id):
             flash("Session tidak ditemukan atau akses ditolak.", "error")
             return redirect(url_for("main.serve_index"))
 
-        # Reset the session to new attempt
-        result = SessionManager.reset_session_to_new_attempt(session_id, "PAGE_REFRESH")
+        # Delete old session and create new one (with camera cleanup)
+        delete_result, new_session = SessionManager.delete_and_create_new_session(
+            session_id, current_user.id, "PAGE_REFRESH"
+        )
         
-        flash("Session berhasil direset. Silakan refresh browser Anda untuk memulai assessment baru.", "success")
-        return redirect(url_for("main.serve_index"))
+        flash("Session berhasil direset. Session baru telah dibuat.", "success")
+        return redirect(url_for("assessment.assessment_dashboard"))
         
     except Exception as e:
         flash(f"Gagal mereset session: {str(e)}", "error")
         return redirect(url_for("assessment.assessment_dashboard"))
 
 
-# Token-based auth functions for SSE
-def generate_stream_token(user_id: int, session_id: str) -> str:
-    """Generate a temporary token for SSE authentication"""
-    secret = "your-secret-key-here"  # TODO: Move to config
-    timestamp = str(int(time.time()))
-    payload = f"{user_id}:{session_id}:{timestamp}"
-    signature = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
-    return f"{payload}:{signature}"
-
-def validate_stream_token(token: str, max_age: int = 300) -> tuple[bool, int, str]:
-    """Validate stream token, returns (valid, user_id, session_id)"""
-    try:
-        secret = "your-secret-key-here"  # TODO: Move to config
-        parts = token.split(':')
-        if len(parts) != 4:
-            return False, 0, ""
-        
-        user_id, session_id, timestamp, signature = parts
-        current_time = int(time.time())
-        token_time = int(timestamp)
-        
-        # Check expiration
-        if current_time - token_time > max_age:
-            return False, 0, ""
-        
-        # Verify signature
-        payload = f"{user_id}:{session_id}:{timestamp}"
-        expected_sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
-        
-        if hmac.compare_digest(signature, expected_sig):
-            return True, int(user_id), session_id
-        
-        return False, 0, ""
-    except:
-        return False, 0, ""
-
-
-@assessment_bp.route('/get-stream-token/<session_id>', methods=['GET'])
-@user_required
-@api_response  
-def get_stream_token(session_id):
-    """Generate a temporary token for SSE streaming"""
-    # SessionManager.get_session is already synchronous
-    session = SessionManager.get_session(session_id)
-    if not session or int(session.user_id) != int(current_user.id):
-        return {"message": "Session not found or access denied"}, 403
-    
-    # Token generation is fast, keep it sync
-    token = generate_stream_token(current_user.id, session_id)
-    return {
-        'token': token,
-        'expires_in': 300,  # 5 minutes
-        'session_id': session_id
-    }
 @assessment_bp.route('/thank-you')
 @login_required
 @raw_response
@@ -929,197 +828,4 @@ def thank_you():
     return render_template('assessment/thank_you.html', 
                          user=current_user,
                          session=last_session)
-
-@assessment_bp.route('/stream-async/', methods=['GET'])  # New async version
-def stream_sse_async():
-    """Async version of SSE streaming using astream_ai_response"""
-    from asgiref.sync import async_to_sync
-    
-    session_id = request.args.get('session_id')
-    message = request.args.get('message', '').strip()
-    user_token = request.args.get('user_token', '')
-    user_timing_str = request.args.get('user_timing', '')
-    
-    def sse(event: dict):
-        return "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
-    
-    def generate():
-        try:
-            # Validation
-            if not session_id or not message:
-                yield sse({'type': 'error', 'message': 'session_id and message are required'})
-                return
-            
-            # Auth: Try token first, then fallback to session
-            auth_valid = False
-            validated_user_id = None
-            
-            if user_token:
-                token_valid, token_user_id, token_session_id = validate_stream_token(user_token)
-                if token_valid and token_session_id == session_id:
-                    auth_valid = True
-                    validated_user_id = token_user_id
-            elif current_user.is_authenticated and (current_user.is_admin() or current_user.is_user()):
-                auth_valid = True
-                validated_user_id = current_user.id
-            
-            if not auth_valid:
-                yield sse({'type': 'error', 'message': 'Authentication required'})
-                return
-            
-            # Validate session ownership
-            session = SessionManager.get_session(session_id)
-            if not session or int(session.user_id) != int(validated_user_id):
-                yield sse({'type': 'error', 'message': 'Session access denied'})
-                return
-            
-            # Parse user timing data
-            user_timing = None
-            if user_timing_str:
-                try:
-                    user_timing = json.loads(user_timing_str)
-                except:
-                    user_timing = None
-            
-            # Stream response using ASYNC approach
-            chat_service = LLMChatService()
-            yield sse({'type': 'stream_start'})
-            
-            last_beat = time.time()
-            chunk_count = 0
-            
-            # Use synchronous streaming (simple and works)
-            for chunk_data in chat_service.stream_ai_response(session_id, message, user_timing):
-                chunk_count += 1
-                chunk_payload = {
-                    'type': 'chunk', 
-                    'data': chunk_data['content'],
-                    'conversation_ended': chunk_data['conversation_ended']
-                }
-                yield sse(chunk_payload)
-                
-                # If conversation ended, stop streaming immediately
-                if chunk_data['conversation_ended']:
-                    break
-                
-                if time.time() - last_beat > 20:
-                    yield ": ping\n\n"  
-                    last_beat = time.time()
-            
-            # Brief delay to ensure database save completes
-            time.sleep(0.1)  # 100ms should be enough for database commit
-            
-            # Check conversation completion
-            ended = LLMChatService.is_conversation_complete(session_id)
-            yield sse({'type': 'complete', 'conversation_ended': ended})
-            
-        except Exception as e:
-            logging.exception("Async SSE stream error")
-            yield sse({'type': 'error', 'message': str(e)})
-    
-    return Response(
-        stream_with_context(generate()),
-        mimetype='text/event-stream',
-        headers={
-            'Cache-Control': 'no-cache',
-            'X-Accel-Buffering': 'no'
-        }
-    )
-
-@assessment_bp.route('/stream/', methods=['GET'])  # Original sync version
-def stream_sse_optimized():
-    """Direct GET SSE endpoint optimized for nginx - matches /assessment/stream/ route"""
-    session_id = request.args.get('session_id')
-    message = request.args.get('message', '').strip()
-    user_token = request.args.get('user_token', '')
-    user_timing_str = request.args.get('user_timing', '')
-    
-    def sse(event: dict):
-        return "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
-    
-    def generate():
-        try:
-            # Validation
-            if not session_id or not message:
-                yield sse({'type': 'error', 'message': 'session_id and message are required'})
-                return
-            
-            # Auth: Try token first, then fallback to session
-            auth_valid = False
-            validated_user_id = None
-            
-            if user_token:
-                token_valid, token_user_id, token_session_id = validate_stream_token(user_token)
-                if token_valid and token_session_id == session_id:
-                    auth_valid = True
-                    validated_user_id = token_user_id
-            elif current_user.is_authenticated and (current_user.is_admin() or current_user.is_user()):
-                auth_valid = True
-                validated_user_id = current_user.id
-            
-            if not auth_valid:
-                yield sse({'type': 'error', 'message': 'Authentication required'})
-                return
-            
-            # Validate session ownership
-            session = SessionManager.get_session(session_id)
-            if not session or int(session.user_id) != int(validated_user_id):
-                yield sse({'type': 'error', 'message': 'Session access denied'})
-                return
-            
-            # Parse user timing data
-            user_timing = None
-            if user_timing_str:
-                try:
-                    user_timing = json.loads(user_timing_str)
-                except:
-                    user_timing = None
-            
-            # Stream response using hybrid async approach
-            chat_service = LLMChatService()
-            yield sse({'type': 'stream_start'})
-            
-            last_beat = time.time()
-            chunk_count = 0
-            
-            # Use synchronous streaming (LangChain internally handles async)
-            for chunk_data in chat_service.stream_ai_response(session_id, message, user_timing):
-                chunk_count += 1
-                chunk_payload = {
-                    'type': 'chunk', 
-                    'data': chunk_data['content'],
-                    'conversation_ended': chunk_data['conversation_ended']
-                }
-                yield sse(chunk_payload)
-                
-                # If conversation ended, stop streaming immediately
-                if chunk_data['conversation_ended']:
-                    break
-                
-                if time.time() - last_beat > 20:
-                    yield ": ping\n\n"  
-                    last_beat = time.time()
-            
-            # Brief delay to ensure database save completes before checking conversation status
-            time.sleep(0.1)  # 100ms should be enough for database commit
-            
-            # Check conversation completion
-            ended = chat_service.is_conversation_complete(session_id)
-            yield sse({'type': 'complete', 'conversation_ended': ended})
-            
-        except Exception as e:
-            logging.exception("SSE stream error")
-            yield sse({'type': 'error', 'message': str(e)})
-    
-    return Response(
-        stream_with_context(generate()),
-        mimetype='text/event-stream',
-        headers={
-            'Cache-Control': 'no-cache, no-transform',
-            'Connection': 'keep-alive',
-            'X-Accel-Buffering': 'no',
-            'Access-Control-Allow-Origin': '*',
-        },
-        status=200
-    )
 

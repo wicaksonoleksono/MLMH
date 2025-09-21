@@ -2,7 +2,8 @@
 from typing import List, Dict, Any, Optional
 import re
 import requests
-from datetime import datetime
+import asyncio
+from datetime import datetime, timezone
 from ...model.assessment.sessions import AssessmentSession, LLMConversation, LLMAnalysisResult
 from ...db import get_session
 from ...services.admin.llmService import LLMService as AdminLLMService
@@ -452,3 +453,68 @@ class LLMConversationService:
             
             db.commit()
             return total_count
+
+    @staticmethod
+    def reset_conversation_content(session_id: str) -> int:
+        """Reset LLM conversation content - REUSE STRATEGY (keep record, clear content)"""
+        with get_session() as db:
+            conversation_record = db.query(LLMConversation).filter_by(session_id=session_id).first()
+            analysis_records = db.query(LLMAnalysisResult).filter_by(session_id=session_id).all()
+            
+            reset_count = 0
+            if conversation_record:
+                # REUSE: Keep record, reset content only
+                conversation_record.conversation_history = {"turns": []}
+                conversation_record.updated_at = datetime.now(timezone.utc)
+                reset_count += 1
+                
+            # For analysis records, still delete them as they're derived data
+            reset_count += len(analysis_records)
+            for analysis in analysis_records:
+                db.delete(analysis)
+            
+            db.commit()
+            return reset_count
+
+    # ===============================
+    # ASYNC WRAPPER METHODS
+    # ===============================
+    
+    @staticmethod
+    async def create_conversation_turn_async(
+        session_id: str,
+        turn_number: int,
+        ai_message: str,
+        user_message: str,
+        ai_model_used: Optional[str] = None,
+        response_audio_path: Optional[str] = None,
+        transcription: Optional[str] = None,
+        user_timing: Optional[Dict[str, Any]] = None,
+        ai_timing: Optional[Dict[str, Any]] = None
+    ) -> LLMConversation:
+        """Async wrapper for create_conversation_turn - non-blocking conversation saves"""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None, 
+            LLMConversationService.create_conversation_turn,
+            session_id, turn_number, ai_message, user_message, ai_model_used,
+            response_audio_path, transcription, user_timing, ai_timing
+        )
+
+    @staticmethod
+    async def create_empty_conversation_record_async(session_id: str) -> LLMConversation:
+        """Async wrapper for create_empty_conversation_record - non-blocking record creation"""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, LLMConversationService.create_empty_conversation_record, session_id)
+
+    @staticmethod
+    async def get_session_conversations_async(session_id: str) -> List[Dict[str, Any]]:
+        """Async wrapper for get_session_conversations - non-blocking conversation loading"""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, LLMConversationService.get_session_conversations, session_id)
+
+    @staticmethod
+    async def save_conversation_metadata_async(session_id: str, metadata: Dict[str, Any]) -> LLMConversation:
+        """Async wrapper for saving conversation metadata - non-blocking metadata saves"""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, LLMConversationService.save_conversation_metadata, session_id, metadata)

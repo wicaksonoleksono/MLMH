@@ -9,7 +9,8 @@ from ...model.admin.camera import CameraSettings
 from ...db import get_session
 import uuid
 import hashlib
-
+import os
+from ..camera.cameraStorageService import CameraStorageService
 
 class SessionManager:
     """Core session lifecycle management with proper separation of concerns"""
@@ -331,6 +332,44 @@ class SessionManager:
             return session is not None
 
     @staticmethod
+    def get_validated_session_for_route(user_id: int) -> tuple[Optional[AssessmentSession], Optional[str]]:
+        """
+        Centralized session validation for routes.
+        Returns (session, redirect_url) where redirect_url is None if session is valid.
+        """
+        # Check if settings are configured
+        settings_check = SessionManager.check_assessment_settings_configured()
+        if not settings_check['all_configured']:
+            return None, '/main/settings-not-configured'
+        
+        # Get active session
+        active_session = SessionManager.get_active_session(user_id)
+        if not active_session:
+            return None, '/'  # Redirect to main index
+        
+        return active_session, None
+    
+    @staticmethod
+    def is_camera_check_required(session: AssessmentSession) -> bool:
+        """
+        Centralized camera check validation.
+        Returns True if camera check is required and not yet completed.
+        """
+        # Camera check is required if:
+        # 1. Consent is completed but camera is not
+        # 2. Session status indicates camera check is pending
+        if not session.consent_completed_at:
+            return False  # Consent not done yet, camera check not applicable
+        
+        # Check if camera is already completed
+        camera_completed = (session.session_metadata and 
+                           session.session_metadata.get('camera_completed_at') is not None)
+        
+        # Camera check required if not completed and session is in early stages
+        return (not camera_completed and 
+                session.status in ['CONSENT', 'CAMERA_CHECK'])
+
+    @staticmethod
     def update_consent_data(session_id: str, consent_data: Dict[str, Any]) -> AssessmentSession:
         """Update session consent data"""
         with get_session() as db:
@@ -458,20 +497,31 @@ class SessionManager:
             if not session:
                 raise ValueError("Session not found")
             
-            # Delete assessment records
+            # Clear all assessment data but keep the session record
             db.query(PHQResponse).filter_by(session_id=session_id).delete()
             db.query(LLMConversation).filter_by(session_id=session_id).delete()
             db.query(CameraCapture).filter_by(session_id=session_id).delete()
+            CameraStorageService.cleanup_session_captures(session_id)
             
-            # Reset session
+            # Reset the session to a new attempt
             session.reset_to_new_attempt(reason)
             db.commit()
-            
             return {
                 "session_id": session_id,
                 "status": "reset",
                 "message": f"Session reset: {reason}"
             }
+
+    @staticmethod
+    def delete_and_create_new_session(session_id: str, user_id: int, reason: str = "SESSION_RESET") -> tuple[Dict[str, Any], AssessmentSession]:
+        """Delete old session and immediately create new one (improved UX pattern)"""
+        # Delete the old session first
+        delete_result = SessionManager.delete_session(session_id)
+        
+        # Create new session immediately 
+        new_session = SessionManager.create_new_session(user_id)
+        
+        return delete_result, new_session
 
     @staticmethod
     def delete_session(session_id: str) -> Dict[str, Any]:
@@ -486,12 +536,8 @@ class SessionManager:
             phq_count = db.query(PHQResponse).filter_by(session_id=session_id).count()
             llm_count = db.query(LLMConversation).filter_by(session_id=session_id).count()
             camera_count = db.query(CameraCapture).filter_by(session_id=session_id).count()
-            
-            # Clean up camera capture files first
             from ...services.camera.cameraStorageService import CameraStorageService
             CameraStorageService.cleanup_session_captures(session_id)
-            
-            # Database cascading delete will handle all related records
             db.delete(session)
             db.commit()
             

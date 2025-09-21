@@ -150,12 +150,7 @@ class CameraAssessmentService:
                 raise ValueError(f"Assessment {assessment_id} not found or invalid type {capture_type}")
 
             # DEBUG: Log what we're passing to storage service
-            print(f" CAMERA SERVICE DEBUG:")
-            print(f"   session_id: {session_id}")
-            print(f"   assessment_id: {assessment_id}")  
             print(f"   filenames: {filenames} (type: {type(filenames)}, length: {len(filenames)})")
-            print(f"   capture_type: {capture_type}")
-            
             capture_record = CameraStorageService.create_batch_capture_with_assessment_id(
                 session_id=session_id,
                 assessment_id=assessment_id,
@@ -167,9 +162,7 @@ class CameraAssessmentService:
             # DEBUG: Log what we got back from database
             print(f" AFTER DB SAVE:")
             print(f"   capture_record.id: {capture_record.id}")
-            print(f"   capture_record.filenames: {capture_record.filenames} (type: {type(capture_record.filenames)})")
             print(f"   capture_record.assessment_id: {capture_record.assessment_id}")
-            
             return {
                 "status": "OLKORECT",
                 "data": {

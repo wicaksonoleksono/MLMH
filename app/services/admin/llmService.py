@@ -7,6 +7,9 @@ import requests
 from ...model.admin.llm import LLMSettings
 from ...db import get_session
 
+import time
+import hashlib
+import hmac
 
 class LLMService:
     """LLM service for managing LLM settings and OpenAI integration"""
@@ -16,8 +19,8 @@ class LLMService:
     DEFAULT_ASPECTS = [
         {"name": "Anhedonia", "description": "Pengguna kehilangan minat atau kesenangan dalam aktivitas sehari-hari."},
         {"name": "Bias Kognitif Negatif", "description": "Pengguna menunjukkan pola pikir negatif dan perasaan putus asa."},
-        {"name": "Ruminasi", "description": "Pengguna terjebak dalam pikiran berulang tanpa menemukan solusi."},
-        {"name": "Retardasi Psikomotor", "description": "Pengguna mengalami perlambatan dalam gerakan dan bicara."},
+        {"name": "Ruminasi", "description": "Pengguna terjebak dalam pikiran negatif berulang tanpa menemukan solusi"},
+        {"name": "Retardasi Psikomotor", "description": "Pengguna mengalami perlambatan dalam gerakan dan bicara. Atau sebaliknya merasa resah atau gelisah sehingga Anda lebih sering bergerak dari biasanya sehingga orang lain menyadarinya "},
         {"name": "Gangguan Tidur", "description": "Pengguna mengalami masalah tidur seperti insomnia atau kualitas tidur yang buruk."},
         {"name": "Iritabilitas", "description": "Pengguna mudah marah atau tersinggung dalam situasi sehari-hari."},
         {"name": "Rasa Bersalah Berlebihan", "description": "Pengguna merasakan perasaan bersalah atau merasa tidak berharga secara berlebihan."},
@@ -438,4 +441,43 @@ maksimum pertukaran 30  turn (Tidak perlu 30 pertukaran, jika sudah memenuhi mak
         except Exception as e:
             print(f"Error testing model {model_id}: {e}")
             return False
+        
+    # Token-based auth functions for SSE
+
+    @staticmethod
+    def generate_stream_token(user_id: int, session_id: str) -> str:
+        """Generate a temporary token for SSE authentication"""
+        secret = "your-secret-key-here"  # TODO: Move to config
+        timestamp = str(int(time.time()))
+        payload = f"{user_id}:{session_id}:{timestamp}"
+        signature = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+        return f"{payload}:{signature}"
+    @staticmethod
+    def validate_stream_token(token: str, max_age: int = 300) -> tuple[bool, int, str]:
+        """Validate stream token, returns (valid, user_id, session_id)"""
+        try:
+            secret = "your-secret-key-here"  # TODO: Move to config
+            parts = token.split(':')
+            if len(parts) != 4:
+                return False, 0, ""
+            
+            user_id, session_id, timestamp, signature = parts
+            current_time = int(time.time())
+            token_time = int(timestamp)
+            
+            # Check expiration
+            if current_time - token_time > max_age:
+                return False, 0, ""
+            
+            # Verify signature
+            payload = f"{user_id}:{session_id}:{timestamp}"
+            expected_sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+            
+            if hmac.compare_digest(signature, expected_sig):
+                return True, int(user_id), session_id
+            
+            return False, 0, ""
+        except:
+            return False, 0, ""
+
 

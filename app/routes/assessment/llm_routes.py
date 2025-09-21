@@ -1,5 +1,5 @@
 # app/routes/assessment/llm_routes.py
-from flask import Blueprint, request, jsonify, render_template, redirect, url_for, flash
+from flask import Blueprint, request, render_template, redirect, url_for, flash, Response, stream_with_context
 from flask_login import current_user, login_required
 from ...decorators import api_response, user_required
 # Removed deprecated service imports - using LLMChatService directly
@@ -13,8 +13,7 @@ llm_assessment_bp = Blueprint('llm_assessment', __name__, url_prefix='/assessmen
 
 import json
 import time
-from flask import Response
-
+import logging
 
 
 # Removed duplicate /start route - using /start-chat instead
@@ -176,6 +175,96 @@ def get_conversation_status_route(session_id):
             "created_at": analysis.created_at.isoformat()
         } if analysis else None
     }
+
+
+@llm_assessment_bp.route('/progress/<session_id>', methods=['GET'])
+@user_required
+@api_response
+def get_llm_progress(session_id):
+    """Get current LLM conversation progress for resume functionality"""
+    # Validate session belongs to current user
+    session = SessionManager.get_session(session_id)
+    if not session or int(session.user_id) != int(current_user.id):
+        return {"message": "Session not found or access denied"}, 403
+    
+    try:
+        # Get or create empty conversation record
+        conversation_record = LLMConversationService.create_empty_conversation_record(session_id)
+        
+        # Get conversation history from database conversation turns
+        database_conversations = LLMConversationService.get_session_conversations(session_id)
+        
+        # Build unified conversation history for frontend
+        conversation_messages = []
+        
+        # ALWAYS start with the greeting message from LangChain template
+        from ...services.admin.llmService import LLMService
+        greeting_message = {
+            'id': 1,
+            'type': 'ai', 
+            'content': LLMService.GREETING,  # "Halo aku Sindi, bagaimana kabar kamu ?"
+            'timestamp': None,
+            'streaming': False,
+            'is_greeting': True
+        }
+        conversation_messages.append(greeting_message)
+        
+        # Convert database turns to frontend format (skip if first turn is same as greeting)
+        for turn in database_conversations:
+            # Skip if this turn's AI message is the same as greeting (avoid duplication)
+            if turn.get('ai_message') == LLMService.GREETING:
+                # Add only the user message for this turn
+                if turn.get('user_message'):
+                    conversation_messages.append({
+                        'id': len(conversation_messages) + 1,
+                        'type': 'user',
+                        'content': turn.get('user_message'),
+                        'timestamp': turn.get('created_at'),
+                        'turn_number': turn.get('turn_number')
+                    })
+                continue
+            
+            # Add user message
+            if turn.get('user_message'):
+                conversation_messages.append({
+                    'id': len(conversation_messages) + 1,
+                    'type': 'user',
+                    'content': turn.get('user_message'),
+                    'timestamp': turn.get('created_at'),
+                    'turn_number': turn.get('turn_number')
+                })
+            
+            # Add AI message
+            conversation_messages.append({
+                'id': len(conversation_messages) + 1,
+                'type': 'ai',
+                'content': turn.get('ai_message'),
+                'timestamp': turn.get('created_at'),
+                'turn_number': turn.get('turn_number')
+            })
+        
+        # Check if conversation ended
+        conversation_ended = any(turn.get("has_end_conversation", False) for turn in database_conversations)
+        
+        # Calculate exchange count
+        exchange_count = len(database_conversations)
+        
+        # Determine if we can start new conversation
+        can_start = not conversation_ended
+        
+        return {
+            "session_id": session_id,
+            "conversation_id": conversation_record.id,
+            "conversation_messages": conversation_messages,
+            "conversation_ended": conversation_ended,
+            "exchange_count": exchange_count,
+            "total_turns": len(database_conversations),
+            "can_start": can_start,
+            "greeting_message": LLMService.GREETING  # Always provide greeting for consistency
+        }
+        
+    except Exception as e:
+        return {"message": f"Error getting progress: {str(e)}"}, 500
 
 
 @llm_assessment_bp.route('/cleanup/<session_id>', methods=['POST'])
@@ -418,7 +507,7 @@ def llm_instructions():
             # Fallback if no settings configured
             instructions = "Instruksi LLM Chat belum dikonfigurasi. Silakan hubungi administrator."
             aspects = []
-        
+        # this is the fuckin problem 1. 
         return render_template('assessment/llm_instructions.html',
                              instructions=instructions, 
                              aspects=aspects,
@@ -492,3 +581,110 @@ def save_timing_data(session_id):
     else:
         print(f"DEBUG: No matching turn found for user_message: '{user_message[:50]}...' or turn_number: {turn_number}")
         return {"message": f"No matching turn found for message or turn number"}, 404
+    
+
+@llm_assessment_bp.route('/stream-async/', methods=['GET'])  # New async version
+def stream_sse_async():
+    """Async version of SSE streaming using astream_ai_response"""
+    from asgiref.sync import async_to_sync
+    
+    session_id = request.args.get('session_id')
+    message = request.args.get('message', '').strip()
+    user_token = request.args.get('user_token', '')
+    user_timing_str = request.args.get('user_timing', '')
+    
+    def sse(event: dict):
+        return "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
+    
+    def generate():
+        try:
+            # Validation
+            if not session_id or not message:
+                yield sse({'type': 'error', 'message': 'session_id and message are required'})
+                return
+            
+            # Auth: Try token first, then fallback to session
+            auth_valid = False
+            validated_user_id = None
+            
+            if user_token:
+                token_valid, token_user_id, token_session_id = LLMService.validate_stream_token(user_token)
+                if token_valid and token_session_id == session_id:
+                    auth_valid = True
+                    validated_user_id = token_user_id
+            elif current_user.is_authenticated and (current_user.is_admin() or current_user.is_user()):
+                auth_valid = True
+                validated_user_id = current_user.id
+            if not auth_valid:
+                yield sse({'type': 'error', 'message': 'Authentication required'})
+                return
+            session = SessionManager.get_session(session_id)
+            if not session or int(session.user_id) != int(validated_user_id):
+                yield sse({'type': 'error', 'message': 'Session access denied'})
+                return
+            user_timing = None
+            if user_timing_str:
+                try:
+                    user_timing = json.loads(user_timing_str)
+                except:
+                    user_timing = None
+            
+            # Stream response using ASYNC approach
+            chat_service = LLMChatService()
+            yield sse({'type': 'stream_start'})
+            
+            last_beat = time.time()
+            chunk_count = 0
+            
+            # Use synchronous streaming (simple and works)
+            for chunk_data in chat_service.stream_ai_response(session_id, message, user_timing):
+                chunk_count += 1
+                chunk_payload = {
+                    'type': 'chunk', 
+                    'data': chunk_data['content'],
+                    'conversation_ended': chunk_data['conversation_ended']
+                }
+                yield sse(chunk_payload)
+                
+                # If conversation ended, stop streaming immediately
+                if chunk_data['conversation_ended']:
+                    break
+                
+                if time.time() - last_beat > 20:
+                    yield ": ping\n\n"  
+                    last_beat = time.time()
+            time.sleep(0.1)  # 100ms should be enough for database commit
+            ended = LLMChatService.is_conversation_complete(session_id)
+            yield sse({'type': 'complete', 'conversation_ended': ended})
+        except Exception as e:
+            logging.exception("Async SSE stream error")
+            yield sse({'type': 'error', 'message': str(e)})
+    
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'X-Accel-Buffering': 'no',
+            'Cache-Control': 'no-cache, no-transform',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*',
+        }
+    )
+
+@llm_assessment_bp.route('/get-stream-token/<session_id>', methods=['GET'])
+@user_required
+@api_response  
+def get_stream_token(session_id):
+    """Generate a temporary token for SSE streaming"""
+    # SessionManager.get_session is already synchronous
+    session = SessionManager.get_session(session_id)
+    if not session or int(session.user_id) != int(current_user.id):
+        return {"message": "Session not found or access denied"}, 403
+    
+    # Token generation is fast, keep it sync
+    token = LLMService.generate_stream_token(current_user.id, session_id)
+    return {
+        'token': token,
+        'expires_in': 300,  # 5 minutes
+        'session_id': session_id
+    }

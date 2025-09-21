@@ -211,6 +211,13 @@ class AssessmentSession(BaseModel):
         self.phq_completed_at = None
         self.llm_completed_at = None
 
+        # **FIX: Clear camera completion metadata to force camera check**
+        if self.session_metadata and 'camera_completed_at' in self.session_metadata:
+            del self.session_metadata['camera_completed_at']
+        # Mark session metadata as modified for SQLAlchemy
+        if self.session_metadata:
+            self.session_metadata = dict(self.session_metadata)
+
         # Reset to camera check status (preserve consent)
         if self.consent_completed_at:
             self.status = 'CAMERA_CHECK'

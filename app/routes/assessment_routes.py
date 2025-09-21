@@ -7,7 +7,6 @@ from ..services.session.sessionManager import SessionManager
 from ..services.admin.phqService import PHQService
 from ..services.admin.llmService import LLMService
 from ..services.llm.chatService import LLMChatService
-from asgiref.sync import sync_to_async
 import json
 import time
 import hashlib
@@ -15,9 +14,6 @@ import hmac
 import logging
 
 assessment_bp = Blueprint('assessment', __name__, url_prefix='/assessment')
-
-# Async wrappers for heavy I/O operations to prevent blocking with 60+ users
-@sync_to_async
 def _save_camera_capture_sync(session_id, file_data, capture_trigger, assessment_id, capture_type, camera_settings_snapshot):
     """Async wrapper for camera capture saving - runs in thread pool"""
     from ..services.camera.cameraCaptureService import CameraCaptureService
@@ -904,10 +900,12 @@ def validate_stream_token(token: str, max_age: int = 300) -> tuple[bool, int, st
 @api_response  
 def get_stream_token(session_id):
     """Generate a temporary token for SSE streaming"""
+    # SessionManager.get_session is already synchronous
     session = SessionManager.get_session(session_id)
     if not session or int(session.user_id) != int(current_user.id):
         return {"message": "Session not found or access denied"}, 403
     
+    # Token generation is fast, keep it sync
     token = generate_stream_token(current_user.id, session_id)
     return {
         'token': token,
@@ -932,7 +930,103 @@ def thank_you():
                          user=current_user,
                          session=last_session)
 
-@assessment_bp.route('/stream/', methods=['GET'])  # This matches nginx /assessment/stream/
+@assessment_bp.route('/stream-async/', methods=['GET'])  # New async version
+def stream_sse_async():
+    """Async version of SSE streaming using astream_ai_response"""
+    from asgiref.sync import async_to_sync
+    
+    session_id = request.args.get('session_id')
+    message = request.args.get('message', '').strip()
+    user_token = request.args.get('user_token', '')
+    user_timing_str = request.args.get('user_timing', '')
+    
+    def sse(event: dict):
+        return "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
+    
+    def generate():
+        try:
+            # Validation
+            if not session_id or not message:
+                yield sse({'type': 'error', 'message': 'session_id and message are required'})
+                return
+            
+            # Auth: Try token first, then fallback to session
+            auth_valid = False
+            validated_user_id = None
+            
+            if user_token:
+                token_valid, token_user_id, token_session_id = validate_stream_token(user_token)
+                if token_valid and token_session_id == session_id:
+                    auth_valid = True
+                    validated_user_id = token_user_id
+            elif current_user.is_authenticated and (current_user.is_admin() or current_user.is_user()):
+                auth_valid = True
+                validated_user_id = current_user.id
+            
+            if not auth_valid:
+                yield sse({'type': 'error', 'message': 'Authentication required'})
+                return
+            
+            # Validate session ownership
+            session = SessionManager.get_session(session_id)
+            if not session or int(session.user_id) != int(validated_user_id):
+                yield sse({'type': 'error', 'message': 'Session access denied'})
+                return
+            
+            # Parse user timing data
+            user_timing = None
+            if user_timing_str:
+                try:
+                    user_timing = json.loads(user_timing_str)
+                except:
+                    user_timing = None
+            
+            # Stream response using ASYNC approach
+            chat_service = LLMChatService()
+            yield sse({'type': 'stream_start'})
+            
+            last_beat = time.time()
+            chunk_count = 0
+            
+            # Use synchronous streaming (simple and works)
+            for chunk_data in chat_service.stream_ai_response(session_id, message, user_timing):
+                chunk_count += 1
+                chunk_payload = {
+                    'type': 'chunk', 
+                    'data': chunk_data['content'],
+                    'conversation_ended': chunk_data['conversation_ended']
+                }
+                yield sse(chunk_payload)
+                
+                # If conversation ended, stop streaming immediately
+                if chunk_data['conversation_ended']:
+                    break
+                
+                if time.time() - last_beat > 20:
+                    yield ": ping\n\n"  
+                    last_beat = time.time()
+            
+            # Brief delay to ensure database save completes
+            time.sleep(0.1)  # 100ms should be enough for database commit
+            
+            # Check conversation completion
+            ended = LLMChatService.is_conversation_complete(session_id)
+            yield sse({'type': 'complete', 'conversation_ended': ended})
+            
+        except Exception as e:
+            logging.exception("Async SSE stream error")
+            yield sse({'type': 'error', 'message': str(e)})
+    
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no'
+        }
+    )
+
+@assessment_bp.route('/stream/', methods=['GET'])  # Original sync version
 def stream_sse_optimized():
     """Direct GET SSE endpoint optimized for nginx - matches /assessment/stream/ route"""
     session_id = request.args.get('session_id')
@@ -967,7 +1061,7 @@ def stream_sse_optimized():
                 yield sse({'type': 'error', 'message': 'Authentication required'})
                 return
             
-            # Validate session ownership  
+            # Validate session ownership
             session = SessionManager.get_session(session_id)
             if not session or int(session.user_id) != int(validated_user_id):
                 yield sse({'type': 'error', 'message': 'Session access denied'})
@@ -981,13 +1075,14 @@ def stream_sse_optimized():
                 except:
                     user_timing = None
             
-            # Stream response
+            # Stream response using hybrid async approach
             chat_service = LLMChatService()
             yield sse({'type': 'stream_start'})
             
             last_beat = time.time()
             chunk_count = 0
             
+            # Use synchronous streaming (LangChain internally handles async)
             for chunk_data in chat_service.stream_ai_response(session_id, message, user_timing):
                 chunk_count += 1
                 chunk_payload = {
@@ -1008,6 +1103,7 @@ def stream_sse_optimized():
             # Brief delay to ensure database save completes before checking conversation status
             time.sleep(0.1)  # 100ms should be enough for database commit
             
+            # Check conversation completion
             ended = chat_service.is_conversation_complete(session_id)
             yield sse({'type': 'complete', 'conversation_ended': ended})
             

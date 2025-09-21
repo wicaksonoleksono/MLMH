@@ -21,7 +21,7 @@ dengan Sindi{% endblock %}
 {% endblock %}
 
 {% block content %}
-<div class="min-h-screen bg-gray-50" x-data="chatInterface('{{ session.id }}')" x-init="init()">
+<div class="min-h-screen bg-gray-50" x-data="chatInterface('{{ session.id }}')" x-init="initAsync()">
   <!-- Navigation -->
   <nav class="bg-white shadow-sm border-b border-gray-200">
     <div class="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
@@ -162,7 +162,7 @@ dengan Sindi{% endblock %}
 
       <!-- Input Area -->
       <div class="bg-gray-50 border-t border-gray-200 p-6">
-        <form @submit.prevent="sendMessage()" class="flex space-x-4">
+        <form @submit.prevent="sendMessageAsync()" class="flex space-x-4">
           <input
             type="text"
             x-model="currentMessage"

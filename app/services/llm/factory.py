@@ -164,7 +164,7 @@ class LLMFactory:
             api_key=api_key,
             model=model,
             streaming=streaming,
-            temperature=0
+            temperature=0.1
             **kwargs
         )
     

@@ -279,6 +279,33 @@ def save_conversation(session_id):
 
 
 
+@llm_assessment_bp.route('/start-chat-async/<session_id>', methods=['POST'])
+@user_required
+@api_response
+def start_chat_async(session_id):
+    """Async version of start chat using async service methods"""
+    from asgiref.sync import sync_to_async, async_to_sync
+    
+    # Validate session belongs to current user
+    session = SessionManager.get_session(session_id)
+    if not session or int(session.user_id) != int(current_user.id):
+        return {"message": "Session not found or access denied"}, 403
+    
+    try:
+        # CREATE EMPTY LLM CONVERSATION RECORD IMMEDIATELY (simple approach)
+        conversation_record = LLMConversationService.create_empty_conversation_record(session_id)
+        
+        # Initialize LLM chat service (simple approach)
+        result = LLMChatService.start_conversation(session.id)
+        
+        # Add conversation_id to result for camera to use
+        if result.get("status") == "success":
+            result["conversation_id"] = conversation_record.id
+        
+        return result
+    except Exception as e:
+        return {"status": "error", "message": str(e)}, 500
+
 @llm_assessment_bp.route('/start-chat/<session_id>', methods=['POST'])
 @user_required
 @api_response
@@ -324,14 +351,20 @@ def chat_stream_new(session_id):
 
     def generate():
         try:
-            # Regular message handling
-            # Stream AI response
-            for chunk in LLMChatService.stream_ai_response(session_id, user_message):
-                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk}, ensure_ascii=False)}\n\n"
+            # Regular message handling using async approach
+            chat_service = LLMChatService()
+            
+            # Use synchronous streaming (LangChain handles async internally)
+            for chunk_data in chat_service.stream_ai_response(session_id, user_message):
+                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk_data['content']}, ensure_ascii=False)}\n\n"
                 time.sleep(0.01)  # Small delay to prevent overwhelming
+                
+                if chunk_data['conversation_ended']:
+                    break
             
             # Check if conversation ended
-            if LLMChatService.is_conversation_complete(session_id):
+            ended = chat_service.is_conversation_complete(session_id)
+            if ended:
                 yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': True}, ensure_ascii=False)}\n\n"
             else:
                 yield f"data: {json.dumps({'type': 'complete', 'conversation_ended': False}, ensure_ascii=False)}\n\n"

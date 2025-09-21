@@ -34,7 +34,23 @@ function chatInterface(sessionId) {
     // Initialization guard
     isInitialized: false,
 
-    // Initialize
+    // Initialize (ASYNC VERSION)
+    async initAsync() {
+      // Prevent double initialization
+      if (this.isInitialized) {
+        return;
+      }
+
+      this.isInitialized = true;
+      this.assessmentStartTime = Date.now();
+      this.startConversationTimer();
+      await this.initCamera();
+      await this.initializeChatAsync();
+      this.setupAbandonTracking();
+      this.addGreetingMessage();
+    },
+
+    // Initialize (ORIGINAL SYNC VERSION)
     async init() {
       // Prevent double initialization
       if (this.isInitialized) {
@@ -140,6 +156,41 @@ function chatInterface(sessionId) {
       };
     },
 
+    // ASYNC VERSION of initializeChat
+    async initializeChatAsync() {
+      try {
+        // Start chat session using ASYNC route
+        const url = `/assessment/llm/start-chat-async/${this.sessionId}`;
+
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+
+        const result = await response.json();
+
+        if (result.status !== "success") {
+          console.error("Start chat async failed:", result.message);
+        } else {
+          // Get conversation_id for assessment-first camera approach
+          this.conversationId = result.conversation_id;
+
+          // Update camera manager with conversation_id
+          if (this.cameraManager) {
+            this.cameraManager.setConversationId(this.conversationId);
+          }
+        }
+
+        this.loading = false;
+        this.scrollToBottom();
+      } catch (error) {
+        console.error("Error initializing chat async:", error);
+        this.loading = false;
+        alert("Error starting conversation. Please refresh the page.");
+      }
+    },
+
+    // ORIGINAL SYNC VERSION of initializeChat
     async initializeChat() {
       try {
         // Start chat session
@@ -183,6 +234,214 @@ function chatInterface(sessionId) {
       }, 100);
     },
 
+    // ASYNC VERSION of sendMessage
+    async sendMessageAsync() {
+      if (
+        !this.currentMessage.trim() ||
+        this.isTyping ||
+        this.conversationEnded
+      )
+        return;
+
+      const userMessage = this.currentMessage.trim();
+      this.currentMessage = "";
+
+      // Set message start time if not already set (when user started typing)
+      if (!this.currentMessageStartTime) {
+        this.currentMessageStartTime = Date.now();
+      }
+
+      // Capture on message send with timing data
+      if (this.cameraManager) {
+        try {
+          // Calculate timing before capture
+          const captureTime = Date.now();
+          const messageStart = Math.floor(
+            (this.currentMessageStartTime - this.assessmentStartTime) / 1000
+          );
+          const messageEnd = Math.floor(
+            (captureTime - this.assessmentStartTime) / 1000
+          );
+          const timing = {
+            start: messageStart,
+            end: messageEnd,
+            duration: messageEnd - messageStart,
+          };
+
+          await this.cameraManager.onMessageSend(timing);
+        } catch (error) {
+          console.error("Camera onMessageSend error:", error);
+        }
+      }
+
+      // Add user message
+      this.messages.push({
+        id: this.messageId++,
+        type: "user",
+        content: userMessage,
+        timestamp: new Date(),
+      });
+
+      // Add AI response placeholder
+      this.messages.push({
+        id: this.messageId++,
+        type: "ai",
+        content: "",
+        streaming: true,
+        timestamp: new Date(),
+      });
+
+      this.isTyping = true;
+      this.scrollToBottom();
+
+      try {
+        // Get stream token for authentication
+        const tokenResponse = await fetch(
+          `/assessment/get-stream-token/${this.sessionId}`
+        );
+        const tokenResult = await tokenResponse.json();
+        const tokenData =
+          tokenResult.status === "OLKORECT" ? tokenResult.data : tokenResult;
+
+        if (!tokenData.token) {
+          throw new Error("Failed to get stream token");
+        }
+
+        // Calculate user timing
+        const messageEndTime = Date.now();
+        const userStart = Math.floor(
+          (this.currentMessageStartTime - this.assessmentStartTime) / 1000
+        );
+        const userEnd = Math.floor(
+          (messageEndTime - this.assessmentStartTime) / 1000
+        );
+        const userTiming = {
+          start: userStart,
+          end: userEnd,
+          duration: userEnd - userStart,
+        };
+
+        // Build stream URL with parameters (ASYNC VERSION)
+        const params = new URLSearchParams({
+          session_id: this.sessionId,
+          message: userMessage,
+          user_token: tokenData.token,
+        });
+        // Add timing data separately to ensure proper encoding
+        params.append("user_timing", JSON.stringify(userTiming));
+
+        const streamUrl = `/assessment/stream-async/?${params}`;
+        const eventSource = new EventSource(streamUrl);
+        this.currentEventSource = eventSource; // Track for cleanup
+
+        // Get reference to the bot message we just added
+        const botMessage = this.messages[this.messages.length - 1];
+        let aiStartTime = null;
+        let aiEndTime = null;
+
+        // Add timeout handling
+        const timeoutId = setTimeout(() => {
+          botMessage.content = `SSE Timeout after 30s`;
+          botMessage.streaming = false;
+          this.isTyping = false;
+          eventSource.close();
+          this.currentEventSource = null; // Clear reference
+        }, 30000);
+
+        eventSource.onmessage = (event) => {
+          let data;
+          try {
+            data = JSON.parse(event.data);
+          } catch (parseError) {
+            botMessage.content = `Error: Invalid server response`;
+            botMessage.streaming = false;
+            this.isTyping = false;
+            return;
+          }
+
+          if (data.type === "chunk") {
+            // Record AI start time on first chunk
+            if (aiStartTime === null) {
+              aiStartTime = Date.now();
+            }
+
+            botMessage.content += data.data;
+            this.scrollToBottom();
+
+            // Check conversation_ended flag from backend (immediate detection)
+            if (data.conversation_ended) {
+              this.conversationEnded = true;
+              if (aiEndTime === null) {
+                aiEndTime = Date.now();
+              }
+              // Send AI timing before finishing conversation
+              this.sendAiTiming(
+                userMessage,
+                userTiming,
+                aiStartTime,
+                aiEndTime
+              );
+              eventSource.close();
+              this.currentEventSource = null; // Clear reference
+              this.isTyping = false;
+              botMessage.streaming = false;
+              this.finishConversation();
+            }
+          } else if (data.type === "complete") {
+            clearTimeout(timeoutId);
+            if (aiEndTime === null) {
+              aiEndTime = Date.now();
+            }
+            botMessage.streaming = false;
+            this.isTyping = false;
+            this.exchangeCount++;
+            eventSource.close();
+            this.currentEventSource = null; // Clear reference
+
+            // Send AI timing to backend
+            this.sendAiTiming(userMessage, userTiming, aiStartTime, aiEndTime);
+
+            // Reset timing for next message
+            this.currentMessageStartTime = null;
+
+            // Check if conversation ended after every message delivery
+            this.checkConversationStatus();
+          } else if (data.type === "error") {
+            clearTimeout(timeoutId);
+            botMessage.content = data.message;
+            botMessage.streaming = false;
+            this.isTyping = false;
+            eventSource.close();
+            this.currentEventSource = null; // Clear reference
+          } else if (data.type === "stream_start") {
+            // Stream started - record AI start time
+            if (aiStartTime === null) {
+              aiStartTime = Date.now();
+            }
+            this.scrollToBottom();
+          }
+        };
+
+        eventSource.onerror = (error) => {
+          clearTimeout(timeoutId);
+          // Show the actual error instead of generic message
+          const errorMessage =
+            error.message || error.toString() || "Unknown connection error";
+          botMessage.content = `<span style="color: red;">Connection error: ${errorMessage}</span>`;
+          botMessage.streaming = false;
+          this.isTyping = false;
+          eventSource.close();
+          this.currentEventSource = null; // Clear reference
+        };
+      } catch (error) {
+        const botMessage = this.messages[this.messages.length - 1];
+        botMessage.content = `Error: ${error.stack || error.toString()}`;
+        botMessage.streaming = false;
+        this.isTyping = false;
+      }
+    },
+
+    // ORIGINAL SYNC VERSION of sendMessage
     async sendMessage() {
       if (
         !this.currentMessage.trim() ||

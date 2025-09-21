@@ -1,11 +1,14 @@
 # app/services/llm/chatService.py
-from typing import Generator, Dict, Any, List
+from typing import Generator, Dict, Any, List, AsyncGenerator
 from datetime import datetime
 from ...services.session.sessionManager import SessionManager
 from ...services.admin.llmService import LLMService
 from ...services.assessment.llmService import LLMConversationService
 from ...model.assessment.sessions import AssessmentSession
 from ...db import get_session
+
+# Async support
+from asgiref.sync import sync_to_async, async_to_sync
 
 # Langchain imports for enhanced chat management
 from langchain_core.chat_history import BaseChatMessageHistory
@@ -187,6 +190,75 @@ class LLMChatService:
             except Exception as e:
                 # Log the error but don't fail the conversation save
                 print(f"Warning: Failed to auto-complete LLM assessment for session {session_id}: {e}")
+    
+    async def astream_ai_response(self, session_id: str, user_message: str, user_timing: dict = None) -> AsyncGenerator[dict, None]:
+        """
+        Async version of stream_ai_response using LangChain's native async streaming
+        """
+        try:
+            # Async database operations
+            settings = await sync_to_async(self._load_llm_settings, thread_sensitive=False)()
+            await sync_to_async(self._init_langchain, thread_sensitive=False)(settings)
+            session = await sync_to_async(SessionManager.get_session, thread_sensitive=False)(session_id)
+            
+            if not session:
+                raise ValueError(f"Session {session_id} not found")
+            
+            response_content = ""
+            config = {"configurable": {"session_id": session_id}}
+            conversation_ended = False
+            
+            # Get current turn number for context (async)
+            existing_turns = await sync_to_async(LLMConversationService.get_session_conversations, thread_sensitive=False)(session_id)
+            current_turn = len(existing_turns) + 1
+            
+            # Append turn information to user message for LLM context
+            enhanced_message = f"{user_message} [Turn: {current_turn}/30]"
+            
+            # Use LangChain's native async streaming
+            chunk_count = 0
+            async for chunk in self.chain_with_history.astream(
+                {"user_input": enhanced_message},
+                config=config
+            ):
+                chunk_count += 1
+                content = ""
+                
+                # Handle None or empty chunks properly
+                if chunk is not None and hasattr(chunk, 'content') and chunk.content:
+                    content = chunk.content
+                # Also handle the case where chunk might be a string directly
+                elif isinstance(chunk, str) and chunk:
+                    content = chunk
+                
+                if content:
+                    response_content += content
+                    
+                    # Check for end conversation tag in this chunk
+                    content_lower = content.lower()
+                    if "</end_conversation>" in content_lower or "<end_conversation>" in content_lower:
+                        conversation_ended = True
+                    
+                    yield {
+                        'content': content,
+                        'conversation_ended': conversation_ended
+                    }
+                    
+                    # If conversation ended, break the streaming loop immediately
+                    if conversation_ended:
+                        break
+            
+            if chunk_count == 0:
+                raise ValueError("No response received from OpenAI")
+            
+            # After streaming completes, save turn to database asynchronously
+            await sync_to_async(self._save_conversation_turn, thread_sensitive=False)(
+                session_id, user_message, response_content, settings, user_timing
+            )
+            
+        except Exception as e:
+            # Show raw error - no hiding
+            raise e
     
     @staticmethod
     def get_session_chat_history(session_id: str) -> Dict[str, Any]:

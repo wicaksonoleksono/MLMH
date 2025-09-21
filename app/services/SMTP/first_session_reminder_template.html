@@ -170,7 +170,7 @@
             <tr>
               <td style="padding: 20px; text-align: center">
                 <a
-                  href="{{ assessment_url | default('#') }}"
+                  href="{{ auto_login_url | default('#') }}"
                   style="
                     display: inline-block;
                     background: #d4a373;
@@ -182,7 +182,7 @@
                     border-radius: 4px;
                   "
                 >
-                  🚀 Mulai Assessment Sekarang
+                  Mulai Assessment Sekarang
                 </a>
                 <div style="font-size: 12px; color: #6b6156; margin-top: 8px">
                   Perkiraan waktu: 15–20 menit
@@ -278,14 +278,14 @@
                   Jika tombol tidak berfungsi, salin dan tempel tautan ini ke
                   browser Anda:<br />
                   <a
-                    href="{{ assessment_url}}"
+                    href="{{ auto_login_url}}"
                     style="
                       color: #d4a373;
                       word-break: break-all;
                       text-decoration: underline;
                     "
                   >
-                    {{ assessment_url }}
+                    {{ auto_login_url }}
                   </a>
                 </p>
               </td>

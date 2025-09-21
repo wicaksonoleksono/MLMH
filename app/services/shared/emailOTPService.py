@@ -42,7 +42,6 @@ class EmailOTPService:
                     os.path.dirname(__file__), 
                     '../SMTP/otp_template.html'
                 )
-                
                 template_data = {
                     'user_name': user.uname,
                     'otp_code': otp_code,

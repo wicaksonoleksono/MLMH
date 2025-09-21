@@ -238,5 +238,5 @@ block content %}
   // Initialize refresh detection for this session
   setupRefreshDetection("{{ session.id }}");
 </script>
-<script src="{{ url_for('static', filename='js/refreshDetection.js') }}"></script>
+<script src="{{ static_url('js/refreshDetection.js') }}"></script>
 {% endblock %}

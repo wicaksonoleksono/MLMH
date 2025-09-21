@@ -14,10 +14,15 @@ class Session2NotificationService:
     """Service for handling Session 2 notifications"""
     
     @staticmethod
-    def get_all_users_with_eligibility(page=None, per_page=None, search_query=None):
+    def get_all_users_with_eligibility(page=None, per_page=None, search_query=None, completion_filter=None):
         """
         Get ALL users with Session 1 and their Session 2 eligibility status
         Returns all users who completed Session 1, with status indicating if they're eligible for Session 2
+        
+        Args:
+            completion_filter: 'complete' to show only users who completed at least one part (PHQ or LLM),
+                              'incomplete' to show users who haven't completed any parts,
+                              None to show all users
         """
         with get_session() as db:
             # Create aliases for clarity
@@ -32,6 +37,8 @@ class Session2NotificationService:
                 User.email,
                 User.phone,
                 Session1.end_time.label('session_1_end_time'),
+                Session1.phq_completed_at.label('session_1_phq_completed'),
+                Session1.llm_completed_at.label('session_1_llm_completed'),
                 Session2.id.label('session_2_id')
             ).join(
                 Session1,
@@ -47,6 +54,24 @@ class Session2NotificationService:
                     Session2.session_number == 2
                 )
             )
+            
+            # Add completion filter if provided
+            if completion_filter == 'complete':
+                # Show only users who completed at least one part (PHQ or LLM) in Session 1
+                query = query.filter(
+                    or_(
+                        Session1.phq_completed_at.isnot(None),
+                        Session1.llm_completed_at.isnot(None)
+                    )
+                )
+            elif completion_filter == 'incomplete':
+                # Show only users who haven't completed any parts in Session 1
+                query = query.filter(
+                    and_(
+                        Session1.phq_completed_at.is_(None),
+                        Session1.llm_completed_at.is_(None)
+                    )
+                )
             
             # Add search filter if provided
             if search_query:
@@ -110,6 +135,11 @@ class Session2NotificationService:
                     else:
                         status = "Memenuhi Syarat"
                     
+                    # Determine completion status for Session 1 parts
+                    has_phq_completed = user.session_1_phq_completed is not None
+                    has_llm_completed = user.session_1_llm_completed is not None
+                    has_any_part_completed = has_phq_completed or has_llm_completed
+                    
                     result.append({
                         'user_id': user.id,
                         'username': user.uname,
@@ -120,7 +150,10 @@ class Session2NotificationService:
                         'session_1_end_time': user.session_1_end_time.isoformat(),
                         'is_eligible': is_eligible,
                         'status': status,
-                        'has_session_2': user.session_2_id is not None
+                        'has_session_2': user.session_2_id is not None,
+                        'has_phq_completed': has_phq_completed,
+                        'has_llm_completed': has_llm_completed,
+                        'has_any_part_completed': has_any_part_completed
                     })
             
             # Return data with pagination info if requested

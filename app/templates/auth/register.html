@@ -245,6 +245,6 @@
 
 {% include 'components/otp_modal.html' %}
 
-<script src="{{ url_for('static', filename='js/components/otp.js') }}"></script>
-<script src="{{ url_for('static', filename='js/auth/register.js') }}"></script>
+<script src="{{ static_url('js/components/otp.js') }}"></script>
+<script src="{{ static_url('js/auth/register.js') }}"></script>
 {% endblock %}

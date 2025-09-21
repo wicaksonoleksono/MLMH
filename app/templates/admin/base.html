@@ -166,9 +166,9 @@
 
     <!-- API Helper -->
     <!-- Core JavaScript files -->
-    <script src="{{ url_for('static', filename='js/core/api.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/core/utils.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/admin/navbar.js') }}"></script>
+    <script src="{{ static_url('js/core/api.js') }}"></script>
+    <script src="{{ static_url('js/core/utils.js') }}"></script>
+    <script src="{{ static_url('js/admin/navbar.js') }}"></script>
     {% block scripts %}{% endblock %}
   </body>
 </html>

@@ -30,15 +30,24 @@ def get_eligible_users():
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 15, type=int)
         search_query = request.args.get('q', '').strip()
+        completion_filter = request.args.get('complete')  # 'true', 'false', or None
         
-        current_app.logger.info(f"Search request: q='{search_query}', page={page}, per_page={per_page}")
+        # Convert completion filter to service format
+        if completion_filter == 'true':
+            completion_filter = 'complete'
+        elif completion_filter == 'false':
+            completion_filter = 'incomplete'
+        else:
+            completion_filter = None
+        
+        current_app.logger.info(f"Search request: q='{search_query}', page={page}, per_page={per_page}, completion_filter={completion_filter}")
         
         # Limit per_page options
         if per_page not in [10, 15, 20]:
             per_page = 15
         
-        # Get all users with eligibility status (paginated with search)
-        all_users_page = Session2NotificationService.get_all_users_with_eligibility(page=page, per_page=per_page, search_query=search_query)
+        # Get all users with eligibility status (paginated with search and completion filter)
+        all_users_page = Session2NotificationService.get_all_users_with_eligibility(page=page, per_page=per_page, search_query=search_query, completion_filter=completion_filter)
         
         # Get pending notifications count
         pending_count = Session2NotificationService.get_pending_notifications_count()
@@ -79,7 +88,17 @@ def get_eligible_users():
 def api_get_eligible_users():
     """API endpoint to get users eligible for Session 2"""
     try:
-        all_users = Session2NotificationService.get_all_users_with_eligibility()
+        completion_filter = request.args.get('complete')  # 'true', 'false', or None
+        
+        # Convert completion filter to service format
+        if completion_filter == 'true':
+            completion_filter = 'complete'
+        elif completion_filter == 'false':
+            completion_filter = 'incomplete'
+        else:
+            completion_filter = None
+            
+        all_users = Session2NotificationService.get_all_users_with_eligibility(completion_filter=completion_filter)
         eligible_users = [user for user in all_users if user['is_eligible']]
         return jsonify({
             'status': 'success',

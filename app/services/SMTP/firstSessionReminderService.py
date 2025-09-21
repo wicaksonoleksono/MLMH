@@ -2,7 +2,6 @@
 from typing import List, Dict, Any
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import and_, not_, exists
-import os
 
 from ...model.shared.users import User
 from ...model.assessment.sessions import AssessmentSession
@@ -10,7 +9,7 @@ from ...db import get_session
 from .smtpService import SMTPService
 from ..shared.autoLoginService import AutoLoginService
 from ...config import Config
-
+from flask import current_app
 
 class FirstSessionReminderService:
     """Service for sending reminder emails to users who registered but haven't started any assessment"""
@@ -144,24 +143,20 @@ class FirstSessionReminderService:
                 )
                 
                 # Prepare template data
-                config = Config()
+                base_url = current_app.config.get('BASE_URL')
                 template_data = {
                     'username': user.uname,
                     'hero_title': f'Siap Memulai Perjalanan Anda, {user.uname}?',
                     'auto_login_url': auto_login_url,
-                    'base_url': config.BASE_URL,
-                    'assessment_url': f"{config.BASE_URL}/assessment/start"
+                    'base_url': base_url,
+                    'assessment_url': auto_login_url  # Use auto-login URL instead of direct assessment URL
                 }
-                # Error sending first session reminder to user 59: expected str, bytes or os.PathLike object, not dict
-                template_path = os.path.join(
-                    os.path.dirname(__file__), 
-                    '../SMTP/first_session_reminder_template.html'
-                )
+                
                 # Send email using SMTPService
-                success = SMTPService.send_template_email(
+                success = SMTPService.send_templated_email(
                     to_email=user.email,
-                    subject='Halo! yuk mulai assesmen kamu ',
-                    template_path=template_path,
+                    subject='Waktunya Memulai - Asesmen Mental Health Menanti Anda!',
+                    template_name='first_session_reminder',
                     template_data=template_data
                 )
                 

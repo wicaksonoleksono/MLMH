@@ -46,9 +46,22 @@ class PasswordResetService:
                 base_url = current_app.config.get('BASE_URL', 'http://localhost:5000')
                 reset_url = f"{base_url.rstrip('/')}/auth/reset-password?token={reset_token}"
                 
+                # Generate auto-login URL for after password reset
+                try:
+                    auto_login_url = AutoLoginService.generate_password_reset_auto_login_url(
+                        user_id=user.id,
+                        redirect_to='/'
+                    )
+                except Exception as e:
+                    print(f"Warning: Could not generate auto-login URL for password reset: {e}")
+                    auto_login_url = None
+
                 template_data = {
-                    'user_name': user.uname,
+                    'username': user.uname,  # Changed from 'user_name' to 'username' for consistency
+                    'user_name': user.uname,  # Keep both for backward compatibility
                     'reset_url': reset_url,
+                    'auto_login_url': auto_login_url,
+                    'base_url': base_url,
                     'expiry_minutes': '60'
                 }
                 

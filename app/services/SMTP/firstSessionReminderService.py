@@ -153,14 +153,17 @@ class FirstSessionReminderService:
                     'assessment_url': auto_login_url  # Use auto-login URL instead of direct assessment URL
                 }
                 
-                # Send email using SMTPService
+                # Send email using SMTPService (copying exact pattern from session2)
                 template_path = os.path.join(
                     os.path.dirname(__file__), 
                     'first_session_reminder_template.html'
                 )
+                
+                subject = 'Waktunya Memulai - Asesmen Mental Health Menanti Anda!'
+                
                 success = SMTPService.send_template_email(
                     to_email=user.email,
-                    subject='Waktunya Memulai - Asesmen Mental Health Menanti Anda!',
+                    subject=subject,
                     template_path=template_path,
                     template_data=template_data
                 )

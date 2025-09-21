@@ -2,6 +2,7 @@
 from typing import List, Dict, Any
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import and_, not_, exists
+import os
 
 from ...model.shared.users import User
 from ...model.assessment.sessions import AssessmentSession
@@ -153,10 +154,14 @@ class FirstSessionReminderService:
                 }
                 
                 # Send email using SMTPService
-                success = SMTPService.send_templated_email(
+                template_path = os.path.join(
+                    os.path.dirname(__file__), 
+                    'first_session_reminder_template.html'
+                )
+                success = SMTPService.send_template_email(
                     to_email=user.email,
                     subject='Waktunya Memulai - Asesmen Mental Health Menanti Anda!',
-                    template_name='first_session_reminder',
+                    template_path=template_path,
                     template_data=template_data
                 )
                 

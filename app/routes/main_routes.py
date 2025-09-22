@@ -33,7 +33,6 @@ def settings_not_configured():
     return render_template('error/settings_not_configured.html', 
                          missing_settings=settings_check['missing_settings'])
 
-
 @main_bp.route('/mobile-restriction')
 @raw_response
 def mobile_restriction():

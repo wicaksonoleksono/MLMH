@@ -351,12 +351,12 @@ function chatInterface(sessionId) {
 
         // Add timeout handling
         const timeoutId = setTimeout(() => {
-          botMessage.content = `Maaf, sistem sedang mengalami gangguan. Silakan coba lagi.`;
+          botMessage.content = `Coba untuk mengirim pesan anda kembali, dikarenakan rate limit  `;
           botMessage.streaming = false;
           this.isTyping = false;
           eventSource.close();
           this.currentEventSource = null; // Clear reference
-        }, 99999999999999);
+        }, 9999999999999999);
 
         eventSource.onmessage = (event) => {
           let data;

@@ -17,17 +17,44 @@ class LLMService:
         # {"name": "Defisit Regulasi Emosi", "description": "Apakah pengguna kesulitan dalam mengatur dan mengelola emosi mereka?"}
     # Default depression aspects with name and description
     DEFAULT_ASPECTS = [
-        {"name": "Anhedonia", "description": "Pengguna kehilangan minat atau kesenangan dalam aktivitas sehari-hari."},
-        {"name": "Bias Kognitif Negatif", "description": "Pengguna menunjukkan pola pikir negatif dan perasaan putus asa."},
-        {"name": "Ruminasi", "description": "Pengguna terjebak dalam pikiran negatif berulang tanpa menemukan solusi"},
-        {"name": "Retardasi Psikomotor", "description": "Pengguna mengalami perlambatan dalam gerakan dan bicara. Atau sebaliknya merasa resah atau gelisah sehingga Anda lebih sering bergerak dari biasanya sehingga orang lain menyadarinya "},
-        {"name": "Gangguan Tidur", "description": "Pengguna mengalami masalah tidur seperti insomnia atau kualitas tidur yang buruk."},
-        {"name": "Iritabilitas", "description": "Pengguna mudah marah atau tersinggung dalam situasi sehari-hari."},
-        {"name": "Rasa Bersalah Berlebihan", "description": "Pengguna merasakan perasaan bersalah atau merasa tidak berharga secara berlebihan."},
-        {"name": "Gangguan Kognitif", "description": "Pengguna mengalami kesulitan dalam konsentrasi dan fungsi eksekutif."},
-        {"name": "Penarikan Diri Sosial", "description": "Pengguna cenderung mengisolasi diri dan menarik diri dari interaksi sosial."},
+         {
+            "name": "Anhedonia atau Kehilangan Minat atau Kesenangan",
+            "description": "Pengguna kehilangan minat atau kesenangan dalam hampir semua aktivitas sehari-hari. Jika kegiatan yang dulu bikin semangat sekarang terasa hambar, menurutmu apa yang bikin rasanya berubah?"
+        },
+        {
+            "name": "Mood Depresi",
+            "description": "Pengguna mengalami suasana hati yang tertekan hampir sepanjang hari, hampir setiap hari. Kalau belakangan ini terasa sedih terus, menurutmu apa yang biasanya memicu atau memperberat perasaan itu?"
+        },
+       
+        {
+            "name": "Perubahan Berat Badan atau Nafsu Makan",
+            "description": "Pengguna mengalami penurunan atau peningkatan berat badan yang signifikan, atau perubahan nafsu makan. Kalau pola makanmu berubah, apa yang biasanya mempengaruhi—stres, ritme harian, atau hal lain?"
+        },
+        {
+            "name": "Gangguan Tidur",
+            "description": "Pengguna mengalami insomnia atau hipersomnia hampir setiap hari. Saat tidur berantakan, apa yang biasanya membuatmu susah/lelap—pikiran tertentu, jadwal, atau kebiasaan sebelum tidur?"
+        },
+        {
+            "name": "Retardasi atau Agitasi Psikomotor",
+            "description": "Pengguna menunjukkan perlambatan gerakan/pembicaraan atau agitasi yang dapat diamati oleh orang lain. Tanyakan pada teman apakah mereka melihat kamu lebih lambat atau lebih gelisah dari biasanya; menurutmu apa yang memicu perubahan ritme itu?"
+        },
+        {
+            "name": "Kelelahan atau Kehilangan Energi",
+            "description": "Pengguna merasa lelah atau kehilangan energi hampir setiap hari. Saat energi cepat turun, biasanya apa yang terjadi sebelumnya—kurang tidur, beban pikiran, atau pola kerja?"
+        },
+        {
+            "name": "Perasaan Tidak Berharga atau Bersalah Berlebihan",
+            "description": "Pengguna merasakan perasaan tidak berharga atau rasa bersalah yang berlebihan atau tidak tepat. Kalau rasa bersalah atau merasa tidak cukup muncul, biasanya dipicu oleh situasi atau pikiran seperti apa?"
+        },
+        {
+            "name": "Gangguan Konsentrasi atau Pengambilan Keputusan",
+            "description": "Pengguna mengalami kesulitan dalam konsentrasi dan fungsi eksekutif, termasuk membuat keputusan, hampir setiap hari. Jika fokus gampang buyar, apa yang biasanya mengganggu—notifikasi, kekhawatiran tertentu, atau kelelahan?"
+        },
+        {
+            "name": "Pikiran tentang Kematian atau Bunuh Diri",
+            "description": "Pengguna memiliki pikiran berulang tentang kematian, ide bunuh diri, atau percobaan bunuh diri. Jika pikiran seperti itu muncul, kapan biasanya muncul dan apa yang membuatnya terasa lebih kuat?"
+        }
     ]
-
 
     # Default analysis scale (shared across all aspects)
     DEFAULT_ANALYSIS_SCALE = [
@@ -49,20 +76,38 @@ Di halaman selanjutnya, kami telah menyiapkan teman untuk bercerita yang akan me
 
 Tidak ada jawaban yang benar atau salah. Jawaban yang paling jujur akan memberikan hasil yang paling bermanfaat bagi anda."""
 
-    # Default LLM Instructions - Customizable (Part 2) - Instructions for the AI behavior
-    DEFAULT_LLM_INSTRUCTIONS = """Salah satu teman Anda kemungkinan mengalami gejala depresi, atau bisa jadi tidak. Lakukan eksplorasi untuk menggali informasi dengan gaya non-formal kepada rekan Anda tentang aktivitas yang dilakukan **2 pekan terakhir**, dimana menyangkut dengan aspek-aspek psikologis terkait gejala depresi di bawah ini:
-{aspects}
-### Prinsip Utama Percakapan
-- Lakukan eksplorasi bagaimana kondisi psikologis mereka, terutama yang berkaitan dengan aspek-aspek diatas.
-- Jika nada jawaban relatif negatif/berat atau terlalu singkat, validasi dulu secara hangat agar pengguna tetap merasa nyaman, lalu lanjut pelan dan jelas.
-- Jika berupa pertanyaan, setiap pesan hanya boleh berisi maksimal 1 kalimat tanya. kuncinya mengetahui 
- 1. apakah teman kamu mempunyai ciri-ciri dari aspek yang disebutkan 
- 2. Jika iya Kira-kira kenapa dia bisa merasa seperti itu dan seberapa parah kira-kira (Mencari tingkat keparahan dan konteks) 
-- Jangan mengulang pertanyaan apabila jawaban sudah cukup jelas. 
-- Kuncinya adalah mengaitkan, bukan memulai topik baru secara tiba-tiba.
-- Buatlah percakapan se natural mungkin.
-- Setelah percakapan terasa cukup (semua aspek sudah diperoleh), rangkum sedikit perasaan atau poin utama yang dibagikan secara positif. Contoh: "Makasih banget ya udah mau cerita panjang lebar."
-maksimum pertukaran 30  turn (Tidak perlu 30 pertukaran, jika sudah memenuhi maka anda bisa berhenti), akan diberitahu per 5 increment, pastikan seluruh aspek sudah ditanyakan. dan tidak perlu mengulang, jika aspek sudah terpenuhi anda dapat menyudahi percakapan, Tutup percakapan dengan hangat, tegaskan kembali bahwa kamu ada untuk mendengarkan kapanpun dibutuhkan. Kemudian tambahkan </end_conversation> untuk menyudahi percakapan. `anda dapat menggunakan emotikon supaya lebih relateable`
+# Default LLM Instructions - Customizable (Part 2)
+
+    DEFAULT_LLM_INSTRUCTIONS = """
+Salah satu teman Anda mungkin mengalami gejala depresi, atau mungkin juga tidak. 
+Tugas Anda adalah melakukan eksplorasi secara non-formal tentang aktivitas mereka selama **2 pekan terakhir**, 
+dengan fokus pada aspek-aspek psikologis berikut: {aspects}
+Awali dengan 
+### Prinsip Percakapan
+1. **Eksplorasi Aspek**
+   - Gali kondisi psikologis mereka terkait setiap aspek yang disebutkan.
+   - Jangan memulai topik baru yang tidak terkait; selalu kaitkan dengan apa yang sudah dibicarakan.
+2. **Gaya Komunikasi**
+   - Gunakan bahasa natural, non-formal, dan hangat.
+   - Jika jawaban terdengar negatif, berat, atau terlalu singkat: validasi dulu secara empatik, lalu lanjutkan pelan dan jelas.
+   - Gunakan emotikon bila relevan untuk terasa lebih akrab.
+3. **Aturan Pertanyaan**
+   - Satu pesan hanya boleh berisi **satu pertanyaan**.
+   - Pertanyaan dibuat dengan panduan 2 langkah per aspek (fleksibel, tidak rigid):
+     - **Langkah 1:** Apakah teman menunjukkan ciri/gejala tersebut?
+       - Jika tidak → jangan dilanjutkan ke langkah 2, tapi boleh diperdalam secara ringan.
+     - **Langkah 2:** Jika iya, tanyakan *kenapa* dan *seberapa sering/parah* mereka mengalaminya. pastikan kenapa dan seberapa sering nya tersampaikan dengan jelas, 
+     jika tidak boleh ditanya lagi atau dipancing dengan contoh-contoh general berdasarkan konteks yang diberikan pengguna contoh: homesick  -> karena jauh dari orang tua dan kangen sama orang tua 
+   - Langkah bisa diperdalam lagi jika jawaban masih kurang. Gali lebih dalam bila diperlukan.
+   - Jangan mengulang pertanyaan bila jawabannya sudah cukup jelas.
+4. **Struktur Pertukaran**
+   - Anda akan menerima indikator `turn` setiap 5 pertukaran (5, 10, 15, dst.) untuk context switching.
+   - Maksimal **30 pertukaran**. Tidak harus sampai 30; hentikan bila seluruh aspek sudah dibahas.
+5. **Akhir Percakapan**
+   - Jika semua aspek sudah dibahas:
+     - Rangkai ringkasan singkat yang positif dari apa yang mereka bagikan.
+     - Tutup percakapan dengan hangat, tegaskan bahwa Anda siap mendengarkan kapanpun dibutuhkan.
+     - Akhiri dengan tag: `</end_conversation>`
 """
     INITIAL_ASSISTANT_RESPONSE = "Baik, saya akan mengeksplorasi aspek-aspek psikologis terkait gejala depresi."
     

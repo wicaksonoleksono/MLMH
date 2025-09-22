@@ -120,7 +120,7 @@ class LLMChatService:
             # Append turn information to user message for LLM context
             enhanced_message = f"{user_message} [Turn: {current_turn}/30]"
             
-            # Stream directly without timeout/retry interference
+            # Stream directly (sync version - works reliably)
             chunk_count = 0
             for chunk in self.chain_with_history.stream(
                 {"user_input": enhanced_message},  # Include turn context

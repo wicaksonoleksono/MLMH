@@ -448,7 +448,7 @@ def chat_stream_new(session_id):
             # Regular message handling using async approach
             chat_service = LLMChatService()
             
-            # Use synchronous streaming (LangChain handles async internally)
+            # Use sync streaming (reliable and works)
             for chunk_data in chat_service.stream_ai_response(session_id, user_message):
                 yield f"data: {json.dumps({'type': 'chunk', 'content': chunk_data['content']}, ensure_ascii=False)}\n\n"
                 time.sleep(0.01)  # Small delay to prevent overwhelming
@@ -641,7 +641,7 @@ def stream_sse_async():
             last_beat = time.time()
             chunk_count = 0
             
-            # Use synchronous streaming (simple and works)
+            # Use sync streaming (reliable and works)
             for chunk_data in chat_service.stream_ai_response(session_id, message, user_timing):
                 chunk_count += 1
                 chunk_payload = {

@@ -70,7 +70,8 @@ function chatInterface(sessionId) {
 
     addGreetingMessage(greetingText = null) {
       // Add initial greeting from API response or fallback
-      const greetingContent = greetingText || "Halo aku Sindi, bagaimana kabar kamu ?";
+      const greetingContent =
+        greetingText || "Halo aku Sindi, bagaimana kabar kamu ?";
       this.messages.push({
         id: this.messageId++,
         type: "ai",
@@ -182,7 +183,7 @@ function chatInterface(sessionId) {
           if (this.cameraManager) {
             this.cameraManager.setConversationId(this.conversationId);
           }
-          
+
           // Store greeting from API response for proper usage
           this.greetingMessage = result.greeting_message;
         }
@@ -219,7 +220,7 @@ function chatInterface(sessionId) {
           if (this.cameraManager) {
             this.cameraManager.setConversationId(this.conversationId);
           }
-          
+
           // Store greeting from API response for proper usage
           this.greetingMessage = result.greeting_message;
         }
@@ -350,12 +351,12 @@ function chatInterface(sessionId) {
 
         // Add timeout handling
         const timeoutId = setTimeout(() => {
-          botMessage.content = `SSE Timeout after 30s`;
+          botMessage.content = `Maaf, sistem sedang mengalami gangguan. Silakan coba lagi.`;
           botMessage.streaming = false;
           this.isTyping = false;
           eventSource.close();
           this.currentEventSource = null; // Clear reference
-        }, 30000);
+        }, 99999999999999);
 
         eventSource.onmessage = (event) => {
           let data;

@@ -1140,6 +1140,43 @@ def register_commands(app):
         except Exception as e:
             click.echo(f"[SNAFU] Failed to create pagination test users: {str(e)}")
 
+    @app.cli.command("add-faculty-column")
+    @click.confirmation_option(prompt="This will add 'faculty' column to existing users table. Are you sure?")
+    def add_faculty_column():
+        """Add faculty column to users table without losing data."""
+        click.echo("[OLKORECT] Adding faculty column to users table...")
+        
+        try:
+            engine = get_engine()
+            with engine.connect() as conn:
+                # Check if column already exists
+                result = conn.execute(text("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'users' AND column_name = 'faculty'
+                """))
+                
+                if result.fetchone():
+                    click.echo("[SNAFU] Faculty column already exists!")
+                    return
+                
+                # Add the column (PostgreSQL syntax)
+                conn.execute(text("ALTER TABLE users ADD COLUMN faculty VARCHAR(50)"))
+                
+                # Set default value for existing users
+                conn.execute(text("UPDATE users SET faculty = 'non-psychology' WHERE faculty IS NULL"))
+                
+                conn.commit()
+                
+                click.echo("[OLKORECT] Faculty column added successfully!")
+                click.echo("  - Column: faculty VARCHAR(50), nullable")
+                click.echo("  - All existing users set to 'non-psychology' by default")
+                click.echo("  - New users can choose 'psychology' or 'non-psychology'")
+                
+        except Exception as e:
+            click.echo(f"[SNAFU] Failed to add faculty column: {str(e)}")
+            click.echo("This command works with PostgreSQL. For other databases, modify the SQL syntax.")
+
     @app.cli.command("delete-user")
     @click.argument('username')
     @click.option('--dry-run', is_flag=True, help='Show what would be deleted without actually deleting')

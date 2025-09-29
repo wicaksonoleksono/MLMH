@@ -23,6 +23,7 @@ class User(BaseModel, UserMixin, StatusMixin):
     gender: Mapped[Optional[str]] = mapped_column(String(20))
     educational_level: Mapped[Optional[str]] = mapped_column(String(100))
     cultural_background: Mapped[Optional[str]] = mapped_column(String(100))
+    faculty: Mapped[Optional[str]] = mapped_column(String(50))
     medical_conditions: Mapped[Optional[str]] = mapped_column(Text)
     medications: Mapped[Optional[str]] = mapped_column(Text)
     emergency_contact: Mapped[Optional[str]] = mapped_column(String(200))
@@ -64,7 +65,7 @@ class User(BaseModel, UserMixin, StatusMixin):
                    email: Optional[str] = None, phone: Optional[str] = None,
                    age: Optional[int] = None, gender: Optional[str] = None,
                    educational_level: Optional[str] = None, cultural_background: Optional[str] = None,
-                   medical_conditions: Optional[str] = None, medications: Optional[str] = None,
+                   faculty: Optional[str] = None, medical_conditions: Optional[str] = None, medications: Optional[str] = None,
                    emergency_contact: Optional[str] = None) -> "User":
         """Create a new user with basic and extended profile information."""
         user = cls(
@@ -76,6 +77,7 @@ class User(BaseModel, UserMixin, StatusMixin):
             gender=gender,
             educational_level=educational_level,
             cultural_background=cultural_background,
+            faculty=faculty,
             medical_conditions=medical_conditions,
             medications=medications,
             emergency_contact=emergency_contact

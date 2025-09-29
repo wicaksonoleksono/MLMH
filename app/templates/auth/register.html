@@ -219,6 +219,22 @@
                        focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500
                        placeholder-gray-400">
             </div>
+            
+            <div>
+              <label for="faculty" class="block text-sm font-medium text-gray-700">
+                Fakultas <span class="text-red-500">*</span>
+              </label>
+              <select 
+                id="faculty" 
+                name="faculty"
+                required
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm 
+                       focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                <option value="">Pilih fakultas</option>
+                <option value="psychology" {{ 'selected' if request.form.faculty == 'psychology' else '' }}>Psikologi</option>
+                <option value="non-psychology" {{ 'selected' if request.form.faculty == 'non-psychology' else '' }}>Non-Psikologi</option>
+              </select>
+            </div>
           </div>
         </div>
 

@@ -16,8 +16,8 @@ class UserManagerService:
                     email: Optional[str] = None, phone: Optional[str] = None,
                     age: Optional[int] = None, gender: Optional[str] = None,
                     educational_level: Optional[str] = None, cultural_background: Optional[str] = None,
-                    medical_conditions: Optional[str] = None, medications: Optional[str] = None,
-                    emergency_contact: Optional[str] = None) -> User:
+                    faculty: Optional[str] = None, medical_conditions: Optional[str] = None, 
+                    medications: Optional[str] = None, emergency_contact: Optional[str] = None) -> User:
         """Create a new user."""
         with get_session() as db:
             # Get user type by name
@@ -36,6 +36,7 @@ class UserManagerService:
                     gender=gender,
                     educational_level=educational_level,
                     cultural_background=cultural_background,
+                    faculty=faculty,
                     medical_conditions=medical_conditions,
                     medications=medications,
                     emergency_contact=emergency_contact
@@ -62,14 +63,14 @@ class UserManagerService:
                        email: Optional[str] = None, phone: Optional[str] = None,
                        age: Optional[int] = None, gender: Optional[str] = None,
                        educational_level: Optional[str] = None, cultural_background: Optional[str] = None,
-                       medical_conditions: Optional[str] = None, medications: Optional[str] = None,
-                       emergency_contact: Optional[str] = None) -> User:
+                       faculty: Optional[str] = None, medical_conditions: Optional[str] = None, 
+                       medications: Optional[str] = None, emergency_contact: Optional[str] = None) -> User:
         """Create a new user (API endpoint)."""
         return UserManagerService.create_user(
             uname=uname, password=password, user_type_name=user_type_name,
             email=email, phone=phone, age=age, gender=gender,
             educational_level=educational_level, cultural_background=cultural_background,
-            medical_conditions=medical_conditions, medications=medications,
+            faculty=faculty, medical_conditions=medical_conditions, medications=medications,
             emergency_contact=emergency_contact
         )
 
@@ -88,6 +89,7 @@ class UserManagerService:
                     'gender': user.gender,
                     'educational_level': user.educational_level,
                     'cultural_background': user.cultural_background,
+                    'faculty': user.faculty,
                     'medical_conditions': user.medical_conditions,
                     'medications': user.medications,
                     'emergency_contact': user.emergency_contact,
@@ -197,6 +199,7 @@ class UserManagerService:
                     'gender': user.gender,
                     'educational_level': user.educational_level,
                     'cultural_background': user.cultural_background,
+                    'faculty': user.faculty,
                     'medical_conditions': user.medical_conditions,
                     'medications': user.medications,
                     'emergency_contact': user.emergency_contact,

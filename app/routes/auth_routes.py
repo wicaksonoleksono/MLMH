@@ -92,7 +92,7 @@ def register():
     else:
         # Handle form submission
         # Validate required fields
-        required_fields = ['username', 'email', 'password', 'confirm_password', 'age', 'gender', 'educational_level', 'cultural_background']
+        required_fields = ['username', 'email', 'password', 'confirm_password', 'age', 'gender', 'educational_level', 'cultural_background', 'faculty']
         for field in required_fields:
             if not request.form.get(field):
                 flash(f'Field {field} harus diisi.', 'error')
@@ -120,6 +120,7 @@ def register():
             'gender': request.form.get('gender') or None,
             'educational_level': request.form.get('educational_level') or None,
             'cultural_background': request.form.get('cultural_background') or None,
+            'faculty': request.form.get('faculty') or None,
             'medical_conditions': request.form.get('medical_conditions') or None,
             'medications': request.form.get('medications') or None,
             'emergency_contact': request.form.get('emergency_contact') or None
@@ -137,6 +138,7 @@ def register():
             gender=data.get('gender') or None,
             educational_level=data.get('educational_level') or None,
             cultural_background=data.get('cultural_background') or None,
+            faculty=data.get('faculty') or None,
             medical_conditions=data.get('medical_conditions') or None,
             medications=data.get('medications') or None,
             emergency_contact=data.get('emergency_contact') or None
@@ -212,6 +214,7 @@ def profile():
             "gender": current_user.gender,
             "educational_level": current_user.educational_level,
             "cultural_background": current_user.cultural_background,
+            "faculty": current_user.faculty,
             "medical_conditions": current_user.medical_conditions,
             "medications": current_user.medications,
             "emergency_contact": current_user.emergency_contact,

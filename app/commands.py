@@ -1177,6 +1177,39 @@ def register_commands(app):
             click.echo(f"[SNAFU] Failed to add faculty column: {str(e)}")
             click.echo("This command works with PostgreSQL. For other databases, modify the SQL syntax.")
 
+    @app.cli.command("remove-faculty-column")
+    @click.confirmation_option(prompt="This will REMOVE the faculty column and ALL faculty data. Are you sure?")
+    def remove_faculty_column():
+        """Remove faculty column from users table (DESTRUCTIVE - data will be lost)."""
+        click.echo("[WATCHOUT] Removing faculty column from users table...")
+        
+        try:
+            engine = get_engine()
+            with engine.connect() as conn:
+                # Check if column exists
+                result = conn.execute(text("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'users' AND column_name = 'faculty'
+                """))
+                
+                if not result.fetchone():
+                    click.echo("[SNAFU] Faculty column doesn't exist!")
+                    return
+                
+                # Remove the column (PostgreSQL syntax)
+                conn.execute(text("ALTER TABLE users DROP COLUMN faculty"))
+                conn.commit()
+                
+                click.echo("[OLKORECT] Faculty column removed successfully!")
+                click.echo("  - Column: faculty dropped from users table")
+                click.echo("  - All faculty data has been permanently deleted")
+                click.echo("  - Registration forms will need faculty field removed")
+                
+        except Exception as e:
+            click.echo(f"[SNAFU] Failed to remove faculty column: {str(e)}")
+            click.echo("This command works with PostgreSQL. For other databases, modify the SQL syntax.")
+
     @app.cli.command("delete-user")
     @click.argument('username')
     @click.option('--dry-run', is_flag=True, help='Show what would be deleted without actually deleting')

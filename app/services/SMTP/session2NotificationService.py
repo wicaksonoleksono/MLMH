@@ -225,8 +225,17 @@ class Session2NotificationService:
         Create Session 2 notifications for eligible users (14-day trigger)
         Returns the number of notifications created
         """
-        all_users = Session2NotificationService.get_all_users_with_eligibility()
-        eligible_users = [user for user in all_users if user['is_eligible']]
+        # Get all users without pagination (returns plain list of dicts)
+        all_users_data = Session2NotificationService.get_all_users_with_eligibility()
+
+        # Debug logging
+        print(f"[DEBUG] all_users_data type: {type(all_users_data)}")
+        if isinstance(all_users_data, list) and len(all_users_data) > 0:
+            print(f"[DEBUG] First item type: {type(all_users_data[0])}")
+            print(f"[DEBUG] First item: {all_users_data[0]}")
+
+        # Filter for eligible users only
+        eligible_users = [user for user in all_users_data if isinstance(user, dict) and user.get('is_eligible', False)]
         created_count = 0
         
         with get_session() as db:

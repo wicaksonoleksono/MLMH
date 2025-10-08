@@ -262,19 +262,35 @@ def get_unstarted_users():
 def get_pending_notifications_ajax():
     """AJAX endpoint for pending Session 2 notifications"""
     from flask import request
-    
+
     try:
-        # Get pagination and search parameters
+        # Get pagination, search, and sort parameters
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 15, type=int)
         search_query = request.args.get('q', '').strip()
-        
+        sort_by = request.args.get('sort_by', 'scheduled_date')
+        sort_order = request.args.get('sort_order', 'desc')
+
         # Limit per_page options
         if per_page not in [10, 15, 20]:
             per_page = 15
-        
-        # Get pending notifications with user details (paginated with search)
-        pending_notifications_page = Session2NotificationService.get_pending_notifications_with_users(page=page, per_page=per_page, search_query=search_query)
+
+        # Validate sort_by options
+        if sort_by not in ['user_id', 'username', 'session_end', 'scheduled_date', 'created_at']:
+            sort_by = 'scheduled_date'
+
+        # Validate sort_order options
+        if sort_order not in ['asc', 'desc']:
+            sort_order = 'desc'
+
+        # Get pending notifications with user details (paginated with search and sort)
+        pending_notifications_page = Session2NotificationService.get_pending_notifications_with_users(
+            page=page,
+            per_page=per_page,
+            search_query=search_query,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
         
         # Get total pending count for stats
         total_pending_count = Session2NotificationService.get_pending_notifications_count()
@@ -296,7 +312,9 @@ def get_pending_notifications_ajax():
                 'total_pending': total_pending_count,
                 'shown_pending': len(pending_notifications_page.items)
             },
-            'search_query': search_query
+            'search_query': search_query,
+            'sort_by': sort_by,
+            'sort_order': sort_order
         }
     except Exception as e:
         current_app.logger.error(f"Error in get_pending_notifications: {str(e)}")

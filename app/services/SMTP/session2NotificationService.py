@@ -110,13 +110,16 @@ class Session2NotificationService:
                 # For eligibility sorting, use default order first, we'll sort in Python
                 query = query.order_by(Session1.end_time.desc())
             
+            # Track if pagination was requested
+            pagination_requested = page is not None and per_page is not None
+
             # If pagination requested, implement manual pagination
-            if page and per_page:
+            if pagination_requested:
                 # Get total count and paginated results
                 total_users = query.count()
                 offset = (page - 1) * per_page
                 all_users = query.offset(offset).limit(per_page).all()
-                
+
                 # Calculate pagination info
                 has_prev = page > 1
                 has_next = offset + per_page < total_users
@@ -187,8 +190,8 @@ class Session2NotificationService:
                 # Sort by is_eligible status (True first if desc, False first if asc)
                 result.sort(key=lambda x: x['is_eligible'], reverse=(sort_order == 'desc'))
 
-            # Return data with pagination info if requested
-            if page and per_page:
+            # Return data with pagination info if originally requested
+            if pagination_requested:
                 # Create pagination object manually
                 from collections import namedtuple
                 PageObj = namedtuple('PageObj', ['items', 'page', 'pages', 'per_page', 'total', 'has_prev', 'has_next', 'prev_num', 'next_num'])
@@ -228,14 +231,8 @@ class Session2NotificationService:
         # Get all users without pagination (returns plain list of dicts)
         all_users_data = Session2NotificationService.get_all_users_with_eligibility()
 
-        # Debug logging
-        print(f"[DEBUG] all_users_data type: {type(all_users_data)}")
-        if isinstance(all_users_data, list) and len(all_users_data) > 0:
-            print(f"[DEBUG] First item type: {type(all_users_data[0])}")
-            print(f"[DEBUG] First item: {all_users_data[0]}")
-
         # Filter for eligible users only
-        eligible_users = [user for user in all_users_data if isinstance(user, dict) and user.get('is_eligible', False)]
+        eligible_users = [user for user in all_users_data if user.get('is_eligible', False)]
         created_count = 0
         
         with get_session() as db:
@@ -459,11 +456,18 @@ class Session2NotificationService:
             return count
 
     @staticmethod
-    def get_pending_notifications_with_users(page: int = 1, per_page: int = 15, search_query: str = None):
+    def get_pending_notifications_with_users(page: int = 1, per_page: int = 15, search_query: str = None, sort_by: str = 'scheduled_date', sort_order: str = 'desc'):
         """
         Get pending Session 2 notifications with user details (paginated)
         Returns users who have been sent emails but haven't done Session 2
         Only includes regular users (user_type_id = 2), not admins
+
+        Args:
+            page: Page number
+            per_page: Items per page
+            search_query: Search by username or email
+            sort_by: Sort field - 'user_id', 'username', 'session_end', 'scheduled_date', 'created_at'
+            sort_order: Sort direction - 'asc' or 'desc'
         """
         with get_session() as db:
             from sqlalchemy.orm import aliased
@@ -518,8 +522,26 @@ class Session2NotificationService:
                         User.email.ilike(f'%{search_query}%')
                     )
                 )
-            
-            query = query.order_by(EmailNotification.scheduled_send_at.desc())
+
+            # Apply sorting
+            sort_column = EmailNotification.scheduled_send_at  # Default
+
+            if sort_by == 'username':
+                sort_column = User.uname
+            elif sort_by == 'user_id':
+                sort_column = User.id
+            elif sort_by == 'created_at':
+                sort_column = User.created_at
+            elif sort_by == 'session_end':
+                sort_column = Session1.end_time
+            elif sort_by == 'scheduled_date':
+                sort_column = EmailNotification.scheduled_send_at
+
+            # Apply sort order
+            if sort_order == 'desc':
+                query = query.order_by(sort_column.desc())
+            else:
+                query = query.order_by(sort_column.asc())
             
             # Get total count
             total_count = query.count()
@@ -535,7 +557,20 @@ class Session2NotificationService:
                     # Handle timezone conversion for database datetime
                     session_1_end_utc = notif.session_1_end_time.replace(tzinfo=timezone.utc) if notif.session_1_end_time.tzinfo is None else notif.session_1_end_time
                     days_since = (datetime.now(timezone.utc) - session_1_end_utc).days
-                    
+
+                    # Calculate status based on days since Session 1 (EXACT same logic as eligible users)
+                    # Note: Pending notifications are only for users who:
+                    # - Have email (checked in query filter)
+                    # - Haven't done Session 2 (checked in query filter)
+                    # - Are >= 14 days (should be, since notification was created)
+
+                    # Since we already filtered in the query, just check days
+                    if days_since < 14:
+                        # This shouldn't happen, but handle it
+                        status = f"Tunggu {14 - days_since} Hari Lagi"
+                    else:
+                        status = "Memenuhi Syarat"
+
                     notif_data = {
                         'user_id': notif.id,
                         'username': notif.uname,
@@ -547,7 +582,7 @@ class Session2NotificationService:
                         'actual_sent_at': notif.actual_sent_at.strftime('%d %B %Y %H:%M') if notif.actual_sent_at else 'Belum dikirim',
                         'send_attempts': notif.send_attempts,
                         'notification_status': notif.notification_status,
-                        'status': 'Tertunda'
+                        'status': status
                     }
                     result.append(notif_data)
             

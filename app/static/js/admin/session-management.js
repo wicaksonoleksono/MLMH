@@ -239,11 +239,50 @@ function loadTabData(tabName) {
     config.tableDescription;
   document.getElementById("stats-title").textContent = config.statsTitle;
 
+  // Update sort dropdown options based on tab
+  updateSortOptions(tabName);
+
   // Load the actual data
   loadTableDataOnly(tabName);
 
   // Update button text for current tab
   updateSelectedCount();
+}
+
+// Update sort dropdown options based on current tab
+function updateSortOptions(tabName) {
+  const sortBySelect = document.getElementById("sort-by-select");
+  if (!sortBySelect) return;
+
+  if (tabName === "pending") {
+    // For pending notifications: show scheduled date instead of eligibility
+    sortBySelect.innerHTML = `
+      <option value="user_id">User ID</option>
+      <option value="username">Username (A-Z)</option>
+      <option value="session_end">Session End Date</option>
+      <option value="scheduled_date" selected>Scheduled Date</option>
+      <option value="created_at">Date Created</option>
+    `;
+    currentSortBy = "scheduled_date";
+  } else if (tabName === "eligible") {
+    // For eligible users: show eligibility status
+    sortBySelect.innerHTML = `
+      <option value="user_id">User ID</option>
+      <option value="username">Username (A-Z)</option>
+      <option value="session_end" selected>Session End Date</option>
+      <option value="eligibility">Eligibility Status</option>
+      <option value="created_at">Date Created</option>
+    `;
+    currentSortBy = "session_end";
+  } else {
+    // For unstarted users: basic options
+    sortBySelect.innerHTML = `
+      <option value="user_id">User ID</option>
+      <option value="username">Username (A-Z)</option>
+      <option value="created_at" selected>Date Created</option>
+    `;
+    currentSortBy = "created_at";
+  }
 }
 
 // Load ONLY table data (for search - no page refresh)
@@ -256,8 +295,8 @@ function loadTableDataOnly(tabName) {
   if (currentSearchQuery) {
     url += `&q=${encodeURIComponent(currentSearchQuery)}`;
   }
-  // Add sort params for eligible tab
-  if (tabName === "eligible") {
+  // Add sort params for eligible and pending tabs
+  if (tabName === "eligible" || tabName === "pending") {
     url += `&sort_by=${currentSortBy}&sort_order=${currentSortOrder}`;
   }
 

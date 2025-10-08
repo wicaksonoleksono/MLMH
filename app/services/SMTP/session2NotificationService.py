@@ -14,15 +14,20 @@ class Session2NotificationService:
     """Service for handling Session 2 notifications"""
     
     @staticmethod
-    def get_all_users_with_eligibility(page=None, per_page=None, search_query=None, completion_filter=None):
+    def get_all_users_with_eligibility(page=None, per_page=None, search_query=None, completion_filter=None, sort_by='session_end', sort_order='desc'):
         """
         Get ALL users with Session 1 and their Session 2 eligibility status
         Returns all users who completed Session 1, with status indicating if they're eligible for Session 2
-        
+
         Args:
+            page: Page number for pagination
+            per_page: Items per page
+            search_query: Search by username or email
             completion_filter: 'complete' to show only users who completed at least one part (PHQ or LLM),
                               'incomplete' to show users who haven't completed any parts,
                               None to show all users
+            sort_by: Sort field - 'user_id', 'username', 'session_end', 'eligibility', 'created_at'
+            sort_order: Sort direction - 'asc' or 'desc'
         """
         with get_session() as db:
             # Create aliases for clarity
@@ -81,8 +86,29 @@ class Session2NotificationService:
                         User.email.ilike(f'%{search_query}%')
                     )
                 )
-            
-            query = query.order_by(Session1.end_time.desc())
+
+            # Apply sorting (for database fields only)
+            # Note: 'eligibility' sorting will be done in Python after processing
+            sort_column = Session1.end_time  # Default
+
+            if sort_by == 'username':
+                sort_column = User.uname
+            elif sort_by == 'user_id':
+                sort_column = User.id
+            elif sort_by == 'created_at':
+                sort_column = User.created_at
+            elif sort_by == 'session_end':
+                sort_column = Session1.end_time
+
+            # Apply sort order (only if not sorting by eligibility - that's done in Python)
+            if sort_by != 'eligibility':
+                if sort_order == 'desc':
+                    query = query.order_by(sort_column.desc())
+                else:
+                    query = query.order_by(sort_column.asc())
+            else:
+                # For eligibility sorting, use default order first, we'll sort in Python
+                query = query.order_by(Session1.end_time.desc())
             
             # If pagination requested, implement manual pagination
             if page and per_page:
@@ -155,7 +181,12 @@ class Session2NotificationService:
                         'has_llm_completed': has_llm_completed,
                         'has_any_part_completed': has_any_part_completed
                     })
-            
+
+            # Apply eligibility sorting in Python if requested
+            if sort_by == 'eligibility':
+                # Sort by is_eligible status (True first if desc, False first if asc)
+                result.sort(key=lambda x: x['is_eligible'], reverse=(sort_order == 'desc'))
+
             # Return data with pagination info if requested
             if page and per_page:
                 # Create pagination object manually

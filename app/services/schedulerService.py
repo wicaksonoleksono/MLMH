@@ -139,47 +139,45 @@ class SchedulerService:
         with app.app_context():
             try:
                 logger.info("Starting SESMAN notification task...")
-                
+
                 from .SMTP.session2NotificationService import Session2NotificationService
-                
-                # Get eligibility days from config
-                eligibility_days = app.config.get('SESMAN_ELI_DAYS', 14)
-                
-                # Get users who became eligible exactly today (14 days after Session 1)
-                target_date = datetime.utcnow().date() - timedelta(days=eligibility_days)
-                eligible_users = Session2NotificationService.get_users_eligible_for_date(target_date)
-                
-                if eligible_users:
-                    logger.info(f"Found {len(eligible_users)} users eligible for Session 2 notification")
-                    
-                    # Send notifications to eligible users
-                    success_count = 0
-                    for user_data in eligible_users:
-                        try:
-                            result = Session2NotificationService.send_session2_notification(user_data)
-                            if result.get('status') == 'success':
-                                success_count += 1
-                        except Exception as e:
-                            logger.error(f"Failed to send notification to user {user_data.get('id')}: {e}")
-                    
-                    logger.info(f"SESMAN notifications completed: {success_count}/{len(eligible_users)} emails sent successfully")
+
+                # Create automatic notifications for eligible users (14+ days after Session 1)
+                # This creates notification records in the database
+                created_count = Session2NotificationService.create_automatic_notifications()
+
+                if created_count > 0:
+                    logger.info(f"Created {created_count} automatic notification records")
+
+                    # Now send the pending notifications
+                    sent_count = Session2NotificationService.send_pending_notifications()
+
+                    logger.info(f"SESMAN notifications completed: {sent_count} notifications sent successfully")
                     return {
-                        'notifications_sent': success_count,
-                        'sessions_processed': len(eligible_users)
+                        'notifications_created': created_count,
+                        'notifications_sent': sent_count
                     }
                 else:
-                    logger.info("No users eligible for Session 2 notification today")
+                    logger.info("No new users eligible for Session 2 notification today")
+
+                    # Still try to send any existing pending notifications
+                    sent_count = Session2NotificationService.send_pending_notifications()
+                    if sent_count > 0:
+                        logger.info(f"Sent {sent_count} existing pending notifications")
+
                     return {
-                        'notifications_sent': 0,
-                        'sessions_processed': 0
+                        'notifications_created': 0,
+                        'notifications_sent': sent_count
                     }
-                    
+
             except Exception as e:
                 logger.error(f"SESMAN notification task failed: {e}")
+                import traceback
+                traceback.print_exc()
                 # Don't re-raise to prevent scheduler from stopping
                 return {
+                    'notifications_created': 0,
                     'notifications_sent': 0,
-                    'sessions_processed': 0,
                     'error': str(e)
                 }
     

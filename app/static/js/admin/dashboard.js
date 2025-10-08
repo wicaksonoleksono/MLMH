@@ -191,13 +191,24 @@ function updateSessionStateToDeleted(sessionId, username, sessionNumber) {
   sessionRow.style.opacity = "0.7";
 }
 
-// AJAX Search Functionality
+// AJAX Search and Filter Functionality
 let searchTimeout;
 const searchInput = document.getElementById("userSearch");
 const searchSpinner = document.getElementById("searchSpinner");
 const userTable = document.getElementById("userTable");
 const userCount = document.getElementById("userCount");
-const paginationControls = document.querySelector(".pagination-controls"); // You'll need to add this class to your pagination div
+const paginationControls = document.querySelector(".pagination-controls");
+const sortBySelect = document.getElementById("sortBySelect");
+const sortOrderSelect = document.getElementById("sortOrderSelect");
+
+// Get current sort parameters
+function getSortParams() {
+  const urlParams = new URLSearchParams(window.location.search);
+  return {
+    sort_by: sortBySelect ? sortBySelect.value : urlParams.get("sort_by") || "user_id",
+    sort_order: sortOrderSelect ? sortOrderSelect.value : urlParams.get("sort_order") || "asc"
+  };
+}
 
 function debounceSearch(query) {
   // Clear previous timeout
@@ -219,11 +230,12 @@ function performSearchAjax(query, page = 1) {
   const urlParams = new URLSearchParams(window.location.search);
   const currentPage = page || urlParams.get("page") || 1;
   const perPage = urlParams.get("per_page") || 15;
+  const sortParams = getSortParams();
 
-  // Build AJAX URL - use ajax-data endpoint
+  // Build AJAX URL - use ajax-data endpoint with sort params
   const ajaxUrl = `/admin/ajax-data?q=${encodeURIComponent(
     query
-  )}&page=${currentPage}&per_page=${perPage}`;
+  )}&page=${currentPage}&per_page=${perPage}&sort_by=${sortParams.sort_by}&sort_order=${sortParams.sort_order}`;
 
   // Perform AJAX request
   fetch(ajaxUrl, {
@@ -268,6 +280,8 @@ function performSearchAjax(query, page = 1) {
           newUrlParams.set("page", responseData.pagination.page);
         }
         newUrlParams.set("per_page", responseData.pagination.per_page);
+        newUrlParams.set("sort_by", responseData.sort_by || sortParams.sort_by);
+        newUrlParams.set("sort_order", responseData.sort_order || sortParams.sort_order);
         window.history.replaceState(
           {},
           "",
@@ -571,11 +585,12 @@ function loadPage(pageNum) {
   const urlParams = new URLSearchParams(window.location.search);
   const searchQuery = urlParams.get("q") || "";
   const perPage = urlParams.get("per_page") || 15;
+  const sortParams = getSortParams();
 
-  // Always use AJAX for pagination, regardless of search state
+  // Always use AJAX for pagination, regardless of search state, with sort params
   const ajaxUrl = `/admin/ajax-data?page=${pageNum}&per_page=${perPage}${
     searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""
-  }`;
+  }&sort_by=${sortParams.sort_by}&sort_order=${sortParams.sort_order}`;
 
   fetch(ajaxUrl)
     .then((response) => response.json())
@@ -593,6 +608,8 @@ function loadPage(pageNum) {
 
         // Update URL without refresh
         urlParams.set("page", pageNum);
+        urlParams.set("sort_by", responseData.sort_by || sortParams.sort_by);
+        urlParams.set("sort_order", responseData.sort_order || sortParams.sort_order);
         window.history.replaceState({}, "", `?${urlParams.toString()}`);
 
         // Update user count
@@ -681,7 +698,94 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     });
   }
+
+  // Add event listeners for sort controls
+  if (sortBySelect) {
+    sortBySelect.addEventListener("change", function() {
+      const sortBy = this.value;
+      const sortOrder = sortOrderSelect ? sortOrderSelect.value : "asc";
+      applySortFilter(sortBy, sortOrder);
+    });
+  }
+
+  if (sortOrderSelect) {
+    sortOrderSelect.addEventListener("change", function() {
+      const sortOrder = this.value;
+      const sortBy = sortBySelect ? sortBySelect.value : "user_id";
+      applySortFilter(sortBy, sortOrder);
+    });
+  }
+
+  // Add event listener for clear filters button
+  const clearFiltersBtn = document.getElementById("clearFilters");
+  if (clearFiltersBtn) {
+    clearFiltersBtn.addEventListener("click", function() {
+      // Reset all filters to default
+      if (searchInput) searchInput.value = "";
+      if (sortBySelect) sortBySelect.value = "user_id";
+      if (sortOrderSelect) sortOrderSelect.value = "asc";
+
+      // Reload data with default filters
+      window.location.href = window.location.pathname;
+    });
+  }
 });
+
+// Apply sort filter function
+function applySortFilter(sortBy, sortOrder) {
+  const urlParams = new URLSearchParams(window.location.search);
+  const searchQuery = urlParams.get("q") || "";
+  const perPage = urlParams.get("per_page") || 15;
+
+  // Build AJAX URL with sort params
+  const ajaxUrl = `/admin/ajax-data?page=1&per_page=${perPage}${
+    searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""
+  }&sort_by=${sortBy}&sort_order=${sortOrder}`;
+
+  fetch(ajaxUrl)
+    .then((response) => response.json())
+    .then((data) => {
+      const actualData = data.status === "OLKORECT" ? data.data : data;
+
+      if (actualData.status === "success" || actualData.data) {
+        const responseData = actualData.data || actualData;
+
+        // Update table content
+        updateUserTable(responseData);
+
+        // Update pagination controls
+        updatePaginationControls(responseData.pagination, searchQuery);
+
+        // Update URL without refresh
+        const newUrlParams = new URLSearchParams(window.location.search);
+        newUrlParams.set("page", 1);
+        newUrlParams.set("sort_by", sortBy);
+        newUrlParams.set("sort_order", sortOrder);
+        window.history.replaceState(
+          {},
+          "",
+          `${window.location.pathname}?${newUrlParams.toString()}`
+        );
+
+        // Update user count
+        if (userCount) {
+          const countText = searchQuery
+            ? `${responseData.pagination.total} users found for "${searchQuery}"`
+            : `${responseData.pagination.total} total users`;
+          userCount.textContent = countText;
+        }
+      }
+    })
+    .catch((error) => {
+      console.error("Error applying sort filter:", error);
+      // Fallback to page reload if AJAX fails
+      const urlParams = new URLSearchParams(window.location.search);
+      urlParams.set("sort_by", sortBy);
+      urlParams.set("sort_order", sortOrder);
+      urlParams.set("page", 1);
+      window.location.search = urlParams.toString();
+    });
+}
 
 // Clear search function
 function clearSearch() {

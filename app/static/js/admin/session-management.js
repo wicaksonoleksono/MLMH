@@ -7,6 +7,9 @@ let currentPage = 1;
 let currentPerPage = 15;
 let currentSearchQuery = "";
 let searchDebounceTimer = null;
+let currentSortBy = "session_end";
+let currentSortOrder = "desc";
+let selectedUsers = new Set(); // Track selected user IDs
 
 // Tab configuration
 const tabConfig = {
@@ -248,10 +251,14 @@ function loadTableDataOnly(tabName) {
   const config = tabConfig[tabName];
   if (!config) return;
 
-  // Build URL with pagination and search
+  // Build URL with pagination, search, and sort
   let url = `${config.endpoint}?page=${currentPage}&per_page=${currentPerPage}`;
   if (currentSearchQuery) {
     url += `&q=${encodeURIComponent(currentSearchQuery)}`;
+  }
+  // Add sort params for eligible tab
+  if (tabName === "eligible") {
+    url += `&sort_by=${currentSortBy}&sort_order=${currentSortOrder}`;
   }
 
   fetch(url, {
@@ -261,6 +268,8 @@ function loadTableDataOnly(tabName) {
   })
     .then((response) => response.json())
     .then((data) => {
+      console.log(`[DEBUG] ${tabName} response:`, data);
+
       // Handle API response wrapper format from @api_response decorator (like dashboard.js)
       const actualData = data.status === "OLKORECT" ? data.data : data;
 
@@ -270,6 +279,9 @@ function loadTableDataOnly(tabName) {
         data.status === "OLKORECT"
       ) {
         const responseData = actualData.data || actualData;
+
+        console.log(`[DEBUG] ${tabName} responseData:`, responseData);
+        console.log(`[DEBUG] ${tabName} items:`, responseData.items);
 
         // Update ONLY table content (no page elements)
         updateTable(tabName, responseData);
@@ -284,12 +296,13 @@ function loadTableDataOnly(tabName) {
         updateSearchCount(responseData.pagination, currentSearchQuery);
       } else {
         hideLoading();
+        console.error(`[ERROR] ${tabName} failed:`, actualData);
         showError(actualData.message || data.error || "Unknown error");
       }
     })
     .catch((error) => {
       hideLoading();
-      console.error("[ERROR] Request failed:", error);
+      console.error(`[ERROR] ${tabName} request failed:`, error);
       showError(error.message);
     });
 }
@@ -1141,5 +1154,59 @@ async function sendAllEligibleNotifications() {
   } finally {
     btn.disabled = false;
     btn.textContent = originalText;
+  }
+}
+
+// Apply sort filter function
+function applySortFilter() {
+  const sortBySelect = document.getElementById("sort-by-select");
+  const sortOrderSelect = document.getElementById("sort-order-select");
+
+  if (sortBySelect && sortOrderSelect) {
+    currentSortBy = sortBySelect.value;
+    currentSortOrder = sortOrderSelect.value;
+    currentPage = 1; // Reset to first page when sorting changes
+
+    // Reload data with new sort
+    loadTableDataOnly(currentTab);
+  }
+}
+
+// Toggle user selection
+function toggleUserSelection(userId, checkbox) {
+  if (checkbox.checked) {
+    selectedUsers.add(userId);
+  } else {
+    selectedUsers.delete(userId);
+  }
+  updateSelectedCount();
+}
+
+// Toggle all users selection
+function toggleSelectAll(checkbox) {
+  const allCheckboxes = document.querySelectorAll('.user-checkbox');
+  allCheckboxes.forEach(cb => {
+    cb.checked = checkbox.checked;
+    const userId = parseInt(cb.dataset.userId);
+    if (checkbox.checked) {
+      selectedUsers.add(userId);
+    } else {
+      selectedUsers.delete(userId);
+    }
+  });
+  updateSelectedCount();
+}
+
+// Update selected count display
+function updateSelectedCount() {
+  const selectedCountElement = document.getElementById("selected-count");
+  const batchSendBtn = document.getElementById("send-batch-reminders-btn");
+
+  if (selectedCountElement) {
+    selectedCountElement.textContent = selectedUsers.size;
+  }
+
+  if (batchSendBtn) {
+    batchSendBtn.disabled = selectedUsers.size === 0;
   }
 }

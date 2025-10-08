@@ -24,14 +24,16 @@ def index():
 def get_eligible_users():
     """AJAX endpoint for users eligible for Session 2"""
     from flask import request
-    
+
     try:
-        # Get pagination and search parameters
+        # Get pagination, search, and sort parameters
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 15, type=int)
         search_query = request.args.get('q', '').strip()
         completion_filter = request.args.get('complete')  # 'true', 'false', or None
-        
+        sort_by = request.args.get('sort_by', 'session_end')  # Default: session end date
+        sort_order = request.args.get('sort_order', 'desc')  # Default: descending
+
         # Convert completion filter to service format
         if completion_filter == 'true':
             completion_filter = 'complete'
@@ -39,15 +41,30 @@ def get_eligible_users():
             completion_filter = 'incomplete'
         else:
             completion_filter = None
-        
-        current_app.logger.info(f"Search request: q='{search_query}', page={page}, per_page={per_page}, completion_filter={completion_filter}")
-        
+
+        # Validate sort_by options
+        if sort_by not in ['user_id', 'username', 'session_end', 'eligibility', 'created_at']:
+            sort_by = 'session_end'
+
+        # Validate sort_order options
+        if sort_order not in ['asc', 'desc']:
+            sort_order = 'desc'
+
+        current_app.logger.info(f"Search request: q='{search_query}', page={page}, per_page={per_page}, completion_filter={completion_filter}, sort_by={sort_by}, sort_order={sort_order}")
+
         # Limit per_page options
         if per_page not in [10, 15, 20]:
             per_page = 15
-        
-        # Get all users with eligibility status (paginated with search and completion filter)
-        all_users_page = Session2NotificationService.get_all_users_with_eligibility(page=page, per_page=per_page, search_query=search_query, completion_filter=completion_filter)
+
+        # Get all users with eligibility status (paginated with search, completion filter, and sorting)
+        all_users_page = Session2NotificationService.get_all_users_with_eligibility(
+            page=page,
+            per_page=per_page,
+            search_query=search_query,
+            completion_filter=completion_filter,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
         
         # Get pending notifications count
         pending_count = Session2NotificationService.get_pending_notifications_count()
@@ -68,9 +85,11 @@ def get_eligible_users():
                 'pending_count': pending_count,
                 'eligible_count': len([u for u in all_users_page.items if u.get('is_eligible')])
             },
-            'search_query': search_query
+            'search_query': search_query,
+            'sort_by': sort_by,
+            'sort_order': sort_order
         }
-        
+
         return result
         
     except Exception as e:

@@ -1531,3 +1531,68 @@ def register_commands(app):
                 click.echo(f"\n❌ Error checking user data: {str(e)}", err=True)
                 raise
 
+    @app.cli.command("create-session2-notifications")
+    def create_session2_notifications():
+        """Manually trigger creation of Session 2 notifications for eligible users"""
+        click.echo("[SESMAN] Creating automatic Session 2 notifications...")
+
+        try:
+            from .services.SMTP.session2NotificationService import Session2NotificationService
+
+            # Create notifications for eligible users
+            created_count = Session2NotificationService.create_automatic_notifications()
+
+            if created_count > 0:
+                click.echo(f"✓ Created {created_count} notification(s) for eligible users")
+
+                # Ask if user wants to send them immediately
+                if click.confirm("\nDo you want to send these pending notifications now?"):
+                    sent_count = Session2NotificationService.send_pending_notifications()
+                    click.echo(f"✓ Sent {sent_count} notification(s) successfully")
+                else:
+                    click.echo("Notifications created but not sent. They will be sent by the scheduler.")
+            else:
+                click.echo("No new eligible users found (users must have completed Session 1 at least 14 days ago)")
+
+                # Check for existing pending notifications
+                pending_count = Session2NotificationService.get_pending_notifications_count()
+                if pending_count > 0:
+                    click.echo(f"\nFound {pending_count} existing pending notification(s)")
+                    if click.confirm("Do you want to send them now?"):
+                        sent_count = Session2NotificationService.send_pending_notifications()
+                        click.echo(f"✓ Sent {sent_count} notification(s) successfully")
+
+        except Exception as e:
+            click.echo(f"❌ Error: {str(e)}", err=True)
+            import traceback
+            traceback.print_exc()
+            raise
+
+    @app.cli.command("send-pending-notifications")
+    def send_pending_notifications_cmd():
+        """Send all pending Session 2 notifications"""
+        click.echo("[SESMAN] Sending pending Session 2 notifications...")
+
+        try:
+            from .services.SMTP.session2NotificationService import Session2NotificationService
+
+            pending_count = Session2NotificationService.get_pending_notifications_count()
+
+            if pending_count == 0:
+                click.echo("No pending notifications to send")
+                return
+
+            click.echo(f"Found {pending_count} pending notification(s)")
+
+            if click.confirm("Do you want to send them now?"):
+                sent_count = Session2NotificationService.send_pending_notifications()
+                click.echo(f"✓ Sent {sent_count} notification(s) successfully")
+            else:
+                click.echo("Cancelled")
+
+        except Exception as e:
+            click.echo(f"❌ Error: {str(e)}", err=True)
+            import traceback
+            traceback.print_exc()
+            raise
+

@@ -59,6 +59,26 @@
             />
           </div>
           
+          <!-- Sort Controls -->
+          <div class="flex items-center space-x-2">
+            <label class="text-sm text-gray-600 whitespace-nowrap">Sort by:</label>
+            <select id="sort-by-select" onchange="applySortFilter()" class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+              <option value="user_id">User ID</option>
+              <option value="username">Username (A-Z)</option>
+              <option value="session_end" selected>Session End Date</option>
+              <option value="eligibility">Eligibility Status</option>
+              <option value="created_at">Date Created</option>
+            </select>
+          </div>
+
+          <div class="flex items-center space-x-2">
+            <label class="text-sm text-gray-600 whitespace-nowrap">Order:</label>
+            <select id="sort-order-select" onchange="applySortFilter()" class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+              <option value="asc">Ascending</option>
+              <option value="desc" selected>Descending</option>
+            </select>
+          </div>
+
           <div class="flex items-center space-x-2">
             <span id="total-count" class="text-sm text-gray-500"></span>
             <label class="text-sm text-gray-600">Per page:</label>

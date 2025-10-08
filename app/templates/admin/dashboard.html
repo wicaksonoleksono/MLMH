@@ -114,13 +114,14 @@
                 </div>
             </div>
             
-            <!-- Real-time User Search -->
-            <div class="mb-4">
-                <div class="relative max-w-md">
-                    <input 
-                        type="text" 
-                        id="userSearch" 
-                        placeholder="Search users by name..." 
+            <!-- Real-time User Search and Filters -->
+            <div class="mb-4 flex flex-col md:flex-row gap-3">
+                <!-- Search Input -->
+                <div class="relative flex-1 max-w-md">
+                    <input
+                        type="text"
+                        id="userSearch"
+                        placeholder="Search users by name..."
                         value="{{ search_query or '' }}"
                         class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     >
@@ -136,9 +137,30 @@
                         </svg>
                     </div>
                 </div>
-                {% if search_query %}
-                <button id="clearSearch" class="mt-2 px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors">
-                    Clear search
+
+                <!-- Sort By Dropdown -->
+                <div class="flex items-center space-x-2">
+                    <label class="text-sm text-gray-600 whitespace-nowrap">Sort by:</label>
+                    <select id="sortBySelect" class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        <option value="user_id" {% if sort_by == 'user_id' %}selected{% endif %}>User ID</option>
+                        <option value="username" {% if sort_by == 'username' %}selected{% endif %}>Username (A-Z)</option>
+                        <option value="created_at" {% if sort_by == 'created_at' %}selected{% endif %}>Date Created</option>
+                    </select>
+                </div>
+
+                <!-- Sort Order Dropdown -->
+                <div class="flex items-center space-x-2">
+                    <label class="text-sm text-gray-600 whitespace-nowrap">Order:</label>
+                    <select id="sortOrderSelect" class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        <option value="asc" {% if sort_order == 'asc' %}selected{% endif %}>Ascending</option>
+                        <option value="desc" {% if sort_order == 'desc' %}selected{% endif %}>Descending</option>
+                    </select>
+                </div>
+
+                <!-- Clear Filters Button -->
+                {% if search_query or sort_by != 'user_id' or sort_order != 'asc' %}
+                <button id="clearFilters" class="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors whitespace-nowrap">
+                    Clear Filters
                 </button>
                 {% endif %}
             </div>
@@ -474,29 +496,33 @@
   function changePerPage(perPage) {
     const urlParams = new URLSearchParams(window.location.search);
     const currentQuery = urlParams.get('q') || '';
-    
-    // Make AJAX request with new per_page and reset to page 1
-    const ajaxUrl = `/admin/ajax-data?page=1&per_page=${perPage}${currentQuery ? `&q=${encodeURIComponent(currentQuery)}` : ''}`;
-    
+    const sortBy = urlParams.get('sort_by') || 'user_id';
+    const sortOrder = urlParams.get('sort_order') || 'asc';
+
+    // Make AJAX request with new per_page and reset to page 1, include sort params
+    const ajaxUrl = `/admin/ajax-data?page=1&per_page=${perPage}${currentQuery ? `&q=${encodeURIComponent(currentQuery)}` : ''}&sort_by=${sortBy}&sort_order=${sortOrder}`;
+
     fetch(ajaxUrl)
       .then(response => response.json())
       .then(data => {
         const actualData = data.status === "OLKORECT" ? data.data : data;
-        
+
         if (actualData.status === "success" || actualData.data) {
           const responseData = actualData.data || actualData;
-          
+
           // Update table content
           updateUserTable(responseData);
-          
+
           // Update pagination controls
           updatePaginationControls(responseData.pagination, currentQuery);
-          
+
           // Update URL without refresh
           urlParams.set('per_page', perPage);
           urlParams.set('page', 1);
+          urlParams.set('sort_by', responseData.sort_by || sortBy);
+          urlParams.set('sort_order', responseData.sort_order || sortOrder);
           window.history.replaceState({}, '', `?${urlParams.toString()}`);
-          
+
           // Update user count
           const userCount = document.getElementById('userCount');
           if (userCount) {

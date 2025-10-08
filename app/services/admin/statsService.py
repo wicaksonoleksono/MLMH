@@ -58,35 +58,55 @@ class StatsService:
             }
     
     @staticmethod
-    def get_user_sessions_preview(page=1, per_page=20, search_query=None):
-        """Get paginated user sessions preview: UserID | Username | Session1 | Session2 | PHQ-Sum"""
+    def get_user_sessions_preview(page=1, per_page=20, search_query=None, sort_by='user_id', sort_order='asc'):
+        """Get paginated user sessions preview: UserID | Username | Session1 | Session2 | PHQ-Sum
+
+        Args:
+            page: Page number
+            per_page: Items per page
+            search_query: Search query for username
+            sort_by: Sort field - 'user_id', 'username', 'created_at'
+            sort_order: Sort direction - 'asc' or 'desc'
+        """
         try:
             with get_session() as db:
                 # Build base query with JOINs to avoid N+1 queries
                 from sqlalchemy.orm import joinedload
-                from sqlalchemy import func, and_
-                
+                from sqlalchemy import func, and_, case
+
                 # Base query with user type filter
                 base_query = db.query(User).join(UserType).filter(UserType.name == 'user')
-                
+
                 # Add search filter if query provided
                 if search_query:
                     search_filter = User.uname.ilike(f'%{search_query}%')
                     base_query = base_query.filter(search_filter)
-                    
+
                     # Order by relevance when searching: exact matches first, then partial matches
-                    from sqlalchemy import case
                     base_query = base_query.order_by(
                         case(
                             (User.uname.ilike(f'{search_query}%'), 1),  # Starts with query
-                            (User.uname.ilike(f'%{search_query}'), 2),  # Ends with query  
+                            (User.uname.ilike(f'%{search_query}'), 2),  # Ends with query
                             else_=3  # Contains query
                         ),
                         User.uname  # Then alphabetically within each relevance group
                     )
                 else:
-                    # Order by user ID for consistent pagination when not searching
-                    base_query = base_query.order_by(User.id)
+                    # Apply sorting based on parameters when not searching
+                    sort_column = User.id  # Default
+
+                    if sort_by == 'username':
+                        sort_column = User.uname
+                    elif sort_by == 'created_at':
+                        sort_column = User.created_at
+                    elif sort_by == 'user_id':
+                        sort_column = User.id
+
+                    # Apply sort order
+                    if sort_order == 'desc':
+                        base_query = base_query.order_by(sort_column.desc())
+                    else:
+                        base_query = base_query.order_by(sort_column.asc())
                 
                 # Get total count for pagination
                 total_users = base_query.count()

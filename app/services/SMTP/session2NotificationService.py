@@ -113,9 +113,15 @@ class Session2NotificationService:
             # Track if pagination was requested
             pagination_requested = page is not None and per_page is not None
 
-            # If pagination requested, implement manual pagination
-            if pagination_requested:
-                # Get total count and paginated results
+            # Special handling for eligibility sorting:
+            # We need to get ALL users first, calculate eligibility, sort, then paginate
+            if sort_by == 'eligibility' and pagination_requested:
+                # Get ALL users (no pagination yet)
+                all_users = query.all()
+                total_users = len(all_users)
+                # Pagination will be done AFTER sorting in Python
+            elif pagination_requested:
+                # Normal pagination for database-sortable fields
                 total_users = query.count()
                 offset = (page - 1) * per_page
                 all_users = query.offset(offset).limit(per_page).all()
@@ -189,6 +195,20 @@ class Session2NotificationService:
             if sort_by == 'eligibility':
                 # Sort by is_eligible status (True first if desc, False first if asc)
                 result.sort(key=lambda x: x['is_eligible'], reverse=(sort_order == 'desc'))
+
+                # NOW apply pagination to the sorted results
+                if pagination_requested:
+                    # Calculate pagination for the full sorted list
+                    total_users = len(result)
+                    pages = (total_users + per_page - 1) // per_page
+                    offset = (page - 1) * per_page
+                    has_prev = page > 1
+                    has_next = offset + per_page < total_users
+                    prev_num = page - 1 if has_prev else None
+                    next_num = page + 1 if has_next else None
+
+                    # Slice the results for current page
+                    result = result[offset:offset + per_page]
 
             # Return data with pagination info if originally requested
             if pagination_requested:

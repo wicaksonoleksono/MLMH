@@ -729,6 +729,22 @@ document.addEventListener("DOMContentLoaded", function () {
       window.location.href = window.location.pathname;
     });
   }
+
+  // Initialize pagination controls with server-side data from data attributes
+  const paginationContainer = document.getElementById('paginationContainer');
+  if (paginationContainer) {
+    const paginationDataAttr = paginationContainer.dataset.pagination;
+    const searchQuery = paginationContainer.dataset.searchQuery || '';
+
+    if (paginationDataAttr && typeof updatePaginationControls === 'function') {
+      try {
+        const paginationData = JSON.parse(paginationDataAttr);
+        updatePaginationControls(paginationData, searchQuery);
+      } catch (e) {
+        console.error('Error parsing pagination data:', e);
+      }
+    }
+  }
 });
 
 // Apply sort filter function
@@ -796,3 +812,55 @@ function clearSearch() {
   // Perform search with empty query to reset
   performSearchAjax("");
 }
+
+// Handle per page change with AJAX
+function changePerPage(perPage) {
+  const urlParams = new URLSearchParams(window.location.search);
+  const currentQuery = urlParams.get('q') || '';
+  const sortBy = urlParams.get('sort_by') || 'user_id';
+  const sortOrder = urlParams.get('sort_order') || 'asc';
+
+  // Make AJAX request with new per_page and reset to page 1, include sort params
+  const ajaxUrl = `/admin/ajax-data?page=1&per_page=${perPage}${currentQuery ? `&q=${encodeURIComponent(currentQuery)}` : ''}&sort_by=${sortBy}&sort_order=${sortOrder}`;
+
+  fetch(ajaxUrl)
+    .then(response => response.json())
+    .then(data => {
+      const actualData = data.status === "OLKORECT" ? data.data : data;
+
+      if (actualData.status === "success" || actualData.data) {
+        const responseData = actualData.data || actualData;
+
+        // Update table content
+        updateUserTable(responseData);
+
+        // Update pagination controls
+        updatePaginationControls(responseData.pagination, currentQuery);
+
+        // Update URL without refresh
+        urlParams.set('per_page', perPage);
+        urlParams.set('page', 1);
+        urlParams.set('sort_by', responseData.sort_by || sortBy);
+        urlParams.set('sort_order', responseData.sort_order || sortOrder);
+        window.history.replaceState({}, '', `?${urlParams.toString()}`);
+
+        // Update user count
+        const userCount = document.getElementById('userCount');
+        if (userCount) {
+          const countText = currentQuery
+            ? `${responseData.pagination.total} users found for "${currentQuery}"`
+            : `${responseData.pagination.total} total users`;
+          userCount.textContent = countText;
+        }
+      }
+    })
+    .catch(error => {
+      console.error('Error changing per page:', error);
+      // Fallback to page reload if AJAX fails
+      const urlParams = new URLSearchParams(window.location.search);
+      urlParams.set('per_page', perPage);
+      urlParams.set('page', 1);
+      window.location.search = urlParams.toString();
+    });
+}
+

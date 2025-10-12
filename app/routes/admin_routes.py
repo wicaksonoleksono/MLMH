@@ -46,7 +46,7 @@ def dashboard():
     session_stats = StatsService.get_session_statistics()
     user_stats = StatsService.get_user_statistics()
 
-    return render_template('admin/dashboard.html',
+    return render_template('admin/dashboard/dashboard.html',
                          user=current_user,
                          stats=stats,
                          user_sessions_page=user_sessions_page,

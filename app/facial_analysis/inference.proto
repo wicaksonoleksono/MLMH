@@ -1,0 +1,88 @@
+syntax = "proto3";
+package inference;
+
+service FacialInference {
+    rpc AnalyzeImage(ImageRequest) returns (ImageResponse) {}
+    rpc HealthCheck(HealthRequest) returns (HealthResponse) {}
+}
+
+message ImageRequest {
+    string image_path = 1;
+    string device = 2;  // "cpu" or "cuda:0"
+}
+
+message ImageResponse {
+    bool success = 1;
+    string error_message = 2;
+
+    // Facial expression (e.g., "Happiness", "Sadness", "Neutral")
+    string facial_expression = 3;
+
+    // Head pose (pitch, yaw, roll in degrees)
+    HeadPose head_pose = 4;
+
+    // Action Units (binary: present/absent)
+    ActionUnits action_units = 5;
+
+    // Action Unit intensities (float values)
+    ActionUnitIntensities au_intensities = 6;
+
+    // Key landmarks (25 important points only)
+    repeated Landmark key_landmarks = 7;
+
+    // Processing time in milliseconds
+    int32 processing_time_ms = 8;
+}
+
+message HeadPose {
+    float pitch = 1;
+    float yaw = 2;
+    float roll = 3;
+}
+
+message ActionUnits {
+    int32 au_1 = 1;
+    int32 au_2 = 2;
+    int32 au_4 = 3;
+    int32 au_5 = 4;
+    int32 au_6 = 5;
+    int32 au_9 = 6;
+    int32 au_12 = 7;
+    int32 au_15 = 8;
+    int32 au_17 = 9;
+    int32 au_20 = 10;
+    int32 au_25 = 11;
+    int32 au_26 = 12;
+}
+
+message ActionUnitIntensities {
+    float au_1 = 1;
+    float au_2 = 2;
+    float au_4 = 3;
+    float au_5 = 4;
+    float au_6 = 5;
+    float au_9 = 6;
+    float au_12 = 7;
+    float au_15 = 8;
+    float au_17 = 9;
+    float au_20 = 10;
+    float au_25 = 11;
+    float au_26 = 12;
+}
+
+message Landmark {
+    int32 index = 1;      // MediaPipe landmark index
+    float x = 2;
+    float y = 3;
+    float z = 4;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+    bool healthy = 1;
+    string message = 2;
+}
+
+
+

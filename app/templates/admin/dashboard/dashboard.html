@@ -338,9 +338,13 @@
                 </table>
             </div>
             
-            <!-- Pagination Controls - Populated entirely by JavaScript -->
-            <div id="paginationContainer" class="flex items-center justify-between mt-4 px-4 py-3 bg-white border-t border-gray-200 rounded-b-xl" style="display: {{ 'flex' if user_sessions_page.pages > 1 else 'none' }}">
-                <!-- JavaScript will populate this entire content -->
+            <!-- Pagination Controls - Populated by JavaScript -->
+            <div id="paginationContainer"
+                 class="flex items-center justify-between mt-4 px-4 py-3 bg-white border-t border-gray-200 rounded-b-xl"
+                 style="display: {{ 'flex' if user_sessions_page.pages > 1 else 'none' }}"
+                 data-pagination='{"page": {{ user_sessions_page.page }}, "pages": {{ user_sessions_page.pages }}, "total": {{ user_sessions_page.total }}, "per_page": {{ user_sessions_page.per_page }}, "has_prev": {{ user_sessions_page.has_prev | tojson }}, "has_next": {{ user_sessions_page.has_next | tojson }}, "prev_num": {{ user_sessions_page.prev_num or 1 }}, "next_num": {{ user_sessions_page.next_num or user_sessions_page.pages }}}'
+                 data-search-query="{{ search_query or '' }}">
+                <!-- JavaScript will populate this content -->
             </div>
         </div>
         
@@ -491,82 +495,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-  // Handle per page change with AJAX
-  function changePerPage(perPage) {
-    const urlParams = new URLSearchParams(window.location.search);
-    const currentQuery = urlParams.get('q') || '';
-    const sortBy = urlParams.get('sort_by') || 'user_id';
-    const sortOrder = urlParams.get('sort_order') || 'asc';
-
-    // Make AJAX request with new per_page and reset to page 1, include sort params
-    const ajaxUrl = `/admin/ajax-data?page=1&per_page=${perPage}${currentQuery ? `&q=${encodeURIComponent(currentQuery)}` : ''}&sort_by=${sortBy}&sort_order=${sortOrder}`;
-
-    fetch(ajaxUrl)
-      .then(response => response.json())
-      .then(data => {
-        const actualData = data.status === "OLKORECT" ? data.data : data;
-
-        if (actualData.status === "success" || actualData.data) {
-          const responseData = actualData.data || actualData;
-
-          // Update table content
-          updateUserTable(responseData);
-
-          // Update pagination controls
-          updatePaginationControls(responseData.pagination, currentQuery);
-
-          // Update URL without refresh
-          urlParams.set('per_page', perPage);
-          urlParams.set('page', 1);
-          urlParams.set('sort_by', responseData.sort_by || sortBy);
-          urlParams.set('sort_order', responseData.sort_order || sortOrder);
-          window.history.replaceState({}, '', `?${urlParams.toString()}`);
-
-          // Update user count
-          const userCount = document.getElementById('userCount');
-          if (userCount) {
-            const countText = currentQuery
-              ? `${responseData.pagination.total} users found for "${currentQuery}"`
-              : `${responseData.pagination.total} total users`;
-            userCount.textContent = countText;
-          }
-        }
-      })
-      .catch(error => {
-        console.error('Error changing per page:', error);
-        // Fallback to page reload if AJAX fails
-        const urlParams = new URLSearchParams(window.location.search);
-        urlParams.set('per_page', perPage);
-        urlParams.set('page', 1);
-        window.location.search = urlParams.toString();
-      });
-  }
-  
-  // Add bulk download class on DOM ready
-  document.addEventListener('DOMContentLoaded', function() {
-    const bulkDownloadBtn = document.querySelector('a[href="{{ url_for("export.export_all_sessions") }}"]');
-    if (bulkDownloadBtn) {
-      bulkDownloadBtn.classList.add('bulk-download-btn');
-    }
-
-    // Initialize pagination controls with server-side data
-    const paginationData = {
-      page: {{ user_sessions_page.page }},
-      pages: {{ user_sessions_page.pages }},
-      total: {{ user_sessions_page.total }},
-      per_page: {{ user_sessions_page.per_page }},
-      has_prev: {{ user_sessions_page.has_prev | tojson }},
-      has_next: {{ user_sessions_page.has_next | tojson }},
-      prev_num: {{ user_sessions_page.prev_num or 1 }},
-      next_num: {{ user_sessions_page.next_num or user_sessions_page.pages }}
-    };
-    
-    // Only initialize if pagination function exists
-    if (typeof updatePaginationControls === 'function') {
-      updatePaginationControls(paginationData, "{{ search_query or '' }}");
-    }
-  });
-</script>
 <script src="{{ static_url('js/admin/dashboard.js') }}"></script>
 {% endblock %}

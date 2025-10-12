@@ -529,3 +529,7 @@ class EmailNotification(BaseModel):
                 'next_session_number': 2
             }
         )
+
+    # Facial analysis relationship - added at end to avoid circular import
+    from .facial_analysis import SessionFacialAnalysis
+    AssessmentSession.facial_analysis = relationship("SessionFacialAnalysis", back_populates="session", cascade="all, delete-orphan")

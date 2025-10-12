@@ -421,9 +421,191 @@ def register_commands(app):
         from .model.admin.llm import LLMSettings
         from .model.admin.consent import ConsentSettings
         from .model.assessment.sessions import AssessmentSession, PHQResponse, LLMConversation, LLMAnalysisResult, CameraCapture, SessionExport
+        from .model.assessment.facial_analysis import SessionFacialAnalysis
 
         Base.metadata.create_all(bind=engine)
         click.echo("[OLKORECT] Database tables recreated.")
+
+    @app.cli.command("list-eligible-sessions")
+    def list_eligible_sessions():
+        """List all sessions eligible for facial analysis"""
+        click.echo("[OLKORECT] Finding eligible sessions...")
+
+        with get_session() as db:
+            from sqlalchemy import and_
+
+            # Get completed sessions with both assessments
+            sessions = db.query(
+                AssessmentSession,
+                User.uname.label('username')
+            ).join(
+                User, AssessmentSession.user_id == User.id
+            ).filter(
+                and_(
+                    AssessmentSession.status == 'COMPLETED',
+                    AssessmentSession.phq_completed_at.isnot(None),
+                    AssessmentSession.llm_completed_at.isnot(None)
+                )
+            ).all()
+
+            if not sessions:
+                click.echo("\n❌ No eligible sessions found")
+                click.echo("Sessions must be COMPLETED with both PHQ and LLM assessments")
+                return
+
+            click.echo(f"\n✓ Found {len(sessions)} eligible session(s):\n")
+
+            for session, username in sessions:
+                # Count images
+                phq = db.query(PHQResponse).filter_by(session_id=session.id).first()
+                llm = db.query(LLMConversation).filter_by(session_id=session.id).first()
+
+                phq_images = 0
+                llm_images = 0
+
+                if phq:
+                    phq_images = db.query(CameraCapture).filter_by(
+                        session_id=session.id,
+                        assessment_id=phq.id
+                    ).count()
+
+                if llm:
+                    llm_images = db.query(CameraCapture).filter_by(
+                        session_id=session.id,
+                        assessment_id=llm.id
+                    ).count()
+
+                click.echo(f"📋 Session: {session.id}")
+                click.echo(f"   User: {username}")
+                click.echo(f"   Session #{session.session_number}")
+                click.echo(f"   PHQ images: {phq_images}")
+                click.echo(f"   LLM images: {llm_images}")
+                click.echo(f"   Total: {phq_images + llm_images}")
+                click.echo(f"   Debug: flask debug-session {session.id}")
+                click.echo()
+
+    @app.cli.command("debug-session")
+    @click.argument('session_id')
+    def debug_session(session_id):
+        """Debug a session's assessment and camera data"""
+        click.echo(f"[OLKORECT] Debugging session: {session_id}")
+
+        with get_session() as db:
+            # Get session info
+            session = db.query(AssessmentSession).filter_by(id=session_id).first()
+            if not session:
+                click.echo("[SNAFU] Session not found!")
+                return
+
+            click.echo(f"\n📋 Session Info:")
+            click.echo(f"  Status: {session.status}")
+            click.echo(f"  PHQ completed: {session.phq_completed_at}")
+            click.echo(f"  LLM completed: {session.llm_completed_at}")
+
+            # Get PHQ assessment
+            click.echo(f"\n📝 PHQ Assessment:")
+            phq = db.query(PHQResponse).filter_by(session_id=session_id).first()
+            if phq:
+                click.echo(f"  ID: {phq.id}")
+                phq_captures = db.query(CameraCapture).filter_by(
+                    session_id=session_id,
+                    assessment_id=phq.id
+                ).all()
+                click.echo(f"  Camera captures (assessment_id={phq.id[:8]}...): {len(phq_captures)}")
+                total_phq_files = sum(len(c.filenames) if c.filenames else 0 for c in phq_captures)
+                click.echo(f"  Total files: {total_phq_files}")
+            else:
+                click.echo("  ❌ PHQ Response NOT FOUND")
+
+            # Get LLM assessment
+            click.echo(f"\n💬 LLM Assessment:")
+            llm = db.query(LLMConversation).filter_by(session_id=session_id).first()
+            if llm:
+                click.echo(f"  ID: {llm.id}")
+                llm_captures = db.query(CameraCapture).filter_by(
+                    session_id=session_id,
+                    assessment_id=llm.id
+                ).all()
+                click.echo(f"  Camera captures (assessment_id={llm.id[:8]}...): {len(llm_captures)}")
+                total_llm_files = sum(len(c.filenames) if c.filenames else 0 for c in llm_captures)
+                click.echo(f"  Total files: {total_llm_files}")
+            else:
+                click.echo("  ❌ LLM Conversation NOT FOUND")
+
+            # Check ALL camera captures
+            click.echo(f"\n📸 All Camera Captures:")
+            all_captures = db.query(CameraCapture).filter_by(session_id=session_id).all()
+            click.echo(f"  Total records: {len(all_captures)}")
+
+            if all_captures:
+                click.echo(f"  Breakdown by assessment_id:")
+                for cap in all_captures:
+                    aid = cap.assessment_id[:8] + "..." if cap.assessment_id else "NULL"
+                    files = len(cap.filenames) if cap.filenames else 0
+                    click.echo(f"    - {cap.capture_type}: assessment_id={aid}, files={files}")
+
+    @app.cli.command("setup-facial-analysis")
+    def setup_facial_analysis_table():
+        """Smart setup: Create table if missing, add missing columns if exists."""
+        click.echo("[OLKORECT] Setting up SessionFacialAnalysis table...")
+
+        try:
+            from .model.assessment.facial_analysis import SessionFacialAnalysis
+            engine = get_engine()
+
+            with engine.connect() as conn:
+                # Check if table exists
+                result = conn.execute(text("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables
+                        WHERE table_name = 'session_facial_analysis'
+                    )
+                """))
+                table_exists = result.scalar()
+
+                if not table_exists:
+                    # Create table from scratch
+                    click.echo("  Table doesn't exist, creating...")
+                    SessionFacialAnalysis.__table__.create(bind=engine, checkfirst=True)
+                    click.echo("  ✓ Table created successfully!")
+                else:
+                    # Check and add missing columns
+                    click.echo("  Table exists, checking columns...")
+                    result = conn.execute(text("""
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_name = 'session_facial_analysis'
+                    """))
+                    existing_columns = [row[0] for row in result.fetchall()]
+
+                    # Define required columns with their definitions
+                    required_columns = {
+                        'jsonl_file_path': 'VARCHAR(500) NOT NULL DEFAULT \'\'',
+                        'started_at': 'TIMESTAMP',
+                        'completed_at': 'TIMESTAMP',
+                        'created_at': 'TIMESTAMP',
+                        'updated_at': 'TIMESTAMP'
+                    }
+
+                    columns_added = []
+                    for col_name, col_def in required_columns.items():
+                        if col_name not in existing_columns:
+                            try:
+                                conn.execute(text(f"ALTER TABLE session_facial_analysis ADD COLUMN {col_name} {col_def}"))
+                                columns_added.append(col_name)
+                                click.echo(f"  ✓ Added column: {col_name}")
+                            except Exception as e:
+                                click.echo(f"  ⚠ Could not add {col_name}: {str(e)}")
+
+                    if not columns_added:
+                        click.echo("  ✓ All columns already exist!")
+                    else:
+                        conn.commit()
+
+                click.echo("[OLKORECT] SessionFacialAnalysis table setup complete!")
+
+        except Exception as e:
+            click.echo(f"[SNAFU] Failed to setup table: {str(e)}")
 
     @app.cli.command("list-users")
     def list_users():

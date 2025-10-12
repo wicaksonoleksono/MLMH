@@ -102,6 +102,7 @@ def create_app():
     from app.routes.assessment.phq_routes import phq_assessment_bp
     from app.routes.assessment.camera_routes import camera_assessment_bp
     from app.routes.admin.export_routes import export_bp
+    from app.routes.admin.facial_analysis_routes import facial_analysis_bp
     app.register_blueprint(admin_bp)
     app.register_blueprint(phq_bp)
     app.register_blueprint(camera_bp)
@@ -116,6 +117,7 @@ def create_app():
     app.register_blueprint(phq_assessment_bp)
     app.register_blueprint(camera_assessment_bp)
     app.register_blueprint(export_bp)
+    app.register_blueprint(facial_analysis_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     register_commands(app)

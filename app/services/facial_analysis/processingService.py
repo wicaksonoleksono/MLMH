@@ -246,7 +246,7 @@ class FacialAnalysisProcessingService:
                         timestamp=timestamp or capture.created_at.isoformat()
                     )
                     image_data.append(img_data)
-                    print(f"[DEBUG] Added image: {filename}")
+                    # print(f"[DEBUG] Added image: {filename}")
 
             print(f"[DEBUG] Total images collected: {len(image_data)}")
             print(f"[DEBUG] media_save_path: {media_save_path}")
@@ -291,11 +291,8 @@ class FacialAnalysisProcessingService:
                 filename = img_data.filename
                 timing = img_data.timing  # CaptureTimingData Pydantic model
                 timestamp = img_data.timestamp  # ISO timestamp
-
-                # Full path to image (send path to gRPC, not bytes)
                 image_path = os.path.join(media_save_path or '', filename)
-                print(f"[DEBUG] Processing image: {filename} -> {image_path}")
-
+                # print(f"[DEBUG] Processing image: {filename} -> {image_path}")
                 if not os.path.exists(image_path):
                     print(f"[ERROR] Image not found: {image_path}")
                     failed += 1

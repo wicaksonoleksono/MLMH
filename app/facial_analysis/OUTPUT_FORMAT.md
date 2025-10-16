@@ -118,6 +118,64 @@ Each line contains a JSON object with the following structure:
 - Float intensity values (0.0 - 5.0) for same 12 AUs
 - Higher values = stronger activation
 
+### Understanding Action Units: Binary vs Intensity
+
+Action Units (AUs) come from the **Facial Action Coding System (FACS)** and LibreFace provides **TWO** measurements for each AU:
+
+#### 1. Binary Detection (`action_units`) - 0 or 1
+Indicates if the AU is **actively detected**:
+- **0** = Not detected / Below threshold
+- **1** = Detected / Present above threshold
+
+Think of it as: **"Is this muscle movement happening? Yes or No?"**
+
+#### 2. Intensity Values (`au_intensities`) - 0.0 to 5.0
+Indicates **HOW STRONG** the muscle movement is:
+- **0.0** = No activation
+- **0.5 - 1.0** = Trace/weak activation
+- **1.0 - 3.0** = Moderate activation
+- **3.0 - 5.0** = Strong/extreme activation
+
+#### Example from Real Data:
+```json
+{
+  "action_units": {
+    "au_12": 0,    // Lip Corner Puller (smile) - NOT detected
+    "au_17": 1,    // Chin Raiser - DETECTED
+    ...
+  },
+  "au_intensities": {
+    "au_12": 0.029,  // Very weak activation (below threshold)
+    "au_17": 0.109,  // Weak but above threshold
+    ...
+  }
+}
+```
+
+**Interpretation:**
+- **au_12** (Lip Corner Puller - smiling):
+  - Binary: `0` → Not actively smiling
+  - Intensity: `0.029` → Trace activation (almost nothing)
+
+- **au_17** (Chin Raiser):
+  - Binary: `1` → Actively detected
+  - Intensity: `0.109` → Weak activation but above threshold
+
+#### When to Use Which?
+
+**Use Binary (`action_units`) for:**
+- Quick yes/no analysis: "Did the person smile during this question?"
+- Counting AU occurrences: "How many times was AU_12 active?"
+- Simple presence/absence statistics
+
+**Use Intensity (`au_intensities`) for:**
+- Measuring expression strength: "How much did they smile?"
+- Detecting subtle changes: Low intensities below binary threshold
+- Fine-grained emotional analysis
+- Correlation with depression severity scores
+
+**Both are included** in the JSONL output so you can use whichever fits your research needs.
+
 #### key_landmarks
 - Type: `array of objects`
 - 25 important facial landmarks (not all 478 MediaPipe points)

@@ -194,28 +194,35 @@ class FacialInferenceServicer(inference_pb2_grpc.FacialInferenceServicer):
             except (TypeError, ValueError):
                 au_intensities[au] = 0.0
 
-        landmarks_raw = raw.get('landmarks') or raw.get('landmarks_2d') or raw.get('landmarks_points')
+        # Extract landmarks - LibreFace returns flattened format lm_mp_{index}_{x|y|z}
         landmarks = []
-        if isinstance(landmarks_raw, list):
-            for idx, entry in enumerate(landmarks_raw):
-                index = idx
-                x = y = z = 0.0
-                if isinstance(entry, dict):
-                    index = entry.get('index', entry.get('id', idx))
-                    x = entry.get('x', entry.get('X', 0.0))
-                    y = entry.get('y', entry.get('Y', 0.0))
-                    z = entry.get('z', entry.get('Z', 0.0))
-                elif isinstance(entry, (list, tuple)):
-                    if len(entry) >= 2:
-                        x = entry[0]
-                        y = entry[1]
-                        z = entry[2] if len(entry) > 2 else 0.0
+
+        # Try to find landmarks in flattened format (lm_mp_0_x, lm_mp_0_y, lm_mp_0_z, ...)
+        landmark_indices = set()
+        for key in raw.keys():
+            if key.startswith('lm_mp_'):
+                # Extract index from key like 'lm_mp_123_x'
+                parts = key.split('_')
+                if len(parts) >= 4:
+                    try:
+                        index = int(parts[2])
+                        landmark_indices.add(index)
+                    except ValueError:
+                        continue
+
+        # Reconstruct landmarks from flattened keys
+        for idx in sorted(landmark_indices):
+            x_key = f'lm_mp_{idx}_x'
+            y_key = f'lm_mp_{idx}_y'
+            z_key = f'lm_mp_{idx}_z'
+
+            if x_key in raw and y_key in raw and z_key in raw:
                 try:
                     landmarks.append({
-                        'index': int(index),
-                        'x': float(x),
-                        'y': float(y),
-                        'z': float(z)
+                        'index': int(idx),
+                        'x': float(raw[x_key]),
+                        'y': float(raw[y_key]),
+                        'z': float(raw[z_key])
                     })
                 except (TypeError, ValueError):
                     continue

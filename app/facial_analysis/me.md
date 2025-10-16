@@ -6,6 +6,7 @@
 
 ```bash
 pip install grpcio grpcio-tools
+
 ```
 
 2. Install LibreFace (in separate conda env):
@@ -20,7 +21,7 @@ pip install --upgrade libreface
 ## Generate Python code from proto
 
 ```bash
-cd /home/wicaksonolxn/Documents/KJ/MH/facial_analysis.service
+cd /home/wicaksonolxn/Documents/KJ/MH/facial_analysis
 python -m grpc_tools.protoc -I. \
   --python_out=generated \
   --grpc_python_out=generated \
@@ -30,10 +31,12 @@ python -m grpc_tools.protoc -I. \
 ## Run the gRPC server
 
 Server reads configuration from `/home/wicaksonolxn/Documents/KJ/MH/.env`:
+
 - `GRPC_FACIAL_ANALYSIS_PORT`
 - `GRPC_FACIAL_ANALYSIS_DEVICE`
 
 **Foreground:**
+
 ```bash
 cd /home/wicaksonolxn/Documents/KJ/MH/facial_analysis.service
 conda activate libreface
@@ -41,6 +44,7 @@ python server/inference_server.py
 ```
 
 **Background:**
+
 ```bash
 cd /home/wicaksonolxn/Documents/KJ/MH/facial_analysis.service
 conda activate libreface
@@ -48,11 +52,13 @@ nohup python server/inference_server.py > grpc_server.log 2>&1 &
 ```
 
 **Check logs:**
+
 ```bash
 tail -f grpc_server.log
 ```
 
 **Stop background server:**
+
 ```bash
 pkill -f inference_server.py
 ```

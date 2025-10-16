@@ -1,5 +1,5 @@
 # app/routes/admin_routes.py
-from flask import Blueprint, render_template, redirect, url_for, request, jsonify
+from flask import Blueprint, render_template
 from flask_login import current_user, login_required
 from ..decorators import raw_response, admin_required, api_response
 
@@ -46,7 +46,7 @@ def dashboard():
     session_stats = StatsService.get_session_statistics()
     user_stats = StatsService.get_user_statistics()
 
-    return render_template('admin/dashboard/dashboard.html',
+    return render_template('admin/dashboard/index.html',
                          user=current_user,
                          stats=stats,
                          user_sessions_page=user_sessions_page,
@@ -57,12 +57,81 @@ def dashboard():
                          sort_by=sort_by,
                          sort_order=sort_order)
 
-@admin_bp.route('/ajax-data')
+@admin_bp.route('/ajax-dashboard-data')
 @login_required
 @admin_required
 @api_response
 def dashboard_ajax_data():
-    """AJAX endpoint for both pagination and search - returns same data structure"""
+    """AJAX endpoint for dashboard data - returns complete dashboard data"""
+    from flask import request
+    from ..services.admin.statsService import StatsService
+
+    # Get pagination, search, and sort parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 15, type=int)
+    search_query = request.args.get('q', '').strip()
+    sort_by = request.args.get('sort_by', 'user_id')
+    sort_order = request.args.get('sort_order', 'asc')
+
+    # Limit per_page options
+    if per_page not in [10, 15, 20]:
+        per_page = 15
+
+    # Validate sort_by options
+    if sort_by not in ['user_id', 'username', 'created_at']:
+        sort_by = 'user_id'
+
+    # Validate sort_order options
+    if sort_order not in ['asc', 'desc']:
+        sort_order = 'asc'
+
+    # Get all dashboard data
+    stats = StatsService.get_dashboard_stats()
+    user_sessions_page = StatsService.get_user_sessions_preview(
+        page=page,
+        per_page=per_page,
+        search_query=search_query,
+        sort_by=sort_by,
+        sort_order=sort_order
+    )
+    phq_stats = StatsService.get_phq_statistics()
+    session_stats = StatsService.get_session_statistics()
+    user_stats = StatsService.get_user_statistics()
+
+    # Return JSON response with all dashboard data
+    return {
+        'status': 'success',
+        'data': {
+            'stats': stats,
+            'user_sessions': {
+                'items': user_sessions_page.items,
+                'pagination': {
+                    'page': user_sessions_page.page,
+                    'pages': user_sessions_page.pages,
+                    'per_page': user_sessions_page.per_page,
+                    'total': user_sessions_page.total,
+                    'has_prev': user_sessions_page.has_prev,
+                    'has_next': user_sessions_page.has_next,
+                    'prev_num': user_sessions_page.prev_num,
+                    'next_num': user_sessions_page.next_num
+                }
+            },
+            'phq_stats': phq_stats,
+            'session_stats': session_stats,
+            'user_stats': user_stats,
+            'search_query': search_query,
+            'sort_by': sort_by,
+            'sort_order': sort_order
+        }
+    }
+
+
+@admin_bp.route('/ajax-data')
+@login_required
+@admin_required
+@api_response
+def ajax_data():
+    """AJAX endpoint for pagination and search (legacy compatibility)"""
     from flask import request
     from ..services.admin.statsService import StatsService
 

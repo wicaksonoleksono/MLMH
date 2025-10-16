@@ -1,88 +1,760 @@
 // app/static/js/admin/dashboard.js
-// Admin dashboard JavaScript functions
+// Admin dashboard JavaScript functions using AJAX like session management
 
-// We don't need the downloadBothSessions function anymore since we're showing sessions separately
-// But we'll keep it in case we want to add a \"Download Both\" button later
-function downloadBothSessions(session1Id, session2Id) {
-  // Use the existing bulk export endpoint
-  fetch("/admin/export/bulk", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      session_ids: [session1Id, session2Id],
-    }),
-  })
-    .then((response) => {
-      if (response.ok) {
-        // Create download link
-        const filename =
-          response.headers.get("Content-Disposition") || "bulk_export.zip";
-        response.blob().then((blob) => {
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.style.display = "none";
-          a.href = url;
-          a.download = filename.includes("filename=")
-            ? filename.split("filename=")[1].replace(/\"/g, "")
-            : "bulk_export.zip";
-          document.body.appendChild(a);
-          a.click();
-          window.URL.revokeObjectURL(url);
-          document.body.removeChild(a);
-        });
-      } else {
-        alert("Export failed. Please try again.");
-      }
-    })
-    .catch((error) => {
-      // Export failed
-      alert("Export failed. Please try again.");
+// Global state
+let currentPage = 1;
+let currentPerPage = 15;
+let currentSearchQuery = "";
+let searchDebounceTimer = null;
+let currentSortBy = "user_id";
+let currentSortOrder = "asc";
+let currentTab = "overview"; // Default tab
+
+function normalizeFacialStatus(status) {
+  if (!status) {
+    return "not_started";
+  }
+  return String(status).trim().toLowerCase();
+}
+
+// Initialize page
+document.addEventListener("DOMContentLoaded", function () {
+  // Get URL parameters
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlSearchQuery = urlParams.get("q") || "";
+  const urlPage = parseInt(urlParams.get("page")) || 1;
+  const urlPerPage = parseInt(urlParams.get("per_page")) || 15;
+  const urlSortBy = urlParams.get("sort_by") || "user_id";
+  const urlSortOrder = urlParams.get("sort_order") || "asc";
+
+  // Get tab from URL hash or default to 'overview'
+  const urlHash = window.location.hash.substring(1); // Remove the '#'
+  const initialTab = urlHash && document.getElementById(`tab-content-${urlHash}`) ? urlHash : "overview";
+
+  // Set initial state from URL parameters
+  currentPage = urlPage;
+  currentPerPage = urlPerPage;
+  currentSearchQuery = urlSearchQuery;
+  currentSortBy = urlSortBy;
+  currentSortOrder = urlSortOrder;
+  currentTab = initialTab;
+
+  // Update search input with URL value
+  const searchInput = document.getElementById("userSearch");
+  if (searchInput && urlSearchQuery) {
+    searchInput.value = urlSearchQuery;
+  }
+
+  // Update per page select with URL value
+  const perPageSelect = document.getElementById("per-page-select");
+  if (perPageSelect) {
+    perPageSelect.value = currentPerPage;
+  }
+
+  // Update sort selects with URL values
+  const sortBySelect = document.getElementById("sortBySelect");
+  const sortOrderSelect = document.getElementById("sortOrderSelect");
+  if (sortBySelect) {
+    sortBySelect.value = currentSortBy;
+  }
+  if (sortOrderSelect) {
+    sortOrderSelect.value = currentSortOrder;
+  }
+
+  // Initialize tabs
+  initializeTabs();
+  
+  // Load initial data
+  loadDashboardData();
+
+  // Initialize search functionality
+  initializeSearch();
+
+  // Initialize sort controls
+  initializeSortControls();
+
+  // Listen for hash changes (back/forward navigation)
+  window.addEventListener("hashchange", function () {
+    const newHash = window.location.hash.substring(1);
+    const newTab = newHash && document.getElementById(`tab-content-${newHash}`) ? newHash : "overview";
+
+    if (newTab !== currentTab) {
+      currentTab = newTab;
+      switchTab(currentTab);
+    }
+  });
+});
+
+// Initialize tab functionality
+function initializeTabs() {
+  // Show the default tab
+  showTab(currentTab);
+  
+  // Add click listeners to all tab buttons
+  document.querySelectorAll('.tab-button').forEach(button => {
+    button.addEventListener('click', function(e) {
+      e.preventDefault();
+      const tabName = this.id.replace('tab-', '');
+      switchTab(tabName);
     });
-}
-
-// Function to handle bulk download with loading indicator
-function downloadAllSessions() {
-  // Note: This function relies on Flask template variable that needs to be passed from template
-  const downloadBtn = document.querySelector(".bulk-download-btn");
-  if (!downloadBtn) return;
-
-  const originalText = downloadBtn.innerHTML;
-  downloadBtn.innerHTML =
-    '<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Preparing...';
-  downloadBtn.disabled = true;
-
-  // Start download
-  setTimeout(() => {
-    // Reset button after a short delay to allow download to start
-    downloadBtn.innerHTML = originalText;
-    downloadBtn.disabled = false;
-  }, 2000);
-}
-
-// Debug function to check delete buttons
-function debugDeleteButtons() {
-  const allDeleteButtons = document.querySelectorAll(
-    'button[onclick*="confirmDelete"]'
-  );
-  console.log(
-    `Found ${allDeleteButtons.length} delete buttons:`,
-    allDeleteButtons
-  );
-  allDeleteButtons.forEach((btn, index) => {
-    console.log(
-      `Button ${index}:`,
-      btn,
-      "onclick:",
-      btn.onclick,
-      "disabled:",
-      btn.disabled
-    );
   });
 }
 
-// Delete session confirmation and execution
+// Switch between tabs
+function switchTab(tabName) {
+  if (currentTab === tabName) return;
+
+  currentTab = tabName;
+  
+  // Update URL hash to make tab persistent
+  window.location.hash = tabName;
+  
+  // Show the selected tab content
+  showTab(tabName);
+}
+
+// Show the specified tab content
+function showTab(tabName) {
+  // Hide all tab content divs
+  document.querySelectorAll('[id^="tab-content-"]').forEach(contentDiv => {
+    contentDiv.classList.add('hidden');
+  });
+  
+  // Remove active class from all tab buttons
+  document.querySelectorAll('.tab-button').forEach(button => {
+    button.className = 'tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300';
+  });
+  
+  // Show the selected tab content
+  const contentDiv = document.getElementById(`tab-content-${tabName}`);
+  if (contentDiv) {
+    contentDiv.classList.remove('hidden');
+  }
+  
+  // Update the active tab button
+  const activeButton = document.getElementById(`tab-${tabName}`);
+  if (activeButton) {
+    activeButton.className = 'tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-indigo-500 text-indigo-600';
+  }
+  
+  // Load data based on the active tab
+  if (tabName === 'user-sessions' || tabName === 'overview') {
+    loadDashboardData();
+  } else if (tabName === 'facial-analysis') {
+    loadFacialAnalysisSessions();
+    initializeFacialAnalysisControls();
+  }
+}
+
+// Initialize search functionality
+function initializeSearch() {
+  const searchInput = document.getElementById("userSearch");
+  if (!searchInput) return;
+
+  searchInput.addEventListener("input", function (e) {
+    const query = e.target.value.trim();
+
+    // Clear previous timer
+    if (searchDebounceTimer) {
+      clearTimeout(searchDebounceTimer);
+    }
+
+    // Set new timer with 300ms debounce
+    searchDebounceTimer = setTimeout(() => {
+      performSearch(query);
+    }, 300);
+  });
+
+  // Clear search when focused for easy clearing
+  searchInput.addEventListener("focus", function () {
+    this.select();
+  });
+}
+
+// Perform search with debounce
+function performSearch(query) {
+  // Update search query state
+  currentSearchQuery = query;
+  currentPage = 1; // Reset to first page when searching
+
+  // Update URL without refresh
+  updateUrlParams();
+
+  // Load dashboard data with new search
+  loadDashboardData();
+}
+
+// Update URL parameters without refresh
+function updateUrlParams() {
+  const urlParams = new URLSearchParams(window.location.search);
+
+  // Update search parameter
+  if (currentSearchQuery && currentSearchQuery.length > 0) {
+    urlParams.set("q", currentSearchQuery);
+  } else {
+    urlParams.delete("q");
+  }
+
+  // Update page parameter
+  if (currentPage > 1) {
+    urlParams.set("page", currentPage);
+  } else {
+    urlParams.delete("page");
+  }
+
+  // Update per_page parameter
+  if (currentPerPage !== 15) { // 15 is default
+    urlParams.set("per_page", currentPerPage);
+  } else {
+    urlParams.delete("per_page");
+  }
+
+  // Update sort parameters
+  if (currentSortBy !== "user_id") {
+    urlParams.set("sort_by", currentSortBy);
+  } else {
+    urlParams.delete("sort_by");
+  }
+  if (currentSortOrder !== "asc") {
+    urlParams.set("sort_order", currentSortOrder);
+  } else {
+    urlParams.delete("sort_order");
+  }
+
+  // Update URL
+  const newUrl = urlParams.toString()
+    ? `${window.location.pathname}?${urlParams.toString()}`
+    : window.location.pathname;
+
+  window.history.replaceState({}, "", newUrl);
+}
+
+// Load dashboard data via AJAX
+function loadDashboardData() {
+  showLoading();
+  hideError();
+
+  // Build URL with pagination, search, and sort
+  let url = `/admin/ajax-dashboard-data?page=${currentPage}&per_page=${currentPerPage}`;
+  if (currentSearchQuery) {
+    url += `&q=${encodeURIComponent(currentSearchQuery)}`;
+  }
+  url += `&sort_by=${currentSortBy}&sort_order=${currentSortOrder}`;
+
+  fetch(url, {
+    headers: {
+      "X-Requested-With": "XMLHttpRequest",
+    },
+  })
+    .then((response) => response.json())
+    .then((data) => {
+      console.log("[DEBUG] Dashboard response:", data);
+
+      // Handle API response wrapper format from @api_response decorator
+      const actualData = data.status === "OLKORECT" ? data.data : data;
+
+      if (
+        actualData.status === "success" ||
+        actualData.user_sessions ||
+        data.status === "OLKORECT"
+      ) {
+        const responseData = actualData.data || actualData;
+
+        // Update dashboard content
+        updateDashboardContent(responseData);
+
+        // Make sure content is visible and loading is hidden
+        hideLoading();
+        showContent();
+
+        // Update search count display
+        updateUserCount(responseData.user_sessions.pagination, currentSearchQuery);
+      } else {
+        hideLoading();
+        console.error("[ERROR] Dashboard load failed:", actualData);
+        showError(actualData.message || data.error || "Unknown error");
+      }
+    })
+    .catch((error) => {
+      hideLoading();
+      console.error("[ERROR] Dashboard request failed:", error);
+      showError(error.message);
+    });
+}
+
+// Update dashboard content
+function updateDashboardContent(data) {
+  // Update stats cards (for overview tab)
+  updateStatsCards(data.stats);
+  
+  // Update table content (for user-sessions tab)
+  updateUserSessionTable(data.user_sessions.items);
+  
+  // Update pagination (for user-sessions tab)
+  updatePagination(data.user_sessions.pagination);
+  
+  // Update assessment statistics (for statistics tab)
+  updateAssessmentStats(data.phq_stats, data.session_stats, data.user_stats);
+}
+
+// Update stats cards
+function updateStatsCards(stats) {
+  if (stats && stats.users) {
+    // Update user stats
+    const userStatsCard = document.getElementById("user-stats-card");
+    if (userStatsCard) {
+      const userStats = userStatsCard.querySelectorAll("div > div.ml-4 > div");
+      if (userStats.length > 0) {
+        userStats[0].textContent = stats.users.total || 0; // Total users
+      }
+      const adminText = userStatsCard.querySelector(".mt-3.text-xs.text-blue-700 div:first-child .font-medium");
+      if (adminText) adminText.textContent = stats.users.admins || 0;
+      const regularText = userStatsCard.querySelector(".mt-3.text-xs.text-blue-700 div:last-child .font-medium");
+      if (regularText) regularText.textContent = stats.users.regular || 0;
+    }
+
+    // Update assessment stats
+    const assessmentStatsCard = document.getElementById("assessment-stats-card");
+    if (assessmentStatsCard && stats.assessments) {
+      const assessmentStats = assessmentStatsCard.querySelectorAll("div > div.ml-4 > div");
+      if (assessmentStats.length > 0) {
+        assessmentStats[0].textContent = stats.assessments.total_sessions || 0; // Total sessions
+      }
+      const completedText = assessmentStatsCard.querySelector(".mt-3.text-xs.text-green-700 div:first-child .font-medium");
+      if (completedText) completedText.textContent = stats.assessments.completed_sessions || 0;
+      const rateText = assessmentStatsCard.querySelector(".mt-3.text-xs.text-green-700 div:last-child .font-medium");
+      if (rateText) rateText.textContent = `${stats.assessments.completion_rate || 0}%`;
+    }
+
+    // Update settings stats
+    const settingsStatsCard = document.getElementById("settings-stats-card");
+    if (settingsStatsCard && stats.settings) {
+      const settingStats = settingsStatsCard.querySelectorAll("div > div.ml-4 > div");
+      if (settingStats.length > 0) {
+        settingStats[0].textContent = stats.settings.total_settings || 0; // Total settings
+      }
+      const assessmentConfigText = settingsStatsCard.querySelector(".mt-3.text-xs.text-purple-700 div:first-child .font-medium");
+      if (assessmentConfigText) assessmentConfigText.textContent = stats.settings.assessment_configs || 0;
+      const mediaSettingText = settingsStatsCard.querySelector(".mt-3.text-xs.text-purple-700 div:last-child .font-medium");
+      if (mediaSettingText) mediaSettingText.textContent = stats.settings.media_settings || 0;
+    }
+  }
+}
+
+// Update user session table
+function updateUserSessionTable(items) {
+  const headerEl = document.getElementById("table-header");
+  const bodyEl = document.getElementById("table-body");
+
+  // Set up table header
+  headerEl.innerHTML = `
+    <tr>
+      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User ID</th>
+      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Username</th>
+      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Session</th>
+      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PHQ-Sum</th>
+      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+    </tr>
+  `;
+
+  if (!items || items.length === 0) {
+    bodyEl.innerHTML = `
+      <tr>
+        <td colspan="6" class="px-6 py-12 text-center text-sm text-gray-500">
+          <div class="flex flex-col items-center justify-center">
+            <svg class="w-12 h-12 text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+            <span class="text-lg font-medium text-gray-400">No user sessions found</span>
+            <p class="text-sm text-gray-500 mt-1">Users will appear here once they start assessments</p>
+          </div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  // Build table rows for each user session
+  let rowsHtml = '';
+  items.forEach((user_session) => {
+    // Session 1 Row
+    rowsHtml += `
+      <tr class="border-b border-gray-100 hover:bg-blue-50 transition-colors duration-150">
+        <td class="py-4 px-6 font-medium text-gray-900">${user_session.user_id}</td>
+        <td class="py-4 px-6 font-medium text-gray-900">${user_session.username}</td>
+        <td class="py-4 px-6 text-gray-900">
+          <div class="flex items-center">
+            <div class="w-3 h-3 rounded-full bg-blue-500 mr-2"></div>
+            <span class="font-medium">Session 1</span>
+          </div>
+        </td>
+        <td class="py-4 px-6">
+          ${getStatusBadge(user_session.session1, user_session.session1_id)}
+        </td>
+        <td class="py-4 px-6 text-gray-900">
+          ${getPHQBadge(user_session.session1_phq_score)}
+        </td>
+        <td class="py-4 px-6 w-48">
+          <div class="flex items-center justify-start space-x-1 min-w-0">
+            ${getActionButtons(user_session.session1, user_session.session1_id, user_session.user_id, user_session.username, 1)}
+          </div>
+        </td>
+      </tr>
+      
+      <!-- Session 2 Row -->
+      <tr class="border-b border-gray-100 hover:bg-blue-50 transition-colors duration-150">
+        <td class="py-4 px-6 font-medium text-gray-900">${user_session.user_id}</td>
+        <td class="py-4 px-6 font-medium text-gray-900">${user_session.username}</td>
+        <td class="py-4 px-6 text-gray-900">
+          <div class="flex items-center">
+            <div class="w-3 h-3 rounded-full bg-purple-500 mr-2"></div>
+            <span class="font-medium">Session 2</span>
+          </div>
+        </td>
+        <td class="py-4 px-6">
+          ${getStatusBadge(user_session.session2, user_session.session2_id)}
+        </td>
+        <td class="py-4 px-6 text-gray-900">
+          ${getPHQBadge(user_session.session2_phq_score)}
+        </td>
+        <td class="py-4 px-6 w-48">
+          <div class="flex items-center justify-start space-x-1 min-w-0">
+            ${getActionButtons(user_session.session2, user_session.session2_id, user_session.user_id, user_session.username, 2)}
+          </div>
+        </td>
+      </tr>
+      
+      <!-- User Separator -->
+      <tr class="border-b-2 border-gray-200">
+        <td colspan="6" class="py-2 px-6 bg-gradient-to-r from-gray-50 to-gray-100"></td>
+      </tr>
+    `;
+  });
+
+  bodyEl.innerHTML = rowsHtml;
+
+  // Set up event delegation for delete buttons
+  document.addEventListener("click", function (e) {
+    const btn = e.target.closest(".delete-session-btn");
+    if (!btn) return;
+
+    // Extract data from attributes
+    const sessionId = btn.dataset.sessionId;
+    const username = decodeURIComponent(btn.dataset.username || "");
+    const sessionNumber = parseInt(btn.dataset.sessionNumber || "0", 10);
+
+    // Call confirmDelete function
+    confirmDelete(sessionId, username, sessionNumber);
+  });
+}
+
+// Helper function to get status badge
+function getStatusBadge(sessionStatus, sessionId) {
+  if (sessionStatus === "COMPLETED" && sessionId) {
+    return `<span class="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">${sessionStatus}</span>`;
+  } else if (sessionStatus === "Not done") {
+    return `<span class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">Not Started</span>`;
+  } else {
+    return `<span class="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">${sessionStatus}</span>`;
+  }
+}
+
+// Helper function to get PHQ badge
+function getPHQBadge(phqScore) {
+  if (phqScore !== null && phqScore !== undefined) {
+    return `<span class="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${phqScore}</span>`;
+  } else {
+    return `<span class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">N/A</span>`;
+  }
+}
+
+// Helper function to get action buttons
+function getActionButtons(sessionStatus, sessionId, userId, username, sessionNumber) {
+  if (sessionStatus === "COMPLETED" && sessionId) {
+    return `
+      <a href="/admin/export/session/${sessionId}" 
+         class="inline-flex items-center justify-center px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 transition-colors duration-200 shadow-sm flex-shrink-0 w-20">
+        <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+        </svg>
+        Download
+      </a>
+      <button class="inline-flex items-center justify-center px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 transition-colors duration-200 shadow-sm flex-shrink-0 w-16 delete-session-btn"
+              data-session-id="${sessionId}" 
+              data-username="${encodeURIComponent(username)}" 
+              data-session-number="${sessionNumber}">
+        <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+        </svg>
+        Delete
+      </button>
+    `;
+  } else {
+    return `
+      <div class="flex items-center justify-start w-full">
+        <span class="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200">
+          <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          Disabled
+        </span>
+      </div>
+    `;
+  }
+}
+
+// Update pagination
+function updatePagination(pagination) {
+  const containerEl = document.getElementById("pagination-container");
+  const infoEl = document.getElementById("pagination-info");
+  const controlsEl = document.getElementById("pagination-controls");
+
+  if (pagination.total === 0) {
+    containerEl.classList.add("hidden");
+    return;
+  }
+
+  containerEl.classList.remove("hidden");
+
+  // Update info text
+  const start = (pagination.page - 1) * pagination.per_page + 1;
+  const end = Math.min(start + pagination.per_page - 1, pagination.total);
+  infoEl.textContent = `Showing ${start} to ${end} of ${pagination.total} results`;
+
+  // Build pagination controls
+  let controls = "";
+
+  // Previous button
+  if (pagination.has_prev) {
+    controls += `<button onclick="changePage(${pagination.prev_num})" class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">Previous</button>`;
+  } else {
+    controls += `<button disabled class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-gray-50 text-sm font-medium text-gray-300 cursor-not-allowed">Previous</button>`;
+  }
+
+  // Page numbers
+  for (let i = 1; i <= pagination.pages; i++) {
+    if (i === pagination.page) {
+      controls += `<button onclick="changePage(${i})" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-indigo-50 text-sm font-medium text-indigo-600">${i}</button>`;
+    } else {
+      controls += `<button onclick="changePage(${i})" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">${i}</button>`;
+    }
+  }
+
+  // Next button
+  if (pagination.has_next) {
+    controls += `<button onclick="changePage(${pagination.next_num})" class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">Next</button>`;
+  } else {
+    controls += `<button disabled class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-gray-50 text-sm font-medium text-gray-300 cursor-not-allowed">Next</button>`;
+  }
+
+  controlsEl.innerHTML = controls;
+}
+
+// Update assessment statistics
+function updateAssessmentStats(phqStats, sessionStats, userStats) {
+  // Update PHQ stats
+  const phqStatsContent = document.getElementById("phq-stats-content");
+  if (phqStatsContent) {
+    let phqHtml = '';
+    if (phqStats) {
+      phqHtml += `
+        <div class="flex justify-between items-center">
+          <div class="flex items-center">
+            <div class="w-3 h-3 rounded-full bg-blue-500 mr-2"></div>
+            <span class="text-sm text-blue-700">Minimal (0-4)</span>
+          </div>
+          <span class="font-medium text-blue-900">${phqStats.minimal || 0}</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <div class="flex items-center">
+            <div class="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
+            <span class="text-sm text-blue-700">Mild (5-9)</span>
+          </div>
+          <span class="font-medium text-blue-900">${phqStats.mild || 0}</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <div class="flex items-center">
+            <div class="w-3 h-3 rounded-full bg-yellow-500 mr-2"></div>
+            <span class="text-sm text-blue-700">Moderate (10-14)</span>
+          </div>
+          <span class="font-medium text-blue-900">${phqStats.moderate || 0}</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <div class="flex items-center">
+            <div class="w-3 h-3 rounded-full bg-orange-500 mr-2"></div>
+            <span class="text-sm text-blue-700">Moderately Severe (15-19)</span>
+          </div>
+          <span class="font-medium text-blue-900">${phqStats.moderate_severe || 0}</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <div class="flex items-center">
+            <div class="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
+            <span class="text-sm text-blue-700">Severe (20-27)</span>
+          </div>
+          <span class="font-medium text-blue-900">${phqStats.severe || 0}</span>
+        </div>
+      `;
+      if (phqStats.total_scores > 0) {
+        phqHtml += `
+          <div class="mt-3 pt-3 border-t border-blue-200">
+            <div class="text-xs text-blue-600">Average Score: <span class="font-medium">${phqStats.average_score}</span></div>
+          </div>
+        `;
+      }
+    } else {
+      phqHtml = '<div class="text-sm text-gray-500">No PHQ data available</div>';
+    }
+    phqStatsContent.innerHTML = phqHtml;
+  }
+
+  // Update session stats
+  const sessionStatsContent = document.getElementById("session-stats-content");
+  if (sessionStatsContent && sessionStats) {
+    sessionStatsContent.innerHTML = `
+      <div class="flex justify-between items-center">
+        <span class="text-sm text-green-700">Total Sessions</span>
+        <span class="font-medium text-green-900">${sessionStats.total_sessions || 0}</span>
+      </div>
+      <div class="flex justify-between items-center">
+        <span class="text-sm text-green-700">Completed</span>
+        <span class="font-medium text-green-900">${sessionStats.completed_sessions || 0}</span>
+      </div>
+      <div class="flex justify-between items-center">
+        <span class="text-sm text-green-700">Completion Rate</span>
+        <span class="font-medium text-green-900">${sessionStats.completion_rate || 0}%</span>
+      </div>
+      <div class="flex justify-between items-center">
+        <span class="text-sm text-green-700">Session 1 Only</span>
+        <span class="font-medium text-green-900">${sessionStats.session1_only || 0}</span>
+      </div>
+      <div class="flex justify-between items-center">
+        <span class="text-sm text-green-700">Both Sessions</span>
+        <span class="font-medium text-green-900">${sessionStats.both_sessions || 0}</span>
+      </div>
+    `;
+  }
+
+  // Update user engagement stats
+  const userEngagementContent = document.getElementById("user-engagement-content");
+  if (userEngagementContent && userStats) {
+    userEngagementContent.innerHTML = `
+      <div class="flex justify-between items-center">
+        <span class="text-sm text-purple-700">Total Users</span>
+        <span class="font-medium text-purple-900">${userStats.total_users || 0}</span>
+      </div>
+      <div class="flex justify-between items-center">
+        <span class="text-sm text-purple-700">Active Users</span>
+        <span class="font-medium text-purple-900">${userStats.active_users || 0}</span>
+      </div>
+      <div class="flex justify-between items-center">
+        <span class="text-sm text-purple-700">Avg Sessions/User</span>
+        <span class="font-medium text-purple-900">${userStats.avg_sessions_per_user || 0}</span>
+      </div>
+      <div class="flex justify-between items-center">
+        <span class="text-sm text-purple-700">High Engagement</span>
+        <span class="font-medium text-purple-900">${userStats.high_engagement || 0}</span>
+      </div>
+      <div class="flex justify-between items-center">
+        <span class="text-sm text-purple-700">Low Engagement</span>
+        <span class="font-medium text-purple-900">${userStats.low_engagement || 0}</span>
+      </div>
+    `;
+  }
+}
+
+// Update user count display
+function updateUserCount(pagination, searchQuery) {
+  const userCountElement = document.getElementById("user-count");
+  if (userCountElement && pagination) {
+    const countText = searchQuery
+      ? `${pagination.total} users found for "${searchQuery}"`
+      : `${pagination.total} total users`;
+    userCountElement.textContent = countText;
+  }
+}
+
+// UI Helper functions
+function showLoading() {
+  document.getElementById("loading-state").classList.remove("hidden");
+  document.getElementById("content-area").classList.add("hidden");
+  document.getElementById("error-state").classList.add("hidden");
+}
+
+function hideLoading() {
+  document.getElementById("loading-state").classList.add("hidden");
+}
+
+function showError(message) {
+  document.getElementById("error-message").textContent = message;
+  document.getElementById("error-state").classList.remove("hidden");
+  showContent();
+}
+
+function hideError() {
+  document.getElementById("error-state").classList.add("hidden");
+}
+
+function showContent() {
+  document.getElementById("content-area").classList.remove("hidden");
+}
+
+// Change page
+function changePage(page) {
+  currentPage = page;
+
+  // Update URL parameters
+  updateUrlParams();
+
+  // Load dashboard data for new page
+  loadDashboardData();
+}
+
+// Change per page
+function changePerPage(perPage) {
+  currentPerPage = parseInt(perPage);
+  currentPage = 1; // Reset to first page
+
+  // Update URL parameters
+  updateUrlParams();
+
+  // Load dashboard data for new per page value
+  loadDashboardData();
+}
+
+// Apply sort filter function
+function applySortFilter() {
+  const sortBySelect = document.getElementById("sortBySelect");
+  const sortOrderSelect = document.getElementById("sortOrderSelect");
+
+  if (sortBySelect && sortOrderSelect) {
+    currentSortBy = sortBySelect.value;
+    currentSortOrder = sortOrderSelect.value;
+    currentPage = 1; // Reset to first page when sorting changes
+
+    // Update URL parameters
+    updateUrlParams();
+
+    // Load dashboard data with new sort
+    loadDashboardData();
+  }
+}
+
+// Add event listeners for sort controls
+function initializeSortControls() {
+  const sortBySelect = document.getElementById("sortBySelect");
+  const sortOrderSelect = document.getElementById("sortOrderSelect");
+
+  if (sortBySelect) {
+    sortBySelect.addEventListener("change", applySortFilter);
+  }
+
+  if (sortOrderSelect) {
+    sortOrderSelect.addEventListener("change", applySortFilter);
+  }
+}
+
+// Delete session confirmation and execution (keeping original functionality)
 function confirmDelete(sessionId, username, sessionNumber) {
   console.log(
     `confirmDelete called with: ${sessionId}, ${username}, ${sessionNumber}`
@@ -111,9 +783,9 @@ function deleteSession(sessionId, username, sessionNumber) {
   const originalContent = deleteBtn.innerHTML;
   deleteBtn.disabled = true;
   deleteBtn.innerHTML = `
-        <svg class=\"animate-spin w-3.5 h-3.5 mr-1.5\" fill=\"none\" viewBox=\"0 0 24 24\">
-            <circle class=\"opacity-25\" cx=\"12\" cy=\"12\" r=\"10\" stroke=\"currentColor\" stroke-width=\"4\"></circle>
-            <path class=\"opacity-75\" fill=\"currentColor\" d=\"M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z\"></path>
+        <svg class="animate-spin w-3.5 h-3.5 mr-1.5" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
         Deleting...
     `;
@@ -142,6 +814,9 @@ function deleteSession(sessionId, username, sessionNumber) {
 
         // Show success message
         alert(`Session ${sessionNumber} for ${username} deleted successfully.`);
+        
+        // Reload dashboard data to reflect changes
+        loadDashboardData();
       } else {
         // Restore button on error
         deleteBtn.disabled = false;
@@ -167,7 +842,7 @@ function updateSessionStateToDeleted(sessionId, username, sessionNumber) {
   // Update the status cell
   const statusCell = sessionRow.querySelector("td:nth-child(4)");
   statusCell.innerHTML = `
-        <span class=\"px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800\">
+        <span class="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
             DELETED
         </span>
     `;
@@ -175,692 +850,464 @@ function updateSessionStateToDeleted(sessionId, username, sessionNumber) {
   // Update the actions cell
   const actionsCell = sessionRow.querySelector("td:nth-child(6)");
   actionsCell.innerHTML = `
-        <div class=\"flex items-center space-x-1\">
-            <span class=\"inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium bg-red-100 text-red-600 border border-red-200\">
-                <svg class=\"w-3.5 h-3.5 mr-1.5\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\">
-                    <path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16\"></path>
+        <div class="flex items-center space-x-1">
+            <span class="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium bg-red-100 text-red-600 border border-red-200">
+                <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                 </svg>
                 Deleted
             </span>
         </div>
     `;
-  // sss
   // Add visual feedback - fade out and red tint
   sessionRow.style.transition = "all 0.3s ease";
   sessionRow.style.backgroundColor = "#fef2f2";
   sessionRow.style.opacity = "0.7";
 }
 
-// AJAX Search and Filter Functionality
-let searchTimeout;
-const searchInput = document.getElementById("userSearch");
-const searchSpinner = document.getElementById("searchSpinner");
-const userTable = document.getElementById("userTable");
-const userCount = document.getElementById("userCount");
-const paginationControls = document.querySelector(".pagination-controls");
-const sortBySelect = document.getElementById("sortBySelect");
-const sortOrderSelect = document.getElementById("sortOrderSelect");
+// Function to handle bulk download with loading indicator (keeping original functionality)
+function downloadAllSessions() {
+  // Note: This function relies on Flask template variable that needs to be passed from template
+  const downloadBtn = document.querySelector(".bulk-download-btn");
+  if (!downloadBtn) return;
 
-// Get current sort parameters
-function getSortParams() {
-  const urlParams = new URLSearchParams(window.location.search);
-  return {
-    sort_by: sortBySelect ? sortBySelect.value : urlParams.get("sort_by") || "user_id",
-    sort_order: sortOrderSelect ? sortOrderSelect.value : urlParams.get("sort_order") || "asc"
-  };
+  const originalText = downloadBtn.innerHTML;
+  downloadBtn.innerHTML =
+    '<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Preparing...';
+  downloadBtn.disabled = true;
+
+  // Start download
+  setTimeout(() => {
+    // Reset button after a short delay to allow download to start
+    downloadBtn.innerHTML = originalText;
+    downloadBtn.disabled = false;
+  }, 2000);
 }
 
-function debounceSearch(query) {
-  // Clear previous timeout
-  clearTimeout(searchTimeout);
+// ============================================================================
+// FACIAL ANALYSIS TAB FUNCTIONS
+// ============================================================================
 
-  // Show spinner
-  if (searchSpinner) {
-    searchSpinner.classList.remove("hidden");
+// Global state for facial analysis
+let allFacialAnalysisSessions = [];
+let filteredFacialAnalysisSessions = [];
+let facialAnalysisSearchDebounceTimer = null;
+
+// Load facial analysis sessions
+async function loadFacialAnalysisSessions() {
+  // Check gRPC health
+  checkFacialAnalysisGrpcHealth();
+
+  try {
+    const response = await fetch('/admin/facial-analysis/eligible-sessions');
+    const result = await response.json();
+    const data = result.status === 'OLKORECT' ? result.data : result;
+
+    if (data.success) {
+      allFacialAnalysisSessions = data.sessions;
+      filteredFacialAnalysisSessions = allFacialAnalysisSessions;
+      applyFacialAnalysisFilters();
+      updateFacialAnalysisStats(data.stats);
+    } else {
+      console.error('Failed to load facial analysis sessions:', data.message);
+    }
+  } catch (error) {
+    console.error('Error loading facial analysis sessions:', error);
   }
-
-  // Set new timeout for 500ms (faster feedback)
-  searchTimeout = setTimeout(() => {
-    performSearchAjax(query.trim());
-  }, 500);
 }
 
-function performSearchAjax(query, page = 1) {
-  // Get current pagination and per_page params
-  const urlParams = new URLSearchParams(window.location.search);
-  const currentPage = page || urlParams.get("page") || 1;
-  const perPage = urlParams.get("per_page") || 15;
-  const sortParams = getSortParams();
+// Check gRPC health
+async function checkFacialAnalysisGrpcHealth() {
+  try {
+    const response = await fetch('/admin/facial-analysis/health');
+    const result = await response.json();
+    const data = result.status === 'OLKORECT' ? result.data : result;
 
-  // Build AJAX URL - use ajax-data endpoint with sort params
-  const ajaxUrl = `/admin/ajax-data?q=${encodeURIComponent(
-    query
-  )}&page=${currentPage}&per_page=${perPage}&sort_by=${sortParams.sort_by}&sort_order=${sortParams.sort_order}`;
+    const banner = document.getElementById('grpc-status-banner');
+    if (!banner) return;
 
-  // Perform AJAX request
-  fetch(ajaxUrl, {
-    headers: {
-      "X-Requested-With": "XMLHttpRequest",
-    },
-  })
-    .then((response) => response.json())
-    .then((data) => {
-      // Hide spinner
-      if (searchSpinner) {
-        searchSpinner.classList.add("hidden");
-      }
-
-      // Handle API response wrapper format from @api_response decorator
-      const actualData = data.status === "OLKORECT" ? data.data : data;
-
-      if (actualData.status === "success" || actualData.data) {
-        const responseData = actualData.data || actualData;
-
-        // Update table content
-        updateUserTable(responseData);
-
-        // Update user count
-        if (userCount) {
-          const countText = query
-            ? `${responseData.pagination.total} users found for \"${query}\"`
-            : `${responseData.pagination.total} total users`;
-          userCount.textContent = countText;
-        }
-
-        // Update pagination controls
-        updatePaginationControls(responseData.pagination, query);
-
-        // Update URL without full reload (browser history)
-        const newUrlParams = new URLSearchParams(window.location.search);
-        if (query) {
-          newUrlParams.set("q", query);
-          newUrlParams.set("page", responseData.pagination.page);
-        } else {
-          newUrlParams.delete("q");
-          newUrlParams.set("page", responseData.pagination.page);
-        }
-        newUrlParams.set("per_page", responseData.pagination.per_page);
-        newUrlParams.set("sort_by", responseData.sort_by || sortParams.sort_by);
-        newUrlParams.set("sort_order", responseData.sort_order || sortParams.sort_order);
-        window.history.replaceState(
-          {},
-          "",
-          `${window.location.pathname}?${newUrlParams.toString()}`
-        );
-      }
-    })
-    .catch((error) => {
-      console.error("Search error:", error);
-      if (searchSpinner) {
-        searchSpinner.classList.add("hidden");
-      }
-      // Fallback to full page reload on error
-      const urlParams = new URLSearchParams(window.location.search);
-      if (query && query.length > 0) {
-        urlParams.set("q", query);
-        urlParams.set("page", 1); // Reset to first page
-      } else {
-        urlParams.delete("q");
-        urlParams.delete("page");
-      }
-      window.location.search = urlParams.toString();
-    });
+    if (data.healthy) {
+      banner.innerHTML = `
+        <div class="flex items-center justify-between p-4 bg-green-50 rounded-lg border border-green-200">
+          <div class="flex items-center">
+            <svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <span class="text-sm font-medium text-green-700">gRPC Service Online (${data.config.host}:${data.config.port})</span>
+          </div>
+        </div>
+      `;
+    } else {
+      banner.innerHTML = `
+        <div class="flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-200">
+          <div class="flex items-center">
+            <svg class="w-5 h-5 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <span class="text-sm font-medium text-red-700">gRPC Service Offline - ${data.message}</span>
+          </div>
+        </div>
+      `;
+    }
+  } catch (error) {
+    console.error('Health check failed:', error);
+  }
 }
 
-function updateUserTable(data) {
-  // Find the tbody element in the user table
-  const tbody = userTable ? userTable.querySelector("tbody") : null;
+// Initialize facial analysis controls
+function initializeFacialAnalysisControls() {
+  const searchInput = document.getElementById('fa-searchInput');
+  const statusFilter = document.getElementById('fa-statusFilter');
+  const processAllButton = document.getElementById('fa-process-all-btn');
+
+  if (!searchInput || !statusFilter) return;
+
+  // Search with debounce (300ms)
+  searchInput.addEventListener('input', function(e) {
+    if (facialAnalysisSearchDebounceTimer) {
+      clearTimeout(facialAnalysisSearchDebounceTimer);
+    }
+
+    facialAnalysisSearchDebounceTimer = setTimeout(() => {
+      applyFacialAnalysisFilters();
+    }, 300);
+  });
+
+  // Status filter
+  statusFilter.addEventListener('change', function() {
+    applyFacialAnalysisFilters();
+  });
+
+  if (processAllButton && !processAllButton.dataset.listenerAttached) {
+    processAllButton.addEventListener('click', processAllFacialAnalysisSessions);
+    processAllButton.dataset.listenerAttached = 'true';
+  }
+}
+
+// Apply facial analysis filters
+function applyFacialAnalysisFilters() {
+  const searchInput = document.getElementById('fa-searchInput');
+  const statusFilter = document.getElementById('fa-statusFilter');
+
+  if (!searchInput || !statusFilter) return;
+
+  const searchQuery = searchInput.value.trim().toLowerCase();
+  const statusValue = statusFilter.value;
+
+  filteredFacialAnalysisSessions = allFacialAnalysisSessions.filter(session => {
+    // Search filter
+    const matchesSearch = !searchQuery ||
+      session.username.toLowerCase().includes(searchQuery) ||
+      session.email.toLowerCase().includes(searchQuery);
+
+    // Status filter
+    let matchesStatus = true;
+    if (statusValue !== 'all') {
+      if (statusValue === 'not_started') {
+        matchesStatus = session.phq_status === 'not_started' && session.llm_status === 'not_started';
+      } else if (statusValue === 'processing') {
+        matchesStatus = session.phq_status === 'processing' || session.llm_status === 'processing';
+      } else if (statusValue === 'completed') {
+        matchesStatus = session.phq_status === 'completed' && session.llm_status === 'completed';
+      }
+    }
+
+    return matchesSearch && matchesStatus;
+  });
+
+  renderFacialAnalysisSessions();
+}
+
+// Render facial analysis sessions table
+function renderFacialAnalysisSessions() {
+  const tbody = document.getElementById('facial-analysis-table-body');
+  const emptyState = document.getElementById('facial-analysis-empty-state');
+
   if (!tbody) return;
 
-  // Clear existing rows (except the last \"separator\" row if it exists)
-  while (tbody.firstChild && tbody.children.length > 1) {
-    tbody.removeChild(tbody.firstChild);
-  }
-
-  // If no results, show empty state
-  if (!data.items || data.items.length === 0) {
-    tbody.innerHTML = `
-            <tr>
-                <td colspan=\"6\" class=\"py-12 text-center text-gray-500\">
-                    <div class=\"flex flex-col items-center justify-center\">
-                        <svg class=\"w-12 h-12 text-gray-300 mb-3\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\">
-                            <path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z\"></path>
-                        </svg>
-                        <span class=\"text-lg font-medium text-gray-400\">No user sessions found</span>
-                        <p class=\"text-sm text-gray-500 mt-1\">Try adjusting your search terms</p>
-                    </div>
-                </td>
-            </tr>
-        `;
+  if (!filteredFacialAnalysisSessions || filteredFacialAnalysisSessions.length === 0) {
+    tbody.innerHTML = '';
+    if (emptyState) emptyState.classList.remove('hidden');
     return;
   }
 
-  // Build new rows
-  let newRows = "";
-  data.items.forEach((user_session) => {
-    // Session 1 Row
-    newRows += `
-            <tr class=\"border-b border-gray-100 hover:bg-blue-50 transition-colors duration-150\">
-                <td class=\"py-4 px-6 font-medium text-gray-900\">${
-                  user_session.user_id
-                }</td>
-                <td class=\"py-4 px-6 font-medium text-gray-900\">${
-                  user_session.username
-                }</td>
-                <td class=\"py-4 px-6 text-gray-900\">
-                    <div class=\"flex items-center\">
-                        <div class=\"w-3 h-3 rounded-full bg-blue-500 mr-2\"></div>
-                        <span class=\"font-medium\">Session 1</span>
-                    </div>
-                </td>
-                <td class=\"py-4 px-6\">
-                    ${
-                      user_session.session1 === "COMPLETED" &&
-                      user_session.session1_id
-                        ? `<span class=\"px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800\">${user_session.session1}</span>`
-                        : user_session.session1 === "Not done"
-                        ? `<span class=\"px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600\">Not Started</span>`
-                        : `<span class=\"px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800\">${user_session.session1}</span>`
-                    }
-                </td>
-                <td class=\"py-4 px-6 text-gray-900\">
-                    ${
-                      user_session.session1_phq_score !== null &&
-                      user_session.session1_phq_score !== undefined
-                        ? `<span class=\"px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800\">${user_session.session1_phq_score}</span>`
-                        : `<span class=\"px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600\">N/A</span>`
-                    }
-                </td>
-                <td class=\"py-4 px-6 w-48\">
-                    <div class=\"flex items-center justify-start space-x-1 min-w-0\">
-                        ${
-                          user_session.session1 === "COMPLETED" &&
-                          user_session.session1_id
-                            ? `<a href=\"/admin/export/session/${
-                                user_session.session1_id
-                              }\" 
-                               class=\"inline-flex items-center justify-center px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 transition-colors duration-200 shadow-sm flex-shrink-0 w-20\">
-                                <svg class=\"w-3.5 h-3.5 mr-1.5\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\">
-                                    <path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4\"></path>
-                                </svg>
-                                Download
-                            </a>
-                            <button class="inline-flex items-center justify-center px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 transition-colors duration-200 shadow-sm flex-shrink-0 w-16 delete-session-btn" 
-                                    data-session-id="${
-                                      user_session.session1_id
-                                    }" 
-                                    data-username="${encodeURIComponent(
-                                      user_session.username
-                                    )}" 
-                                    data-session-number="1">
-                                <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                </svg>
-                                Delete
-                            </button>`
-                            : `<div class=\"flex items-center justify-start w-full\">
-                                <span class=\"inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200\">
-                                    <svg class=\"w-3.5 h-3.5 mr-1.5\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\">
-                                        <path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z\"></path>
-                                    </svg>
-                                    Disabled
-                                </span>
-                            </div>`
-                        }
-                    </div>
-                </td>
-            </tr>
-            
-            <!-- Session 2 Row -->
-            <tr class=\"border-b border-gray-100 hover:bg-blue-50 transition-colors duration-150\">
-                <td class=\"py-4 px-6 font-medium text-gray-900\">${
-                  user_session.user_id
-                }</td>
-                <td class=\"py-4 px-6 font-medium text-gray-900\">${
-                  user_session.username
-                }</td>
-                <td class=\"py-4 px-6 text-gray-900\">
-                    <div class=\"flex items-center\">
-                        <div class=\"w-3 h-3 rounded-full bg-purple-500 mr-2\"></div>
-                        <span class=\"font-medium\">Session 2</span>
-                    </div>
-                </td>
-                <td class=\"py-4 px-6\">
-                    ${
-                      user_session.session2 === "COMPLETED" &&
-                      user_session.session2_id
-                        ? `<span class=\"px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800\">${user_session.session2}</span>`
-                        : user_session.session2 === "Not done"
-                        ? `<span class=\"px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600\">Not Started</span>`
-                        : `<span class=\"px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800\">${user_session.session2}</span>`
-                    }
-                </td>
-                <td class=\"py-4 px-6 text-gray-900\">
-                    ${
-                      user_session.session2_phq_score !== null &&
-                      user_session.session2_phq_score !== undefined
-                        ? `<span class=\"px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800\">${user_session.session2_phq_score}</span>`
-                        : `<span class=\"px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600\">N/A</span>`
-                    }
-                </td>
-                <td class=\"py-4 px-6 w-48\">
-                    <div class=\"flex items-center justify-start space-x-1 min-w-0\">
-                        ${
-                          user_session.session2 === "COMPLETED" &&
-                          user_session.session2_id
-                            ? `<a href=\"/admin/export/session/${
-                                user_session.session2_id
-                              }\" 
-                               class=\"inline-flex items-center justify-center px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 transition-colors duration-200 shadow-sm flex-shrink-0 w-20\">
-                                <svg class=\"w-3.5 h-3.5 mr-1.5\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\">
-                                    <path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4\"></path>
-                                </svg>
-                                Download
-                            </a>
-                            <button class="inline-flex items-center justify-center px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 transition-colors duration-200 shadow-sm flex-shrink-0 w-16 delete-session-btn" 
-                                    data-session-id="${
-                                      user_session.session2_id
-                                    }" 
-                                    data-username="${encodeURIComponent(
-                                      user_session.username
-                                    )}" 
-                                    data-session-number="2">
-                                <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                </svg>
-                                Delete
-                            </button>`
-                            : `<div class=\"flex items-center justify-start w-full\">
-                                <span class=\"inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200\">
-                                    <svg class=\"w-3.5 h-3.5 mr-1.5\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\">
-                                        <path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z\"></path>
-                                    </svg>
-                                    Disabled
-                                </span>
-                            </div>`
-                        }
-                    </div>
-                </td>
-            </tr>
-            
-            <!-- User Separator -->
-            <tr class=\"border-b-2 border-gray-200\">
-                <td colspan=\"6\" class=\"py-2 px-6 bg-gradient-to-r from-gray-50 to-gray-100\"></td>
-            </tr>
-        `;
-  });
+  if (emptyState) emptyState.classList.add('hidden');
 
-  // Insert new rows
-  tbody.innerHTML = newRows;
+  tbody.innerHTML = filteredFacialAnalysisSessions.map(session => `
+    <tr class="hover:bg-gray-50 transition-colors">
+      <td class="px-6 py-4">
+        <div>
+          <div class="text-sm font-medium text-gray-900">${session.username}</div>
+          <div class="text-sm text-gray-500">${session.email}</div>
+        </div>
+      </td>
+      <td class="px-6 py-4">
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+          Session ${session.session_number}
+        </span>
+      </td>
+      <td class="px-6 py-4 text-sm text-gray-500">
+        ${session.session_end ? new Date(session.session_end).toLocaleDateString() : 'N/A'}
+      </td>
+      <td class="px-6 py-4">
+        ${getFacialAnalysisStatusBadge(session.phq_status)}
+      </td>
+      <td class="px-6 py-4">
+        ${getFacialAnalysisStatusBadge(session.llm_status)}
+      </td>
+      <td class="px-6 py-4">
+        <div class="text-sm">
+          <span class="text-blue-600 font-medium">${session.phq_images_count}</span> PHQ |
+          <span class="text-purple-600 font-medium">${session.llm_images_count}</span> LLM
+        </div>
+      </td>
+      <td class="px-6 py-4">
+        ${getFacialAnalysisActionButton(session)}
+      </td>
+    </tr>
+  `).join('');
 }
 
-function updatePaginationControls(pagination, searchQuery = "") {
-  console.log("updatePaginationControls called with:", {
-    pagination,
-    searchQuery,
-  });
+// Get facial analysis status badge
+function getFacialAnalysisStatusBadge(status) {
+  const colors = {
+    'not_started': 'bg-gray-100 text-gray-700',
+    'processing': 'bg-purple-100 text-purple-700 animate-pulse',
+    'completed': 'bg-green-100 text-green-700',
+    'failed': 'bg-red-100 text-red-700'
+  };
 
-  const paginationContainer =
-    document.querySelector(".pagination-controls") ||
-    document.getElementById("paginationContainer");
+  const color = colors[status] || 'bg-gray-100 text-gray-700';
 
-  if (!paginationContainer) {
-    console.warn("Pagination container not found");
-    return;
-  }
-
-  // Show/hide pagination based on page count
-  if (pagination.pages <= 1) {
-    paginationContainer.style.display = "none";
-    return;
-  } else {
-    paginationContainer.style.display = "flex";
-  }
-
-  // Build pagination HTML
-  const startItem = (pagination.page - 1) * pagination.per_page + 1;
-  const endItem = Math.min(
-    pagination.page * pagination.per_page,
-    pagination.total
-  );
-
-  let buttonsHTML = "";
-
-  // Previous button
-  if (pagination.has_prev) {
-    buttonsHTML += `<button onclick="loadPage(${pagination.prev_num})" 
-       class="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
-        Previous
-    </button>`;
-  }
-
-  // Page numbers
-  for (let pageNum = 1; pageNum <= pagination.pages; pageNum++) {
-    if (pageNum === pagination.page) {
-      buttonsHTML += `<span class="px-3 py-2 text-sm bg-blue-600 text-white border border-blue-600 rounded-md">
-        ${pageNum}
-      </span>`;
-    } else if (
-      pageNum <= 2 ||
-      pageNum >= pagination.pages - 1 ||
-      (pageNum >= pagination.page - 1 && pageNum <= pagination.page + 1)
-    ) {
-      buttonsHTML += `<button onclick="loadPage(${pageNum})" 
-         class="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
-          ${pageNum}
-      </button>`;
-    } else if (pageNum === 3 && pagination.page > 4) {
-      buttonsHTML += '<span class="px-3 py-2 text-sm text-gray-500">...</span>';
-    } else if (
-      pageNum === pagination.pages - 2 &&
-      pagination.page < pagination.pages - 3
-    ) {
-      buttonsHTML += '<span class="px-3 py-2 text-sm text-gray-500">...</span>';
-    }
-  }
-
-  // Next button
-  if (pagination.has_next) {
-    buttonsHTML += `<button onclick="loadPage(${pagination.next_num})" 
-       class="px-3 py-2 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
-        Next
-    </button>`;
-  }
-
-  // Update container with pagination HTML
-  paginationContainer.innerHTML = `
-    <div class="flex items-center">
-      <p class="text-sm text-gray-700">
-        Showing ${startItem} to ${endItem} of ${pagination.total} results
-      </p>
-    </div>
-    <div class="flex items-center space-x-2">
-      ${buttonsHTML}
-    </div>
+  return `
+    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${color}">
+      ${status.replace('_', ' ').toUpperCase()}
+    </span>
   `;
 }
 
-// AJAX pagination function
-function loadPage(pageNum) {
-  const urlParams = new URLSearchParams(window.location.search);
-  const searchQuery = urlParams.get("q") || "";
-  const perPage = urlParams.get("per_page") || 15;
-  const sortParams = getSortParams();
+// Get facial analysis action button
+function getFacialAnalysisActionButton(session) {
+  const phqStatus = normalizeFacialStatus(session.phq_status);
+  const llmStatus = normalizeFacialStatus(session.llm_status);
+  const canProcess = phqStatus === 'not_started' || llmStatus === 'not_started';
+  const isProcessing = phqStatus === 'processing' || llmStatus === 'processing';
+  const hasAnalysis = [phqStatus, llmStatus].some(status => status !== 'not_started');
 
-  // Always use AJAX for pagination, regardless of search state, with sort params
-  const ajaxUrl = `/admin/ajax-data?page=${pageNum}&per_page=${perPage}${
-    searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""
-  }&sort_by=${sortParams.sort_by}&sort_order=${sortParams.sort_order}`;
-
-  fetch(ajaxUrl)
-    .then((response) => response.json())
-    .then((data) => {
-      const actualData = data.status === "OLKORECT" ? data.data : data;
-
-      if (actualData.status === "success" || actualData.data) {
-        const responseData = actualData.data || actualData;
-
-        // Update table content
-        updateUserTable(responseData);
-
-        // Update pagination controls
-        updatePaginationControls(responseData.pagination, searchQuery);
-
-        // Update URL without refresh
-        urlParams.set("page", pageNum);
-        urlParams.set("sort_by", responseData.sort_by || sortParams.sort_by);
-        urlParams.set("sort_order", responseData.sort_order || sortParams.sort_order);
-        window.history.replaceState({}, "", `?${urlParams.toString()}`);
-
-        // Update user count
-        const userCount = document.getElementById("userCount");
-        if (userCount) {
-          const countText = searchQuery
-            ? `${responseData.pagination.total} users found for "${searchQuery}"`
-            : `${responseData.pagination.total} total users`;
-          userCount.textContent = countText;
-        }
-      }
-    })
-    .catch((error) => {
-      console.error("Error loading page:", error);
-      // Fallback to page reload if AJAX fails
-      urlParams.set("page", pageNum);
-      window.location.search = urlParams.toString();
-    });
-}
-
-// Initialize dashboard when DOM is loaded
-document.addEventListener("DOMContentLoaded", function () {
-  // Global event delegation for delete buttons using data attributes
-  document.addEventListener("click", function (e) {
-    const btn = e.target.closest(".delete-session-btn");
-    if (!btn) return;
-
-    console.log("Delete button clicked via data attributes:", btn);
-
-    // Extract data from attributes
-    const sessionId = btn.dataset.sessionId;
-    const username = decodeURIComponent(btn.dataset.username || "");
-    const sessionNumber = parseInt(btn.dataset.sessionNumber || "0", 10);
-
-    console.log("Extracted data:", { sessionId, username, sessionNumber });
-
-    // Call confirmDelete function
-    confirmDelete(sessionId, username, sessionNumber);
-  });
-
-  console.log("Data-attribute delete button handler set up");
-
-  // Add event listener to bulk download button
-  const bulkDownloadBtn = document.querySelector(".bulk-download-btn");
-  if (bulkDownloadBtn) {
-    bulkDownloadBtn.addEventListener("click", function (e) {
-      // Show confirmation dialog
-      if (
-        confirm(
-          "This will download all completed sessions organized by session number. This may take a while. Continue?"
-        )
-      ) {
-        downloadAllSessions();
-      } else {
-        e.preventDefault();
-      }
-    });
+  if (isProcessing) {
+    return `
+      <button disabled class="inline-flex items-center px-3 py-2 bg-gray-300 text-gray-600 text-xs font-medium rounded-md cursor-not-allowed">
+        <svg class="w-4 h-4 mr-1.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+        </svg>
+        Processing...
+      </button>
+    `;
   }
 
-  // Add event listeners for search input
-  if (searchInput) {
-    // Search input listener
-    searchInput.addEventListener("input", (e) => {
-      const query = e.target.value.trim();
+  const buttons = [];
 
-      if (!query) {
-        // Clear search if input is empty
-        clearSearch();
-        return;
+  if (canProcess) {
+    buttons.push(`
+      <button onclick="processFacialAnalysisSession('${session.id}')"
+              class="inline-flex items-center px-3 py-2 bg-indigo-600 text-white text-xs font-medium rounded-md hover:bg-indigo-700 transition-colors">
+        <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        Process
+      </button>
+    `);
+  }
+
+  if (hasAnalysis) {
+    buttons.push(`
+      <button onclick="reanalyzeFacialAnalysisSession('${session.id}')"
+              class="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors">
+        Re-Analyze
+      </button>
+    `);
+    buttons.push(`
+      <button onclick="deleteFacialAnalysisSession('${session.id}')"
+              class="inline-flex items-center px-3 py-2 bg-red-600 text-white text-xs font-medium rounded-md hover:bg-red-700 transition-colors">
+        Delete Results
+      </button>
+    `);
+  }
+
+  if (buttons.length === 0) {
+    return `<span class="text-xs text-gray-400">No actions</span>`;
+  }
+
+  return `<div class="flex flex-wrap gap-1">${buttons.join("")}</div>`;
+}
+
+// Process facial analysis session
+async function processFacialAnalysisSession(sessionId) {
+  if (!confirm('Start facial analysis processing for this session?\n\nThis will process both PHQ and LLM assessments.')) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`/admin/facial-analysis/process/${sessionId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
       }
-
-      debounceSearch(query);
     });
 
-    // Clear search button listener
-    const clearButton = document.getElementById("clearSearch");
-    if (clearButton) {
-      clearButton.addEventListener("click", clearSearch);
+    const result = await response.json();
+    const data = result.status === 'OLKORECT' ? result.data : result;
+
+    if (data.success) {
+      alert('Processing started successfully!\n\nPHQ: ' + (data.phq?.message || 'N/A') + '\nLLM: ' + (data.llm?.message || 'N/A'));
+      loadFacialAnalysisSessions(); // Reload to show updated status
+    } else {
+      alert('Processing failed:\n\n' + (data.message || 'Unknown error'));
+    }
+  } catch (error) {
+    alert('Error starting processing:\n\n' + error.message);
+  }
+}
+
+async function reanalyzeFacialAnalysisSession(sessionId) {
+  if (!confirm(`Re-analyze both PHQ and LLM assessments?\n\nThis will delete existing analysis files and reprocess all images for the session.`)) {
+    return;
+  }
+
+  try {
+    const assessments = ['PHQ', 'LLM'];
+    const errors = [];
+
+    for (const assessmentType of assessments) {
+      const response = await fetch(`/admin/facial-analysis/reanalyze/${sessionId}/${assessmentType}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const httpStatus = response.status;
+      const result = await response.json();
+      const data = result.status === 'OLKORECT' ? result.data : result;
+
+      if (!data.success || httpStatus >= 400) {
+        errors.push(`${assessmentType}: ${data.message || 'Unknown error'}`);
+      }
     }
 
-    // Clear search on escape key
-    searchInput.addEventListener("keydown", function (e) {
-      if (e.key === "Escape") {
-        e.target.value = "";
-        clearSearch();
-      }
-    });
+    if (errors.length === 0) {
+      alert('Re-analysis completed for PHQ and LLM!');
+    } else {
+      alert('Re-analysis completed with issues:\n\n' + errors.join('\n'));
+    }
+
+    loadFacialAnalysisSessions();
+  } catch (error) {
+    alert(`Error re-analyzing session:\n\n${error.message}`);
+  }
+}
+
+async function deleteFacialAnalysisSession(sessionId) {
+  if (!confirm(`Delete PHQ and LLM analysis?\n\nThis will delete:\n- JSONL result files\n- Database records\n\nThis action cannot be undone!`)) {
+    return;
   }
 
-  // Add event listeners for sort controls
-  if (sortBySelect) {
-    sortBySelect.addEventListener("change", function() {
-      const sortBy = this.value;
-      const sortOrder = sortOrderSelect ? sortOrderSelect.value : "asc";
-      applySortFilter(sortBy, sortOrder);
-    });
-  }
+  try {
+    const assessments = ['PHQ', 'LLM'];
+    const errors = [];
 
-  if (sortOrderSelect) {
-    sortOrderSelect.addEventListener("change", function() {
-      const sortOrder = this.value;
-      const sortBy = sortBySelect ? sortBySelect.value : "user_id";
-      applySortFilter(sortBy, sortOrder);
-    });
-  }
+    for (const assessmentType of assessments) {
+      const response = await fetch(`/admin/facial-analysis/delete/${sessionId}/${assessmentType}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
 
-  // Add event listener for clear filters button
-  const clearFiltersBtn = document.getElementById("clearFilters");
-  if (clearFiltersBtn) {
-    clearFiltersBtn.addEventListener("click", function() {
-      // Reset all filters to default
-      if (searchInput) searchInput.value = "";
-      if (sortBySelect) sortBySelect.value = "user_id";
-      if (sortOrderSelect) sortOrderSelect.value = "asc";
+      const httpStatus = response.status;
+      const result = await response.json();
+      const data = result.status === 'OLKORECT' ? result.data : result;
 
-      // Reload data with default filters
-      window.location.href = window.location.pathname;
-    });
-  }
-
-  // Initialize pagination controls with server-side data from data attributes
-  const paginationContainer = document.getElementById('paginationContainer');
-  if (paginationContainer) {
-    const paginationDataAttr = paginationContainer.dataset.pagination;
-    const searchQuery = paginationContainer.dataset.searchQuery || '';
-
-    if (paginationDataAttr && typeof updatePaginationControls === 'function') {
-      try {
-        const paginationData = JSON.parse(paginationDataAttr);
-        updatePaginationControls(paginationData, searchQuery);
-      } catch (e) {
-        console.error('Error parsing pagination data:', e);
+      if (!data.success && httpStatus !== 404) {
+        errors.push(`${assessmentType}: ${data.message || 'Delete failed'}`);
       }
     }
+
+    if (errors.length === 0) {
+      alert('PHQ and LLM analysis deleted successfully!');
+    } else if (errors.length < assessments.length) {
+      alert('Some analysis deleted, but issues occurred:\n\n' + errors.join('\n'));
+    } else {
+      alert('Delete failed:\n\n' + errors.join('\n'));
+    }
+
+    loadFacialAnalysisSessions();
+  } catch (error) {
+    alert(`Error deleting session analysis:\n\n${error.message}`);
   }
-});
-
-// Apply sort filter function
-function applySortFilter(sortBy, sortOrder) {
-  const urlParams = new URLSearchParams(window.location.search);
-  const searchQuery = urlParams.get("q") || "";
-  const perPage = urlParams.get("per_page") || 15;
-
-  // Build AJAX URL with sort params
-  const ajaxUrl = `/admin/ajax-data?page=1&per_page=${perPage}${
-    searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""
-  }&sort_by=${sortBy}&sort_order=${sortOrder}`;
-
-  fetch(ajaxUrl)
-    .then((response) => response.json())
-    .then((data) => {
-      const actualData = data.status === "OLKORECT" ? data.data : data;
-
-      if (actualData.status === "success" || actualData.data) {
-        const responseData = actualData.data || actualData;
-
-        // Update table content
-        updateUserTable(responseData);
-
-        // Update pagination controls
-        updatePaginationControls(responseData.pagination, searchQuery);
-
-        // Update URL without refresh
-        const newUrlParams = new URLSearchParams(window.location.search);
-        newUrlParams.set("page", 1);
-        newUrlParams.set("sort_by", sortBy);
-        newUrlParams.set("sort_order", sortOrder);
-        window.history.replaceState(
-          {},
-          "",
-          `${window.location.pathname}?${newUrlParams.toString()}`
-        );
-
-        // Update user count
-        if (userCount) {
-          const countText = searchQuery
-            ? `${responseData.pagination.total} users found for "${searchQuery}"`
-            : `${responseData.pagination.total} total users`;
-          userCount.textContent = countText;
-        }
-      }
-    })
-    .catch((error) => {
-      console.error("Error applying sort filter:", error);
-      // Fallback to page reload if AJAX fails
-      const urlParams = new URLSearchParams(window.location.search);
-      urlParams.set("sort_by", sortBy);
-      urlParams.set("sort_order", sortOrder);
-      urlParams.set("page", 1);
-      window.location.search = urlParams.toString();
-    });
 }
 
-// Clear search function
-function clearSearch() {
-  if (searchInput) {
-    searchInput.value = "";
+async function processAllFacialAnalysisSessions() {
+  if (!confirm('Process facial analysis for all eligible sessions?\n\nThis will sequentially process both PHQ and LLM assessments for every eligible session. This may take a while.')) {
+    return;
   }
 
-  // Perform search with empty query to reset
-  performSearchAjax("");
-}
+  const button = document.getElementById('fa-process-all-btn');
+  if (!button) {
+    return;
+  }
 
-// Handle per page change with AJAX
-function changePerPage(perPage) {
-  const urlParams = new URLSearchParams(window.location.search);
-  const currentQuery = urlParams.get('q') || '';
-  const sortBy = urlParams.get('sort_by') || 'user_id';
-  const sortOrder = urlParams.get('sort_order') || 'asc';
+  const originalHtml = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = `
+    <span class="inline-flex items-center">
+      <svg class="w-4 h-4 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+      </svg>
+      Processing...
+    </span>
+  `;
 
-  // Make AJAX request with new per_page and reset to page 1, include sort params
-  const ajaxUrl = `/admin/ajax-data?page=1&per_page=${perPage}${currentQuery ? `&q=${encodeURIComponent(currentQuery)}` : ''}&sort_by=${sortBy}&sort_order=${sortOrder}`;
-
-  fetch(ajaxUrl)
-    .then(response => response.json())
-    .then(data => {
-      const actualData = data.status === "OLKORECT" ? data.data : data;
-
-      if (actualData.status === "success" || actualData.data) {
-        const responseData = actualData.data || actualData;
-
-        // Update table content
-        updateUserTable(responseData);
-
-        // Update pagination controls
-        updatePaginationControls(responseData.pagination, currentQuery);
-
-        // Update URL without refresh
-        urlParams.set('per_page', perPage);
-        urlParams.set('page', 1);
-        urlParams.set('sort_by', responseData.sort_by || sortBy);
-        urlParams.set('sort_order', responseData.sort_order || sortOrder);
-        window.history.replaceState({}, '', `?${urlParams.toString()}`);
-
-        // Update user count
-        const userCount = document.getElementById('userCount');
-        if (userCount) {
-          const countText = currentQuery
-            ? `${responseData.pagination.total} users found for "${currentQuery}"`
-            : `${responseData.pagination.total} total users`;
-          userCount.textContent = countText;
-        }
+  try {
+    const response = await fetch('/admin/facial-analysis/process-all', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
       }
-    })
-    .catch(error => {
-      console.error('Error changing per page:', error);
-      // Fallback to page reload if AJAX fails
-      const urlParams = new URLSearchParams(window.location.search);
-      urlParams.set('per_page', perPage);
-      urlParams.set('page', 1);
-      window.location.search = urlParams.toString();
     });
+
+    const result = await response.json();
+    const data = result.status === 'OLKORECT' ? result.data : result;
+
+    if (data.success) {
+      alert(data.message);
+    } else {
+      const messageParts = [
+        data.message || 'Batch processing completed with issues.',
+        data.summary ? `Completed: ${data.summary.completed}, Partial: ${data.summary.partial}, Failed: ${data.summary.failed}` : ''
+      ].filter(Boolean);
+      alert(messageParts.join('\n'));
+    }
+
+    loadFacialAnalysisSessions();
+  } catch (error) {
+    alert('Batch processing failed:\n\n' + error.message);
+  } finally {
+    button.disabled = false;
+    button.innerHTML = originalHtml;
+  }
 }
 
+// Update facial analysis stats
+function updateFacialAnalysisStats(stats) {
+  const statTotal = document.getElementById('fa-stat-total');
+  const statPending = document.getElementById('fa-stat-pending');
+  const statProcessing = document.getElementById('fa-stat-processing');
+  const statCompleted = document.getElementById('fa-stat-completed');
+
+  if (statTotal) statTotal.textContent = stats.total || 0;
+  if (statPending) statPending.textContent = stats.pending || 0;
+  if (statProcessing) statProcessing.textContent = stats.processing || 0;
+  if (statCompleted) statCompleted.textContent = stats.completed || 0;
+}

@@ -1,16 +1,28 @@
 # app/services/admin/exportService.py
 import os
-import json
 import zipfile
 from datetime import datetime
-from typing import Dict, List, Any
+from typing import List, Dict, Optional
 from io import BytesIO
 from flask import current_app
 from ...db import get_session
 from ...model.assessment.sessions import AssessmentSession, CameraCapture
 from ...services.assessment.phqService import PHQResponseService
 from ...services.assessment.llmService import LLMConversationService
-from ...services.session.sessionTimingService import SessionTimingService
+from ...schemas.export import (
+    SessionExportData,
+    PHQExportData,
+    PHQResponseItem,
+    PHQTimingData,
+    LLMExportData,
+    LLMConversationTurn,
+    LLMTimingData,
+    CaptureMetadata,
+    CaptureMetadataFull,
+    CaptureTimingData,
+    AssessmentCaptureMetadata,
+    AllCapturesMetadata,
+)
 
 
 class ExportService:
@@ -30,102 +42,113 @@ class ExportService:
             with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
                 # 1. Session info
                 session_info = ExportService._get_session_info(session)
-                zip_file.writestr('session_info.json', json.dumps(session_info, indent=2))
+                zip_file.writestr('session_info.json', session_info.model_dump_json(indent=2))
                 
                 # 2. PHQ responses
                 if session.phq_completed_at:
                     phq_data = ExportService._get_phq_data(session_id)
-                    zip_file.writestr('phq_responses.json', json.dumps(phq_data, indent=2))
+                    zip_file.writestr('phq_responses.json', phq_data.model_dump_json(indent=2))
                 
                 # 3. LLM conversation
                 if session.llm_completed_at:
                     llm_data = ExportService._get_llm_data(session_id)
-                    zip_file.writestr('llm_conversation.json', json.dumps(llm_data, indent=2))
+                    zip_file.writestr('llm_conversation.json', llm_data.model_dump_json(indent=2))
                 
                 # 4. Camera captures
                 ExportService._add_camera_captures(zip_file, session_id)
                 
                 # 5. Human-readable summary
-                summary = ExportService._generate_summary(session, phq_data if session.phq_completed_at else None)
+                phq_model = phq_data if session.phq_completed_at else None
+                summary = ExportService._generate_summary(session, phq_model)
                 zip_file.writestr('summary.txt', summary)
 
             zip_buffer.seek(0)
             return zip_buffer
 
     @staticmethod
-    def _get_session_info(session: AssessmentSession) -> Dict[str, Any]:
-        """Get basic session metadata"""
-        return {
-            'session_id': session.id,
-            'user_id': session.user_id,
-            'username': session.user.uname if session.user else 'Unknown',
-            'session_number': session.session_number,
-            'created_at': session.created_at.isoformat(),
-            'completed_at': session.completed_at.isoformat() if session.completed_at else None,
-            'status': session.status,
-            'is_first': session.is_first,
-            'phq_completed': session.phq_completed_at.isoformat() if session.phq_completed_at else None,
-            'llm_completed': session.llm_completed_at.isoformat() if session.llm_completed_at else None,
-            'consent_completed': session.consent_completed_at.isoformat() if session.consent_completed_at else None,
-            'camera_completed': session.camera_completed,
-            'failure_reason': session.failure_reason
-        }
+    def _get_session_info(session: AssessmentSession) -> SessionExportData:
+        """Get basic session metadata as Pydantic model"""
+        return SessionExportData(
+            session_id=session.id,
+            user_id=session.user_id,
+            username=session.user.uname if session.user else 'Unknown',
+            session_number=session.session_number,
+            created_at=session.created_at.isoformat(),
+            completed_at=session.completed_at.isoformat() if session.completed_at else None,
+            status=session.status,
+            is_first=session.is_first,
+            phq_completed=session.phq_completed_at.isoformat() if session.phq_completed_at else None,
+            llm_completed=session.llm_completed_at.isoformat() if session.llm_completed_at else None,
+            consent_completed=session.consent_completed_at.isoformat() if session.consent_completed_at else None,
+            camera_completed=session.camera_completed,
+            failure_reason=session.failure_reason
+        )
 
     @staticmethod
-    def _get_phq_data(session_id: str) -> Dict[str, Any]:
-        """Get PHQ responses in readable format using new JSON structure"""
+    def _get_phq_data(session_id: str) -> PHQExportData:
+        """Get PHQ responses in readable format using new JSON structure as Pydantic model"""
         response_record = PHQResponseService.get_session_responses(session_id)
         total_score = PHQResponseService.calculate_session_score(session_id)
-        
+
         # Group by category using new JSON structure
-        phq_data = {
-            'total_score': total_score,
-            'max_possible_score': PHQResponseService.get_max_possible_score(session_id),
-            'responses': {}
-        }
-        
+        responses: Dict[str, Dict[str, PHQResponseItem]] = {}
+
         if response_record and response_record.responses:
             for question_id, response_data in response_record.responses.items():
                 category = response_data.get('category_name', 'UNKNOWN')
-                if category not in phq_data['responses']:
-                    phq_data['responses'][category] = {}
-                
+                if category not in responses:
+                    responses[category] = {}
+
                 question_text = response_data.get('question_text', f'Question {question_id}')
-                phq_data['responses'][category][question_text] = {
-                    'response_text': response_data.get('response_text', ''),
-                    'response_value': response_data.get('response_value', 0),
-                    'response_time_ms': response_data.get('response_time_ms', None),
-                    'timing': response_data.get('timing', {})  # Include assessment-relative timing
-                }
-        
-        return phq_data
+
+                # Create timing data if available
+                timing_dict = response_data.get('timing', {})
+                timing_data = PHQTimingData(**timing_dict) if timing_dict else None
+
+                responses[category][question_text] = PHQResponseItem(
+                    response_text=response_data.get('response_text', ''),
+                    response_value=response_data.get('response_value', 0),
+                    response_time_ms=response_data.get('response_time_ms', None),
+                    timing=timing_data
+                )
+
+        return PHQExportData(
+            total_score=total_score,
+            max_possible_score=PHQResponseService.get_max_possible_score(session_id),
+            responses=responses
+        )
 
     @staticmethod
-    def _get_llm_data(session_id: str) -> Dict[str, Any]:
-        """Get LLM conversation in readable format using new JSON structure"""
+    def _get_llm_data(session_id: str) -> LLMExportData:
+        """Get LLM conversation in readable format using new JSON structure as Pydantic model"""
         conversation_turns = LLMConversationService.get_session_conversations(session_id)
-        
-        llm_data = {
-            'total_conversations': len(conversation_turns),
-            'conversations': []
-        }
-        
+
+        conversations: List[LLMConversationTurn] = []
+
         for turn_data in conversation_turns:
-            conv_data = {
-                'turn_number': turn_data.get('turn_number'),
-                'created_at': turn_data.get('created_at'),
-                'ai_message': turn_data.get('ai_message'),
-                'user_message': turn_data.get('user_message'),
-                'user_message_length': turn_data.get('user_message_length'),
-                'has_end_conversation': turn_data.get('has_end_conversation'),
-                'ai_model_used': turn_data.get('ai_model_used'),
-                'user_timing': turn_data.get('user_timing', {}),  # Include user timing
-                'ai_timing': turn_data.get('ai_timing', {})  # Include AI timing
-            }
-            
-            llm_data['conversations'].append(conv_data)
-        
-        return llm_data
+            # Create timing data - may be empty dict {}
+            user_timing_dict = turn_data.get('user_timing', {})
+            user_timing = LLMTimingData(**user_timing_dict)
+
+            ai_timing_dict = turn_data.get('ai_timing', {})
+            ai_timing = LLMTimingData(**ai_timing_dict)
+
+            conversations.append(LLMConversationTurn(
+                turn_number=turn_data.get('turn_number'),
+                created_at=turn_data.get('created_at'),
+                ai_message=turn_data.get('ai_message'),
+                user_message=turn_data.get('user_message'),
+                user_message_length=turn_data.get('user_message_length'),
+                has_end_conversation=turn_data.get('has_end_conversation'),
+                ai_model_used=turn_data.get('ai_model_used'),
+                user_timing=user_timing,
+                ai_timing=ai_timing
+            ))
+
+        return LLMExportData(
+            total_conversations=len(conversation_turns),
+            conversations=conversations
+        )
 
     @staticmethod
     def _add_camera_captures(zip_file: zipfile.ZipFile, session_id: str):
@@ -178,115 +201,143 @@ class ExportService:
                     unknown_captures.append(capture)
                     print(f"⚠️ Skipping {capture.capture_type} capture {capture.filenames} from export")
             
-            # Create comprehensive metadata (only for linked captures)
+            # Create comprehensive metadata using Pydantic models
             linked_captures = phq_captures + llm_captures
-            metadata = {
-                'total_captures': len(linked_captures),
-                'phq_captures': len(phq_captures),
-                'llm_captures': len(llm_captures),
-                'unknown_captures_skipped': len(unknown_captures),
-                'captures': []
-            }
-            
+            all_capture_metadata: List[CaptureMetadataFull] = []
+
             # Add only linked captures to metadata
             for capture in linked_captures:
                 # Determine assessment type and folder using new structure
                 assessment_type = capture.capture_type
                 folder_path = f"{assessment_type.lower()}/"
-                
+
                 # Add metadata for each filename in the JSON array
                 for filename in capture.filenames:
-                    capture_meta = {
-                        'filename': filename,
-                        'assessment_type': assessment_type,
-                        'folder_path': folder_path,
-                        'full_path': os.path.join(current_app.media_save, filename),
-                        'zip_path': f'images/{folder_path}{filename}',
-                        'timestamp': capture.created_at.isoformat(),
-                        'capture_type': capture.capture_type,
-                        'assessment_id': capture.assessment_id
-                    }
-                    
-                    # Include assessment-relative timing from capture metadata if available
+                    # Extract timing data if available
+                    timing_data = None
+                    capture_timestamp = None
+
                     if capture.capture_metadata and 'capture_history' in capture.capture_metadata:
                         capture_history = capture.capture_metadata['capture_history']
                         # Find the entry for this filename
                         for entry in capture_history:
                             if entry.get('filename') == filename and 'timing' in entry:
-                                capture_meta['assessment_timing'] = entry['timing']
+                                timing_dict = entry['timing']
+                                timing_data = CaptureTimingData(**timing_dict)
                                 break
+
                     # For old captures without timing, use the capture timestamp
-                    if 'assessment_timing' not in capture_meta:
-                        capture_meta['capture_timestamp'] = capture.created_at.isoformat()
-                    
-                    metadata['captures'].append(capture_meta)
-            
+                    if not timing_data:
+                        capture_timestamp = capture.created_at.isoformat()
+
+                    capture_meta = CaptureMetadataFull(
+                        filename=filename,
+                        assessment_type=assessment_type,
+                        folder_path=folder_path,
+                        full_path=os.path.join(current_app.media_save, filename),
+                        zip_path=f'images/{folder_path}{filename}',
+                        timestamp=capture.created_at.isoformat(),
+                        capture_type=capture.capture_type,
+                        assessment_id=capture.assessment_id,
+                        assessment_timing=timing_data,
+                        capture_timestamp=capture_timestamp
+                    )
+
+                    all_capture_metadata.append(capture_meta)
+
+            # Create AllCapturesMetadata Pydantic model
+            metadata_model = AllCapturesMetadata(
+                total_captures=len(linked_captures),
+                phq_captures=len(phq_captures),
+                llm_captures=len(llm_captures),
+                unknown_captures_skipped=len(unknown_captures),
+                captures=all_capture_metadata
+            )
+
             # Add main metadata file
-            zip_file.writestr('images/metadata.json', json.dumps(metadata, indent=2))
+            zip_file.writestr('images/metadata.json', metadata_model.model_dump_json(indent=2))
             
-            # Add assessment-specific metadata files
+            # Add assessment-specific metadata files using Pydantic models
             if phq_captures:
-                phq_metadata = {
-                    'assessment_type': 'PHQ',
-                    'total_captures': len(phq_captures),
-                    'captures': []
-                }
+                phq_capture_list: List[CaptureMetadata] = []
+
                 for capture in phq_captures:
                     for filename in capture.filenames:
-                        capture_meta = {
-                            'filename': filename,
-                            'timestamp': capture.created_at.isoformat(),
-                            'capture_type': capture.capture_type,
-                            'assessment_id': capture.assessment_id
-                        }
-                        
-                        # Include assessment-relative timing from capture metadata if available
+                        # Extract timing data if available
+                        timing_data = None
+                        capture_timestamp = None
+
                         if capture.capture_metadata and 'capture_history' in capture.capture_metadata:
                             capture_history = capture.capture_metadata['capture_history']
-                            # Find the entry for this filename
                             for entry in capture_history:
                                 if entry.get('filename') == filename and 'timing' in entry:
-                                    capture_meta['assessment_timing'] = entry['timing']
+                                    timing_dict = entry['timing']
+                                    timing_data = CaptureTimingData(**timing_dict)
                                     break
+
                         # For old captures without timing, use the capture timestamp
-                        if 'assessment_timing' not in capture_meta:
-                            capture_meta['capture_timestamp'] = capture.created_at.isoformat()
-                        
-                        phq_metadata['captures'].append(capture_meta)
-                zip_file.writestr('images/phq/metadata.json', json.dumps(phq_metadata, indent=2))
+                        if not timing_data:
+                            capture_timestamp = capture.created_at.isoformat()
+
+                        capture_meta = CaptureMetadata(
+                            filename=filename,
+                            timestamp=capture.created_at.isoformat(),
+                            capture_type=capture.capture_type,
+                            assessment_id=capture.assessment_id,
+                            assessment_timing=timing_data,
+                            capture_timestamp=capture_timestamp
+                        )
+
+                        phq_capture_list.append(capture_meta)
+
+                phq_metadata_model = AssessmentCaptureMetadata(
+                    assessment_type='PHQ',
+                    total_captures=len(phq_captures),
+                    captures=phq_capture_list
+                )
+                zip_file.writestr('images/phq/metadata.json', phq_metadata_model.model_dump_json(indent=2))
             
             if llm_captures:
-                llm_metadata = {
-                    'assessment_type': 'LLM',
-                    'total_captures': len(llm_captures),
-                    'captures': []
-                }
+                llm_capture_list: List[CaptureMetadata] = []
+
                 for capture in llm_captures:
                     for filename in capture.filenames:
-                        capture_meta = {
-                            'filename': filename,
-                            'timestamp': capture.created_at.isoformat(),
-                            'capture_type': capture.capture_type,
-                            'assessment_id': capture.assessment_id
-                        }
-                        
-                        # Include assessment-relative timing from capture metadata if available
+                        # Extract timing data if available
+                        timing_data = None
+                        capture_timestamp = None
+
                         if capture.capture_metadata and 'capture_history' in capture.capture_metadata:
                             capture_history = capture.capture_metadata['capture_history']
-                            # Find the entry for this filename
                             for entry in capture_history:
                                 if entry.get('filename') == filename and 'timing' in entry:
-                                    capture_meta['assessment_timing'] = entry['timing']
+                                    timing_dict = entry['timing']
+                                    timing_data = CaptureTimingData(**timing_dict)
                                     break
+
                         # For old captures without timing, use the capture timestamp
-                        if 'assessment_timing' not in capture_meta:
-                            capture_meta['capture_timestamp'] = capture.created_at.isoformat()
-                        
-                        llm_metadata['captures'].append(capture_meta)
-                zip_file.writestr('images/llm/metadata.json', json.dumps(llm_metadata, indent=2))
+                        if not timing_data:
+                            capture_timestamp = capture.created_at.isoformat()
+
+                        capture_meta = CaptureMetadata(
+                            filename=filename,
+                            timestamp=capture.created_at.isoformat(),
+                            capture_type=capture.capture_type,
+                            assessment_id=capture.assessment_id,
+                            assessment_timing=timing_data,
+                            capture_timestamp=capture_timestamp
+                        )
+
+                        llm_capture_list.append(capture_meta)
+
+                llm_metadata_model = AssessmentCaptureMetadata(
+                    assessment_type='LLM',
+                    total_captures=len(llm_captures),
+                    captures=llm_capture_list
+                )
+                zip_file.writestr('images/llm/metadata.json', llm_metadata_model.model_dump_json(indent=2))
 
     @staticmethod
-    def _generate_summary(session: AssessmentSession, phq_data: Dict = None) -> str:
+    def _generate_summary(session: AssessmentSession, phq_data: Optional[PHQExportData] = None) -> str:
         """Generate human-readable summary"""
         summary = f"""
 MENTAL HEALTH ASSESSMENT EXPORT
@@ -306,12 +357,12 @@ Assessment Completion:
 - Camera Check: {'✓ Completed' if session.camera_completed else '✗ Not completed'}
 - Consent: {'✓ Completed' if session.consent_completed_at else '✗ Not completed'}
 """
-        
+
         if phq_data:
             summary += f"""
 PHQ Results Summary:
-- Total Score: {phq_data['total_score']}/{phq_data['max_possible_score']}
-- Categories Assessed: {len(phq_data['responses'])}
+- Total Score: {phq_data.total_score}/{phq_data.max_possible_score}
+- Categories Assessed: {len(phq_data.responses)}
 """
         
         # Get image organization info

@@ -3,7 +3,10 @@
 import grpc
 import warnings
 
-import inference_pb2 as inference__pb2
+try:
+    from . import inference_pb2 as inference__pb2
+except ImportError:
+    import inference_pb2 as inference__pb2
 
 GRPC_GENERATED_VERSION = '1.75.1'
 GRPC_VERSION = grpc.__version__

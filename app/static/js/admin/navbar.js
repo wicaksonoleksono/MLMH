@@ -10,10 +10,10 @@ function navbar() {
         name: "Manajemen Sesi",
         href: "/admin/session-management",
       },
-      {
-        name: "Analisis Wajah",
-        href: "/admin/facial-analysis",
-      },
+      // {
+      //   name: "Analisis Wajah",
+      //   href: "/admin/facial-analysis",
+      // },
       { name: "Informed Consent", href: "/admin/consent" },
       { name: "Pengaturan PHQ", href: "/admin/phq" },
       { name: "Pengaturan LLM", href: "/admin/llm" },

@@ -61,7 +61,12 @@ class SessionFacialAnalysis(BaseModel):
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     # Relationship (back_populates will be defined in AssessmentSession)
-    session = relationship("AssessmentSession", back_populates="facial_analysis")
+    session = relationship("AssessmentSession", back_populates="facial_analysis") 
+    # To create the Migration flask cli script 1st this whole table doesnt exist at all. so remember to create this and then for the Assesment session there iss Facial analysis 
+    # new relationship that looks like this 
+        # from .facial_analysis import SessionFacialAnalysis
+    # AssessmentSession.facial_analysis = relationship("SessionFacialAnalysis", back_populates="session", cascade="all, delete-orphan")
+
 
     def __repr__(self):
         return f'<SessionFacialAnalysis session={self.session_id} {self.assessment_type}: {self.status}, {self.total_images_processed} images>'

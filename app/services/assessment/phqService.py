@@ -371,6 +371,15 @@ class PHQResponseService:
             if session.phq_settings and session.phq_settings.scale:
                 scale_max = session.phq_settings.scale.max_value
 
+            # Get PHQ response record to count questions
+            phq_response_record = db.query(PHQResponse).filter_by(session_id=session_id).first()
+            if not phq_response_record or not phq_response_record.responses:
+                return 0
+
+            # Calculate max possible score: number of questions * scale max value
+            question_count = len(phq_response_record.responses)
+            return question_count * scale_max
+
     @staticmethod
     def clear_session_responses(session_id: str) -> int:
         """Clear all PHQ responses for a session - used for restart functionality"""

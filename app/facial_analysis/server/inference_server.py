@@ -12,6 +12,7 @@ import time
 import sys
 import os
 from pathlib import Path
+from typing import Dict, List, Any
 
 # Import generated proto files
 # Support both direct execution and module execution
@@ -35,7 +36,6 @@ except ImportError:
     print("WARNING: LibreFace not installed. Install from: https://github.com/ihp-lab/LibreFace")
     LIBREFACE_AVAILABLE = False
     libreface = None
-
 
 # Key landmarks indices (from important.md)
 KEY_LANDMARKS = {
@@ -94,7 +94,11 @@ class FacialInferenceServicer(inference_pb2_grpc.FacialInferenceServicer):
             device: 'cpu' or 'cuda:0'
         """
         self.device = device
-        self.weights_dir = './weights_libreface'
+
+        root_path = Path(__file__).resolve().parents[2]
+        self.weights_path = (root_path / 'weights_libreface').resolve()
+        self.weights_path.mkdir(parents=True, exist_ok=True)
+        self.weights_dir = str(self.weights_path)
 
         if LIBREFACE_AVAILABLE:
             print(f"LibreFace available on {device}")
@@ -103,16 +107,126 @@ class FacialInferenceServicer(inference_pb2_grpc.FacialInferenceServicer):
 
     def HealthCheck(self, request, context):
         """Health check endpoint"""
-        if LIBREFACE_AVAILABLE:
-            return inference_pb2.HealthResponse(
-                healthy=True,
-                message=f"LibreFace inference service running on {self.device}"
-            )
-        else:
+        if not LIBREFACE_AVAILABLE:
             return inference_pb2.HealthResponse(
                 healthy=False,
                 message="LibreFace not installed"
             )
+
+        return inference_pb2.HealthResponse(
+            healthy=True,
+            message=f"LibreFace inference service running on {self.device}"
+        )
+
+    def _normalize_libreface_result(self, raw_result: Any) -> Dict[str, Any]:
+        """Normalize LibreFace output to consistent structure."""
+        if raw_result is None:
+            raw_result = {}
+
+        # Convert DataFrame/list output to dict
+        if hasattr(raw_result, 'to_dict'):
+            records = raw_result.to_dict('records')
+            raw = records[0] if records else {}
+        elif isinstance(raw_result, list):
+            raw = raw_result[0] if raw_result else {}
+        else:
+            raw = raw_result
+
+        if not isinstance(raw, dict):
+            raw = {}
+
+        facial_expression = raw.get('facial_expression') or raw.get('expression') or 'Unknown'
+
+        def _parse_float(value, default=0.0):
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return default
+
+        head_pose = {
+            'pitch': _parse_float(raw.get('head_pose_pitch') or raw.get('pitch') or raw.get('head_pitch')),
+            'yaw': _parse_float(raw.get('head_pose_yaw') or raw.get('yaw') or raw.get('head_yaw')),
+            'roll': _parse_float(raw.get('head_pose_roll') or raw.get('roll') or raw.get('head_roll')),
+        }
+
+        expected_binary_aus = ['au_1', 'au_2', 'au_4', 'au_5', 'au_6', 'au_9', 'au_12', 'au_15', 'au_17', 'au_20', 'au_25', 'au_26']
+        expected_intensity_aus = expected_binary_aus
+
+        detected_aus_source = raw.get('detected_aus')
+        if not isinstance(detected_aus_source, dict):
+            detected_aus_source = {}
+            for key, value in raw.items():
+                lower = str(key).lower()
+                if lower.startswith('au_') and not lower.endswith('_intensity'):
+                    detected_aus_source[lower] = value
+
+        action_units = {}
+        for au in expected_binary_aus:
+            value = detected_aus_source.get(au)
+            if value is None:
+                value = detected_aus_source.get(au.upper())
+            try:
+                action_units[au] = int(round(float(value)))
+            except (TypeError, ValueError):
+                action_units[au] = 0
+
+        intensities_source = raw.get('au_intensities')
+        if not isinstance(intensities_source, dict):
+            intensities_source = {}
+            for key, value in raw.items():
+                lower = str(key).lower()
+                if lower.startswith('au_') and lower.endswith('_intensity'):
+                    intensities_source[lower] = value
+
+        au_intensities = {}
+        for au in expected_intensity_aus:
+            key_candidates = [
+                f'{au}_intensity',
+                f'{au.upper()}_intensity'
+            ]
+            matched_value = None
+            for candidate in key_candidates:
+                if candidate in intensities_source:
+                    matched_value = intensities_source[candidate]
+                    break
+            try:
+                au_intensities[au] = float(matched_value)
+            except (TypeError, ValueError):
+                au_intensities[au] = 0.0
+
+        landmarks_raw = raw.get('landmarks') or raw.get('landmarks_2d') or raw.get('landmarks_points')
+        landmarks = []
+        if isinstance(landmarks_raw, list):
+            for idx, entry in enumerate(landmarks_raw):
+                index = idx
+                x = y = z = 0.0
+                if isinstance(entry, dict):
+                    index = entry.get('index', entry.get('id', idx))
+                    x = entry.get('x', entry.get('X', 0.0))
+                    y = entry.get('y', entry.get('Y', 0.0))
+                    z = entry.get('z', entry.get('Z', 0.0))
+                elif isinstance(entry, (list, tuple)):
+                    if len(entry) >= 2:
+                        x = entry[0]
+                        y = entry[1]
+                        z = entry[2] if len(entry) > 2 else 0.0
+                try:
+                    landmarks.append({
+                        'index': int(index),
+                        'x': float(x),
+                        'y': float(y),
+                        'z': float(z)
+                    })
+                except (TypeError, ValueError):
+                    continue
+
+        return {
+            'facial_expression': facial_expression,
+            'head_pose': head_pose,
+            'action_units': action_units,
+            'au_intensities': au_intensities,
+            'landmarks': landmarks
+        }
 
     def AnalyzeImage(self, request, context):
         """Analyze facial expression in image"""
@@ -145,57 +259,58 @@ class FacialInferenceServicer(inference_pb2_grpc.FacialInferenceServicer):
                 result = result.to_dict('records')[0]
 
             # Extract facial expression
-            facial_expression = result.get('facial_expression', 'Unknown')
+            normalized = self._normalize_libreface_result(result)
 
-            # Extract head pose
+            facial_expression = normalized['facial_expression']
+
             head_pose = inference_pb2.HeadPose(
-                pitch=float(result.get('head_pose_pitch', 0.0)),
-                yaw=float(result.get('head_pose_yaw', 0.0)),
-                roll=float(result.get('head_pose_roll', 0.0))
+                pitch=normalized['head_pose']['pitch'],
+                yaw=normalized['head_pose']['yaw'],
+                roll=normalized['head_pose']['roll']
             )
 
-            # Extract Action Units (binary)
+            aus = normalized['action_units']
             action_units = inference_pb2.ActionUnits(
-                au_1=int(result.get('AU_1', 0)),
-                au_2=int(result.get('AU_2', 0)),
-                au_4=int(result.get('AU_4', 0)),
-                au_5=int(result.get('AU_5', 0)),
-                au_6=int(result.get('AU_6', 0)),
-                au_9=int(result.get('AU_9', 0)),
-                au_12=int(result.get('AU_12', 0)),
-                au_15=int(result.get('AU_15', 0)),
-                au_17=int(result.get('AU_17', 0)),
-                au_20=int(result.get('AU_20', 0)),
-                au_25=int(result.get('AU_25', 0)),
-                au_26=int(result.get('AU_26', 0))
+                au_1=int(aus.get('au_1', 0)),
+                au_2=int(aus.get('au_2', 0)),
+                au_4=int(aus.get('au_4', 0)),
+                au_5=int(aus.get('au_5', 0)),
+                au_6=int(aus.get('au_6', 0)),
+                au_9=int(aus.get('au_9', 0)),
+                au_12=int(aus.get('au_12', 0)),
+                au_15=int(aus.get('au_15', 0)),
+                au_17=int(aus.get('au_17', 0)),
+                au_20=int(aus.get('au_20', 0)),
+                au_25=int(aus.get('au_25', 0)),
+                au_26=int(aus.get('au_26', 0))
             )
 
-            # Extract Action Unit intensities
+            intensities = normalized['au_intensities']
             au_intensities = inference_pb2.ActionUnitIntensities(
-                au_1=float(result.get('AU_1_intensity', 0.0)),
-                au_2=float(result.get('AU_2_intensity', 0.0)),
-                au_4=float(result.get('AU_4_intensity', 0.0)),
-                au_5=float(result.get('AU_5_intensity', 0.0)),
-                au_6=float(result.get('AU_6_intensity', 0.0)),
-                au_9=float(result.get('AU_9_intensity', 0.0)),
-                au_12=float(result.get('AU_12_intensity', 0.0)),
-                au_15=float(result.get('AU_15_intensity', 0.0)),
-                au_17=float(result.get('AU_17_intensity', 0.0)),
-                au_20=float(result.get('AU_20_intensity', 0.0)),
-                au_25=float(result.get('AU_25_intensity', 0.0)),
-                au_26=float(result.get('AU_26_intensity', 0.0))
+                au_1=float(intensities.get('au_1', 0.0)),
+                au_2=float(intensities.get('au_2', 0.0)),
+                au_4=float(intensities.get('au_4', 0.0)),
+                au_5=float(intensities.get('au_5', 0.0)),
+                au_6=float(intensities.get('au_6', 0.0)),
+                au_9=float(intensities.get('au_9', 0.0)),
+                au_12=float(intensities.get('au_12', 0.0)),
+                au_15=float(intensities.get('au_15', 0.0)),
+                au_17=float(intensities.get('au_17', 0.0)),
+                au_20=float(intensities.get('au_20', 0.0)),
+                au_25=float(intensities.get('au_25', 0.0)),
+                au_26=float(intensities.get('au_26', 0.0))
             )
 
             # Extract key landmarks (25 important points)
             key_landmarks = []
-            landmarks_data = result.get('landmarks', [])
-
+            landmarks_data = normalized['landmarks']
             if landmarks_data:
+                landmarks_by_index = {lm['index']: lm for lm in landmarks_data if 'index' in lm}
                 for name, idx in KEY_LANDMARKS.items():
-                    if idx < len(landmarks_data):
-                        landmark = landmarks_data[idx]
+                    landmark = landmarks_by_index.get(idx)
+                    if landmark:
                         key_landmarks.append(inference_pb2.Landmark(
-                            index=idx,
+                            index=int(idx),
                             x=float(landmark.get('x', 0.0)),
                             y=float(landmark.get('y', 0.0)),
                             z=float(landmark.get('z', 0.0))

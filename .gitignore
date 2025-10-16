@@ -140,7 +140,7 @@ ipython_config.py
 
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
 __pypackages__/
-
+venv.libre
 # Celery stuff
 celerybeat-schedule
 celerybeat.pid
@@ -235,3 +235,6 @@ uploads
 app/static/uploads
 manage.sh
 .qwen
+AGENTS.md
+tmp/
+weights_libreface/

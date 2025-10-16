@@ -12,6 +12,13 @@ const facialAnalysis = {
     setInterval(() => this.checkGrpcHealth(), 30000);
   },
 
+  normalizeStatus(status) {
+    if (!status) {
+      return "not_started";
+    }
+    return String(status).trim().toLowerCase();
+  },
+
   async checkGrpcHealth() {
     try {
       const response = await fetch("/admin/facial-analysis/health");
@@ -159,6 +166,7 @@ const facialAnalysis = {
   },
 
   getStatusBadge(status) {
+    const normalized = this.normalizeStatus(status);
     const badges = {
       not_started:
         '<span class="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">Not Started</span>',
@@ -169,25 +177,16 @@ const facialAnalysis = {
       failed:
         '<span class="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">Failed</span>',
     };
-    return badges[status] || badges["not_started"];
+    return badges[normalized] || badges["not_started"];
   },
 
   getActionButton(session) {
-    const bothCompleted =
-      session.phq_status === "completed" && session.llm_status === "completed";
-    const anyProcessing =
-      session.phq_status === "processing" ||
-      session.llm_status === "processing";
+    const phqStatus = this.normalizeStatus(session.phq_status);
+    const llmStatus = this.normalizeStatus(session.llm_status);
+    const isProcessing = phqStatus === "processing" || llmStatus === "processing";
+    const canProcess = phqStatus === "not_started" || llmStatus === "not_started";
 
-    if (bothCompleted) {
-      return `
-                <button disabled class="px-3 py-1.5 bg-gray-100 text-gray-400 text-xs font-medium rounded cursor-not-allowed">
-                    Already Processed
-                </button>
-            `;
-    }
-
-    if (anyProcessing) {
+    if (isProcessing) {
       return `
                 <button disabled class="px-3 py-1.5 bg-orange-100 text-orange-600 text-xs font-medium rounded cursor-not-allowed">
                     Processing...
@@ -195,13 +194,41 @@ const facialAnalysis = {
             `;
     }
 
-    return `
-    
-            <button onclick="facialAnalysis.processSession('${session.id}')"
-                    class="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700">
-                Process
-            </button>
-        `;
+    const buttons = [];
+    const hasAnalysis = [phqStatus, llmStatus].some(
+      (status) => status !== "not_started"
+    );
+
+    if (canProcess) {
+      buttons.push(`
+        <button onclick="facialAnalysis.processSession('${session.id}')"
+                class="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700">
+          Process
+        </button>
+      `);
+    }
+
+    if (hasAnalysis) {
+      buttons.push(`
+        <button onclick="facialAnalysis.reanalyzeSession('${session.id}')"
+                class="px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded hover:bg-indigo-700">
+          Re-Analyze
+        </button>
+      `);
+
+      buttons.push(`
+        <button onclick="facialAnalysis.deleteSessionAnalysis('${session.id}')"
+                class="px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded hover:bg-red-700">
+          Delete Results
+        </button>
+      `);
+    }
+
+    if (buttons.length === 0) {
+      return '<span class="text-xs text-gray-400">No actions</span>';
+    }
+
+    return `<div class="flex flex-wrap gap-1">${buttons.join("")}</div>`;
   },
 
   async processSession(sessionId) {
@@ -324,6 +351,98 @@ const facialAnalysis = {
       stats.processing || 0;
     document.getElementById("stat-completed").textContent =
       stats.completed || 0;
+  },
+
+  async reanalyzeSession(sessionId) {
+    if (!confirm("Re-analyze both PHQ and LLM assessments?\n\nThis will delete existing analysis files and reprocess all images for the session.")) {
+      return;
+    }
+
+    try {
+      const assessments = ["PHQ", "LLM"];
+      const errors = [];
+
+      for (const assessmentType of assessments) {
+        const response = await fetch(
+          `/admin/facial-analysis/reanalyze/${sessionId}/${assessmentType}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        const httpStatus = response.status;
+        const result = await response.json();
+        const data = result.status === "OLKORECT" ? result.data : result;
+
+        if (!data.success || httpStatus >= 400) {
+          errors.push(`${assessmentType}: ${data.message || "Unknown error"}`);
+        }
+      }
+
+      if (errors.length === 0) {
+        alert("Re-analysis completed for PHQ and LLM!");
+      } else {
+        alert(
+          "Re-analysis completed with issues:\n\n" +
+            errors.join("\n")
+        );
+      }
+
+      this.refreshSessions();
+    } catch (error) {
+      alert(`Error re-analyzing session:\n\n${error.message}`);
+    }
+  },
+
+  async deleteSessionAnalysis(sessionId) {
+    if (!confirm("Delete PHQ and LLM analysis?\n\nThis will delete:\n- JSONL result files\n- Database records\n\nThis action cannot be undone!")) {
+      return;
+    }
+
+    try {
+      const assessments = ["PHQ", "LLM"];
+      const errors = [];
+
+      for (const assessmentType of assessments) {
+        const response = await fetch(
+          `/admin/facial-analysis/delete/${sessionId}/${assessmentType}`,
+          {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        const httpStatus = response.status;
+        const result = await response.json();
+        const data = result.status === "OLKORECT" ? result.data : result;
+
+        if (!data.success && httpStatus !== 404) {
+          errors.push(
+            `${assessmentType}: ${data.message || "Delete failed"}`
+          );
+        }
+      }
+
+      if (errors.length === 0) {
+        alert("PHQ and LLM analysis deleted successfully!");
+      } else if (errors.length < assessments.length) {
+        alert(
+          "Some analysis deleted, but issues occurred:\n\n" +
+            errors.join("\n")
+        );
+      } else {
+        alert("Delete failed:\n\n" + errors.join("\n"));
+      }
+
+      this.refreshSessions();
+    } catch (error) {
+      alert(`Error deleting session analysis:\n\n${error.message}`);
+    }
   },
 };
 

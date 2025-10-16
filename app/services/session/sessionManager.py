@@ -2,6 +2,7 @@
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from sqlalchemy import func
+from flask import current_app
 from ...model.assessment.sessions import AssessmentSession
 from ...model.admin.phq import PHQSettings
 from ...model.admin.llm import LLMSettings
@@ -533,9 +534,27 @@ class SessionManager:
             
             # Get counts for reporting BEFORE deletion using explicit queries
             from ...model.assessment.sessions import PHQResponse, LLMConversation, CameraCapture
+            from ...model.assessment.facial_analysis import SessionFacialAnalysis
             phq_count = db.query(PHQResponse).filter_by(session_id=session_id).count()
             llm_count = db.query(LLMConversation).filter_by(session_id=session_id).count()
             camera_count = db.query(CameraCapture).filter_by(session_id=session_id).count()
+
+            # Clean up facial analysis records and JSONL artifacts
+            facial_analysis_records = db.query(SessionFacialAnalysis).filter_by(session_id=session_id).all()
+            facial_analysis_deleted = 0
+            jsonl_files_deleted = 0
+            for analysis in facial_analysis_records:
+                if analysis.jsonl_file_path:
+                    jsonl_path = os.path.join(current_app.media_save, analysis.jsonl_file_path)
+                    if os.path.exists(jsonl_path):
+                        try:
+                            os.remove(jsonl_path)
+                            jsonl_files_deleted += 1
+                        except Exception as e:
+                            print(f"[WARNING] Failed to delete facial analysis JSONL file {jsonl_path}: {str(e)}")
+                db.delete(analysis)
+                facial_analysis_deleted += 1
+
             from ...services.camera.cameraStorageService import CameraStorageService
             CameraStorageService.cleanup_session_captures(session_id)
             db.delete(session)
@@ -549,7 +568,9 @@ class SessionManager:
                 "deleted_counts": {
                     "phq_responses": phq_count,
                     "llm_conversations": llm_count,
-                    "camera_captures": camera_count
+                    "camera_captures": camera_count,
+                    "facial_analysis_records": facial_analysis_deleted,
+                    "facial_analysis_jsonl_files": jsonl_files_deleted
                 },
                 "message": f"Session {getattr(session, 'session_number', session_id)} for user {session.user_id} deleted successfully"
             }

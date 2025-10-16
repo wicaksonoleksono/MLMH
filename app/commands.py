@@ -544,11 +544,11 @@ def register_commands(app):
                     files = len(cap.filenames) if cap.filenames else 0
                     click.echo(f"    - {cap.capture_type}: assessment_id={aid}, files={files}")
 
-    @app.cli.command("setup-facial-analysis")
+    @app.cli.command("migrate-face")
+    # get this brah ..
     def setup_facial_analysis_table():
         """Smart setup: Create table if missing, add missing columns if exists."""
         click.echo("[OLKORECT] Setting up SessionFacialAnalysis table...")
-
         try:
             from .model.assessment.facial_analysis import SessionFacialAnalysis
             engine = get_engine()

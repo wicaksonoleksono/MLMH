@@ -143,6 +143,9 @@ function showTab(tabName) {
   } else if (tabName === 'facial-analysis') {
     loadFacialAnalysisSessions();
     initializeFacialAnalysisControls();
+  } else if (tabName === 'facial-analysis-exports') {
+    loadFacialAnalysisExports();
+    initializeFacialAnalysisExportsControls();
   }
 }
 
@@ -1310,4 +1313,394 @@ function updateFacialAnalysisStats(stats) {
   if (statPending) statPending.textContent = stats.pending || 0;
   if (statProcessing) statProcessing.textContent = stats.processing || 0;
   if (statCompleted) statCompleted.textContent = stats.completed || 0;
+}
+
+// ============================================================================
+// FACIAL ANALYSIS EXPORTS TAB FUNCTIONS
+// ============================================================================
+
+// Global state for facial analysis exports
+let allFacialAnalysisExportSessions = [];
+let filteredFacialAnalysisExportSessions = [];
+let currentFacialExportPage = 1;
+let currentFacialExportPerPage = 15;
+let currentFacialExportSearchQuery = "";
+let currentFacialExportSortBy = "user_id";
+let currentFacialExportSortOrder = "asc";
+let facialExportSearchDebounceTimer = null;
+let selectedFacialExportSessions = new Set();
+
+// Load facial analysis export sessions
+async function loadFacialAnalysisExports() {
+  try {
+    const response = await fetch('/admin/export/facial-analysis/sessions-list');
+    const result = await response.json();
+    const data = result.status === 'OLKORECT' ? result.data : result;
+
+    if (data.sessions) {
+      allFacialAnalysisExportSessions = data.sessions;
+      applyFacialExportFilters();
+      updateFacialExportCount();
+    } else {
+      console.error('Failed to load facial analysis export sessions:', data.message);
+    }
+  } catch (error) {
+    console.error('Error loading facial analysis export sessions:', error);
+  }
+}
+
+// Initialize facial analysis exports controls
+function initializeFacialAnalysisExportsControls() {
+  const searchInput = document.getElementById('facialExportSearch');
+  const sortBy = document.getElementById('facialExportSortBy');
+  const sortOrder = document.getElementById('facialExportSortOrder');
+  const perPage = document.getElementById('facial-export-per-page');
+  const bulkButton = document.getElementById('bulk-download-facial-analysis');
+
+  if (searchInput) {
+    searchInput.addEventListener('input', function(e) {
+      if (facialExportSearchDebounceTimer) {
+        clearTimeout(facialExportSearchDebounceTimer);
+      }
+      facialExportSearchDebounceTimer = setTimeout(() => {
+        currentFacialExportSearchQuery = e.target.value.trim().toLowerCase();
+        currentFacialExportPage = 1;
+        applyFacialExportFilters();
+      }, 300);
+    });
+  }
+
+  if (sortBy) {
+    sortBy.addEventListener('change', function() {
+      currentFacialExportSortBy = this.value;
+      currentFacialExportPage = 1;
+      applyFacialExportFilters();
+    });
+  }
+
+  if (sortOrder) {
+    sortOrder.addEventListener('change', function() {
+      currentFacialExportSortOrder = this.value;
+      currentFacialExportPage = 1;
+      applyFacialExportFilters();
+    });
+  }
+
+  if (perPage) {
+    perPage.addEventListener('change', function() {
+      currentFacialExportPerPage = parseInt(this.value);
+      currentFacialExportPage = 1;
+      applyFacialExportFilters();
+    });
+  }
+
+  if (bulkButton) {
+    bulkButton.addEventListener('click', downloadBulkFacialAnalysis);
+  }
+}
+
+// Apply facial export filters
+function applyFacialExportFilters() {
+  // Filter sessions
+  filteredFacialAnalysisExportSessions = allFacialAnalysisExportSessions.filter(session => {
+    // Search filter
+    if (currentFacialExportSearchQuery) {
+      const matchesSearch = session.username.toLowerCase().includes(currentFacialExportSearchQuery);
+      if (!matchesSearch) return false;
+    }
+    return true;
+  });
+
+  // Sort sessions
+  filteredFacialAnalysisExportSessions.sort((a, b) => {
+    let aVal, bVal;
+
+    switch(currentFacialExportSortBy) {
+      case 'username':
+        aVal = a.username.toLowerCase();
+        bVal = b.username.toLowerCase();
+        break;
+      case 'created_at':
+        aVal = new Date(a.created_at);
+        bVal = new Date(b.created_at);
+        break;
+      case 'user_id':
+      default:
+        aVal = a.user_id;
+        bVal = b.user_id;
+        break;
+    }
+
+    if (aVal < bVal) return currentFacialExportSortOrder === 'asc' ? -1 : 1;
+    if (aVal > bVal) return currentFacialExportSortOrder === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  renderFacialExportSessions();
+  updateFacialExportPagination();
+  updateFacialExportCount();
+}
+
+// Render facial export sessions table
+function renderFacialExportSessions() {
+  const headerEl = document.getElementById('facial-export-table-header');
+  const bodyEl = document.getElementById('facial-export-table-body');
+
+  if (!headerEl || !bodyEl) return;
+
+  // Set up table header
+  headerEl.innerHTML = `
+    <tr>
+      <th class="px-6 py-3 text-left">
+        <input type="checkbox" id="select-all-facial-exports" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+      </th>
+      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User ID</th>
+      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Username</th>
+      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Session</th>
+      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PHQ Status</th>
+      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">LLM Status</th>
+      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+    </tr>
+  `;
+
+  // Calculate pagination
+  const start = (currentFacialExportPage - 1) * currentFacialExportPerPage;
+  const end = start + currentFacialExportPerPage;
+  const paginatedSessions = filteredFacialAnalysisExportSessions.slice(start, end);
+
+  if (paginatedSessions.length === 0) {
+    bodyEl.innerHTML = `
+      <tr>
+        <td colspan="7" class="px-6 py-12 text-center text-sm text-gray-500">
+          <div class="flex flex-col items-center justify-center">
+            <svg class="w-12 h-12 text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+            <span class="text-lg font-medium text-gray-400">No facial analysis exports available</span>
+            <p class="text-sm text-gray-500 mt-1">Sessions with completed facial analysis will appear here</p>
+          </div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  let rowsHtml = '';
+  paginatedSessions.forEach((session) => {
+    const canDownload = session.can_download;
+    const isChecked = selectedFacialExportSessions.has(session.id);
+
+    rowsHtml += `
+      <tr class="border-b border-gray-100 hover:bg-blue-50 transition-colors duration-150">
+        <td class="px-6 py-4">
+          ${canDownload ? `<input type="checkbox" class="facial-export-checkbox rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" data-session-id="${session.id}" ${isChecked ? 'checked' : ''}>` : ''}
+        </td>
+        <td class="py-4 px-6 font-medium text-gray-900">${session.user_id}</td>
+        <td class="py-4 px-6 font-medium text-gray-900">${session.username}</td>
+        <td class="py-4 px-6 text-gray-900">
+          <div class="flex items-center">
+            <div class="w-3 h-3 rounded-full ${session.session_number === 1 ? 'bg-blue-500' : 'bg-purple-500'} mr-2"></div>
+            <span class="font-medium">Session ${session.session_number}</span>
+          </div>
+        </td>
+        <td class="py-4 px-6">${getFacialStatusBadge(session.phq_analysis_status)}</td>
+        <td class="py-4 px-6">${getFacialStatusBadge(session.llm_analysis_status)}</td>
+        <td class="py-4 px-6">
+          ${getFacialExportActionButtons(session)}
+        </td>
+      </tr>
+    `;
+  });
+
+  bodyEl.innerHTML = rowsHtml;
+
+  // Add event listener for select all checkbox
+  const selectAllCheckbox = document.getElementById('select-all-facial-exports');
+  if (selectAllCheckbox) {
+    selectAllCheckbox.addEventListener('change', function() {
+      const checkboxes = document.querySelectorAll('.facial-export-checkbox');
+      checkboxes.forEach(cb => {
+        cb.checked = this.checked;
+        const sessionId = cb.dataset.sessionId;
+        if (this.checked) {
+          selectedFacialExportSessions.add(sessionId);
+        } else {
+          selectedFacialExportSessions.delete(sessionId);
+        }
+      });
+      updateBulkDownloadButton();
+    });
+  }
+
+  // Add event listeners for individual checkboxes
+  document.querySelectorAll('.facial-export-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', function() {
+      const sessionId = this.dataset.sessionId;
+      if (this.checked) {
+        selectedFacialExportSessions.add(sessionId);
+      } else {
+        selectedFacialExportSessions.delete(sessionId);
+      }
+      updateBulkDownloadButton();
+    });
+  });
+}
+
+// Get facial status badge
+function getFacialStatusBadge(status) {
+  const colors = {
+    'completed': 'bg-green-100 text-green-800',
+    'processing': 'bg-yellow-100 text-yellow-800',
+    'failed': 'bg-red-100 text-red-800',
+    'not_started': 'bg-gray-100 text-gray-600',
+    'pending': 'bg-blue-100 text-blue-800'
+  };
+
+  const color = colors[status] || 'bg-gray-100 text-gray-600';
+  const displayStatus = status.replace('_', ' ').toUpperCase();
+
+  return `<span class="px-2 py-1 rounded-full text-xs font-medium ${color}">${displayStatus}</span>`;
+}
+
+// Get facial export action buttons
+function getFacialExportActionButtons(session) {
+  if (session.can_download) {
+    return `
+      <a href="/admin/export/facial-analysis/session/${session.id}"
+         class="inline-flex items-center justify-center px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 transition-colors duration-200 shadow-sm">
+        <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+        </svg>
+        Download
+      </a>
+    `;
+  } else {
+    return `
+      <span class="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200">
+        <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        Processing
+      </span>
+    `;
+  }
+}
+
+// Update facial export pagination
+function updateFacialExportPagination() {
+  const containerEl = document.getElementById("facial-export-pagination-container");
+  const infoEl = document.getElementById("facial-export-pagination-info");
+  const controlsEl = document.getElementById("facial-export-pagination-controls");
+
+  if (!containerEl || !infoEl || !controlsEl) return;
+
+  const total = filteredFacialAnalysisExportSessions.length;
+  const totalPages = Math.ceil(total / currentFacialExportPerPage);
+
+  if (total === 0) {
+    containerEl.classList.add("hidden");
+    return;
+  }
+
+  containerEl.classList.remove("hidden");
+
+  // Update info text
+  const start = (currentFacialExportPage - 1) * currentFacialExportPerPage + 1;
+  const end = Math.min(start + currentFacialExportPerPage - 1, total);
+  infoEl.textContent = `Showing ${start} to ${end} of ${total} results`;
+
+  // Build pagination controls
+  let controls = "";
+
+  // Previous button
+  if (currentFacialExportPage > 1) {
+    controls += `<button onclick="changeFacialExportPage(${currentFacialExportPage - 1})" class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">Previous</button>`;
+  } else {
+    controls += `<button disabled class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-gray-50 text-sm font-medium text-gray-300 cursor-not-allowed">Previous</button>`;
+  }
+
+  // Page numbers
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === currentFacialExportPage) {
+      controls += `<button onclick="changeFacialExportPage(${i})" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-indigo-50 text-sm font-medium text-indigo-600">${i}</button>`;
+    } else {
+      controls += `<button onclick="changeFacialExportPage(${i})" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">${i}</button>`;
+    }
+  }
+
+  // Next button
+  if (currentFacialExportPage < totalPages) {
+    controls += `<button onclick="changeFacialExportPage(${currentFacialExportPage + 1})" class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">Next</button>`;
+  } else {
+    controls += `<button disabled class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-gray-50 text-sm font-medium text-gray-300 cursor-not-allowed">Next</button>`;
+  }
+
+  controlsEl.innerHTML = controls;
+}
+
+// Change facial export page
+function changeFacialExportPage(page) {
+  currentFacialExportPage = page;
+  renderFacialExportSessions();
+  updateFacialExportPagination();
+}
+
+// Update facial export count
+function updateFacialExportCount() {
+  const countEl = document.getElementById("facial-export-count");
+  if (countEl) {
+    const readyCount = allFacialAnalysisExportSessions.filter(s => s.can_download).length;
+    countEl.textContent = `${readyCount} sessions ready`;
+  }
+}
+
+// Update bulk download button
+function updateBulkDownloadButton() {
+  const bulkButton = document.getElementById('bulk-download-facial-analysis');
+  if (bulkButton) {
+    bulkButton.disabled = selectedFacialExportSessions.size === 0;
+  }
+}
+
+// Download bulk facial analysis
+async function downloadBulkFacialAnalysis() {
+  if (selectedFacialExportSessions.size === 0) {
+    alert('Please select at least one session to download.');
+    return;
+  }
+
+  const sessionIds = Array.from(selectedFacialExportSessions);
+
+  try {
+    const response = await fetch('/admin/export/facial-analysis/bulk', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ session_ids: sessionIds })
+    });
+
+    if (response.ok) {
+      // Trigger download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bulk_facial_analysis_export_${new Date().getTime()}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      // Clear selection
+      selectedFacialExportSessions.clear();
+      renderFacialExportSessions();
+      updateBulkDownloadButton();
+    } else {
+      const error = await response.json();
+      alert(`Bulk download failed: ${error.error || 'Unknown error'}`);
+    }
+  } catch (error) {
+    alert(`Error downloading bulk facial analysis: ${error.message}`);
+  }
 }

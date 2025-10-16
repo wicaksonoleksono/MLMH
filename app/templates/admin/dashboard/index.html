@@ -26,6 +26,12 @@
         >
           Facial Analysis
         </button>
+        <button
+          id="tab-facial-analysis-exports"
+          class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+        >
+          Session Exports
+        </button>
       </nav>
     </div>
 
@@ -68,6 +74,11 @@
       <!-- FACIAL ANALYSIS TAB -->
       <div id="tab-content-facial-analysis" class="hidden">
         {% include 'admin/dashboard/facial_analysis.html' %}
+      </div>
+
+      <!-- FACIAL ANALYSIS EXPORTS TAB -->
+      <div id="tab-content-facial-analysis-exports" class="hidden">
+        {% include 'admin/dashboard/facial_analysis_exports.html' %}
       </div>
 
     </div>

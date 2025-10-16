@@ -197,17 +197,17 @@ def get_session_progress(session_id):
 
 @export_bp.route('/session/<session_id>/mark-complete', methods=['POST'])
 @admin_required
-@api_response  
+@api_response
 def mark_session_complete(session_id):
     """Manually mark a session as complete (admin override)"""
     try:
         session = SessionManager.get_session(session_id)
         if not session:
             return {"success": False, "message": "Session not found"}, 404
-        
+
         if session.status == 'COMPLETED':
             return {"success": False, "message": "Session is already completed"}, 400
-        
+
         from ...db import get_session
         with get_session() as db:
             # Mark all assessments as completed if not already
@@ -215,17 +215,125 @@ def mark_session_complete(session_id):
                 session.phq_completed_at = session.updated_at
             if not session.llm_completed_at:
                 session.llm_completed_at = session.updated_at
-            
+
             # Mark session as completed
             session.complete_session()
             db.commit()
-        
+
         return {
             "success": True,
             "message": f"Session {session_id} marked as complete",
             "session_id": session_id,
             "new_status": "COMPLETED"
         }, 200
-        
+
     except Exception as e:
         return {"success": False, "message": f"Failed to mark session complete: {str(e)}"}, 500
+
+
+# ============= FACIAL ANALYSIS EXPORT ROUTES =============
+
+@export_bp.route('/facial-analysis/session/<session_id>')
+@login_required
+@admin_required
+@raw_response
+def export_session_facial_analysis(session_id):
+    """Export single session with facial analysis JSONL + processed images"""
+    try:
+        zip_buffer = ExportService.export_session_with_facial_analysis(session_id)
+        filename = ExportService.get_facial_analysis_export_filename(session_id)
+
+        return send_file(
+            zip_buffer,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/zip'
+        )
+
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        return jsonify({"error": f"Facial analysis export failed: {str(e)}"}), 500
+
+
+@export_bp.route('/facial-analysis/bulk', methods=['POST'])
+@login_required
+@admin_required
+@raw_response
+def export_bulk_facial_analysis():
+    """Export multiple sessions with facial analysis as ZIP of ZIPs"""
+    try:
+        data = request.get_json()
+        session_ids = data.get('session_ids', [])
+
+        if not session_ids:
+            return jsonify({"error": "No session IDs provided"}), 400
+
+        zip_buffer = ExportService.export_bulk_facial_analysis(session_ids)
+        filename = ExportService.get_bulk_facial_analysis_export_filename()
+
+        return send_file(
+            zip_buffer,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/zip'
+        )
+
+    except Exception as e:
+        return jsonify({"error": f"Bulk facial analysis export failed: {str(e)}"}), 500
+
+
+@export_bp.route('/facial-analysis/sessions-list')
+@login_required
+@admin_required
+@api_response
+def get_facial_analysis_sessions():
+    """Get all sessions with completed facial analysis (both PHQ and LLM)"""
+    try:
+        from ...model.assessment.sessions import AssessmentSession
+        from ...model.assessment.facial_analysis import SessionFacialAnalysis
+        from ...db import get_session
+
+        with get_session() as db:
+            # Get all sessions
+            sessions = db.query(AssessmentSession).filter_by(status='COMPLETED').all()
+
+            session_data = []
+            for session in sessions:
+                # Check facial analysis status
+                phq_analysis = db.query(SessionFacialAnalysis).filter_by(
+                    session_id=session.id,
+                    assessment_type='PHQ'
+                ).first()
+
+                llm_analysis = db.query(SessionFacialAnalysis).filter_by(
+                    session_id=session.id,
+                    assessment_type='LLM'
+                ).first()
+
+                phq_status = phq_analysis.status if phq_analysis else 'not_started'
+                llm_status = llm_analysis.status if llm_analysis else 'not_started'
+
+                # Check if both are completed
+                both_completed = (phq_status == 'completed' and llm_status == 'completed')
+
+                session_data.append({
+                    "id": session.id,
+                    "user_id": session.user_id,
+                    "username": session.user.uname if session.user else 'Unknown',
+                    "session_number": session.session_number,
+                    "status": session.status,
+                    "created_at": session.created_at.isoformat(),
+                    "phq_analysis_status": phq_status,
+                    "llm_analysis_status": llm_status,
+                    "both_completed": both_completed,
+                    "can_download": both_completed
+                })
+
+        return {
+            "sessions": session_data,
+            "total": len(session_data)
+        }, 200
+
+    except Exception as e:
+        return {"success": False, "message": f"Failed to get facial analysis sessions: {str(e)}"}, 500

@@ -1,0 +1,83 @@
+<!-- Top Controls -->
+<div class="flex justify-between items-center mb-6">
+  <h3 class="text-lg font-medium text-gray-900">Session Exports</h3>
+  <div class="flex items-center space-x-4">
+    <!-- Search Input -->
+    <div class="relative">
+      <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+        <svg class="h-4 w-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+      </div>
+      <input
+        type="text"
+        id="facialExportSearch"
+        placeholder="Search users by name..."
+        class="pl-10 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500"
+      />
+    </div>
+
+    <!-- Sort Controls -->
+    <div class="flex items-center space-x-2">
+      <label class="text-sm text-gray-600 whitespace-nowrap">Sort by:</label>
+      <select id="facialExportSortBy" class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+        <option value="user_id">User ID</option>
+        <option value="username">Username (A-Z)</option>
+        <option value="created_at">Date Created</option>
+      </select>
+    </div>
+
+    <div class="flex items-center space-x-2">
+      <label class="text-sm text-gray-600 whitespace-nowrap">Order:</label>
+      <select id="facialExportSortOrder" class="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+        <option value="asc">Ascending</option>
+        <option value="desc">Descending</option>
+      </select>
+    </div>
+
+    <div class="flex items-center space-x-2">
+      <span id="facial-export-count" class="text-sm text-gray-500">0 sessions ready</span>
+      <label class="text-sm text-gray-600">Per page:</label>
+      <select id="facial-export-per-page" class="text-sm border border-gray-300 rounded px-2 py-1">
+        <option value="10">10</option>
+        <option value="15" selected>15</option>
+        <option value="20">20</option>
+      </select>
+    </div>
+
+    <button
+      id="bulk-download-facial-analysis"
+      class="inline-flex items-center px-3 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white text-sm font-medium rounded-lg hover:from-green-700 hover:to-green-800 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+      disabled
+    >
+      <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+      </svg>
+      Bulk Download Sessions
+    </button>
+  </div>
+</div>
+
+<!-- Data Table -->
+<div class="bg-white overflow-hidden shadow rounded-lg">
+  <div class="overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200">
+      <thead id="facial-export-table-header" class="bg-gray-50">
+        <!-- Dynamic header content -->
+      </thead>
+      <tbody id="facial-export-table-body" class="bg-white divide-y divide-gray-200">
+        <!-- Dynamic table content -->
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination Controls -->
+  <div id="facial-export-pagination-container" class="hidden flex items-center justify-between mt-4 px-4 py-3 bg-white border-t border-gray-200">
+    <div class="flex items-center">
+      <p id="facial-export-pagination-info" class="text-sm text-gray-700"></p>
+    </div>
+    <div id="facial-export-pagination-controls" class="flex items-center space-x-2">
+      <!-- Dynamic pagination buttons -->
+    </div>
+  </div>
+</div>

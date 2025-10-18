@@ -1074,6 +1074,12 @@ function applyFacialAnalysisFilters() {
     }
 
     return matchesSearch && matchesStatus;
+  }).sort((a, b) => {
+    // Sort by user_id first, then by session_number (for proper grouping in UI)
+    if (a.user_id !== b.user_id) {
+      return a.user_id.localeCompare(b.user_id);
+    }
+    return a.session_number - b.session_number;
   });
 
   renderFacialAnalysisSessions();

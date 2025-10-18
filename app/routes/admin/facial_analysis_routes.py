@@ -20,6 +20,13 @@ import threading
 
 facial_analysis_bp = Blueprint('facial_analysis', __name__, url_prefix='/admin/facial-analysis')
 
+# Global state for batch processing cancellation
+_batch_processing_state = {
+    'is_running': False,
+    'cancel_requested': False,
+    'lock': threading.Lock()
+}
+
 
 @facial_analysis_bp.route('/')
 @login_required
@@ -299,6 +306,11 @@ def process_all_sessions():
 
     print(f"[INFO] Starting parallel processing of {len(sessions)} sessions with ThreadPoolExecutor")
 
+    # Set processing state
+    with _batch_processing_state['lock']:
+        _batch_processing_state['is_running'] = True
+        _batch_processing_state['cancel_requested'] = False
+
     results: Dict[str, Dict[str, Any]] = {}  # Use dict for thread-safe keying by session_id
     summary = {
         "total_sessions": len(sessions),
@@ -324,6 +336,13 @@ def process_all_sessions():
 
         phq_success = False
         llm_success = False
+
+        # Check if cancellation was requested BEFORE processing
+        with _batch_processing_state['lock']:
+            if _batch_processing_state['cancel_requested']:
+                print(f"[CANCELLED] Skipping session {session_id[:8]} ({username}) - cancellation requested")
+                session_result['errors'].append("Processing cancelled by user")
+                return session_result, False, False
 
         # Process PHQ
         if session.phq_completed_at:
@@ -422,12 +441,58 @@ def process_all_sessions():
 
     print(f"[COMPLETE] Batch processing complete: {message}")
 
+    # Reset processing state
+    with _batch_processing_state['lock']:
+        _batch_processing_state['is_running'] = False
+        _batch_processing_state['cancel_requested'] = False
+
     return {
         "success": overall_success,
         "message": message,
         "summary": summary,
         "results": results_list
     }, 200
+
+
+@facial_analysis_bp.route('/process-all/cancel', methods=['POST'])
+@login_required
+@admin_required
+@api_response
+def cancel_process_all():
+    """
+    Cancel the batch processing (process-all).
+
+    Sets a flag that prevents new sessions from starting.
+    Sessions already in progress will complete (can't kill gRPC calls),
+    but any remaining sessions will be skipped.
+    """
+    with _batch_processing_state['lock']:
+        if not _batch_processing_state['is_running']:
+            return {
+                "success": False,
+                "message": "No batch processing currently running"
+            }, 400
+
+        _batch_processing_state['cancel_requested'] = True
+        print(f"[CANCEL] Batch processing cancellation requested by {current_user.email}")
+
+    return {
+        "success": True,
+        "message": "Batch processing cancellation requested. Remaining sessions will be skipped. Currently processing sessions will complete."
+    }, 200
+
+
+@facial_analysis_bp.route('/process-all/status', methods=['GET'])
+@login_required
+@admin_required
+@api_response
+def get_process_all_status():
+    """Get the current status of batch processing"""
+    with _batch_processing_state['lock']:
+        return {
+            "is_running": _batch_processing_state['is_running'],
+            "cancel_requested": _batch_processing_state['cancel_requested']
+        }, 200
 
 
 @facial_analysis_bp.route('/task-status/<session_id>/<assessment_type>', methods=['GET'])

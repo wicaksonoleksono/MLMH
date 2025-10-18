@@ -1459,29 +1459,62 @@ async function deleteFacialAnalysisSession(sessionId) {
   }
 }
 
+let facialAnalysisBatchProcessing = false;
+
 async function processAllFacialAnalysisSessions() {
-  if (!confirm('Process facial analysis for all eligible sessions?\n\nThis will sequentially process both PHQ and LLM assessments for every eligible session. This may take a while.')) {
+  if (!confirm('Process facial analysis for all eligible sessions?\n\n⚠️ WARNING: This processes 300+ sessions (~45 minutes)\n\nYou can cancel anytime. Processing will continue in background.')) {
     return;
   }
 
   const button = document.getElementById('fa-process-all-btn');
-  if (!button) {
+  if (!button || facialAnalysisBatchProcessing) {
     return;
   }
 
-  const originalHtml = button.innerHTML;
+  facialAnalysisBatchProcessing = true;
   button.disabled = true;
   button.innerHTML = `
     <span class="inline-flex items-center">
       <svg class="w-4 h-4 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
       </svg>
-      Processing...
+      Processing (click to cancel)...
     </span>
   `;
+  button.onclick = cancelFacialAnalysisBatchProcessing;
 
   try {
-    const response = await fetch('/admin/facial-analysis/process-all', {
+    // START processing (don't wait for completion)
+    fetch('/admin/facial-analysis/process-all', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    }).then(response => response.json())
+      .then(result => {
+        const data = result.status === 'OLKORECT' ? result.data : result;
+        console.log('[BATCH] Backend processing complete:', data);
+        loadFacialAnalysisSessions();
+      })
+      .catch(error => console.error('[BATCH] Error:', error));
+
+    // IMMEDIATELY return and show cancel button
+    alert('✅ Batch processing started!\n\nProcessing will continue in background.\n\nYou can:\n- Close this page\n- Click "Cancel" to stop new sessions\n\n(Already started sessions will complete)');
+
+  } catch (error) {
+    alert('Failed to start batch processing:\n\n' + error.message);
+    facialAnalysisBatchProcessing = false;
+    button.disabled = false;
+  }
+}
+
+async function cancelFacialAnalysisBatchProcessing() {
+  if (!confirm('Cancel batch processing?\n\n⚠️ Currently processing sessions will still complete.\nOnly NEW sessions will be skipped.')) {
+    return;
+  }
+
+  try {
+    const response = await fetch('/admin/facial-analysis/process-all/cancel', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -1492,21 +1525,25 @@ async function processAllFacialAnalysisSessions() {
     const data = result.status === 'OLKORECT' ? result.data : result;
 
     if (data.success) {
-      alert(data.message);
+      alert('✅ Cancellation requested!\n\n' + data.message);
     } else {
-      const messageParts = [
-        data.message || 'Batch processing completed with issues.',
-        data.summary ? `Completed: ${data.summary.completed}, Partial: ${data.summary.partial}, Failed: ${data.summary.failed}` : ''
-      ].filter(Boolean);
-      alert(messageParts.join('\n'));
+      alert('⚠️ ' + data.message);
     }
 
-    loadFacialAnalysisSessions();
+    facialAnalysisBatchProcessing = false;
+    const button = document.getElementById('fa-process-all-btn');
+    if (button) {
+      button.disabled = false;
+      button.onclick = processAllFacialAnalysisSessions;
+      button.innerHTML = `
+        <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 01-8 0m0 10a4 4 0 018 0m-4 4v-4m0-6V3"></path>
+        </svg>
+        Process All
+      `;
+    }
   } catch (error) {
-    alert('Batch processing failed:\n\n' + error.message);
-  } finally {
-    button.disabled = false;
-    button.innerHTML = originalHtml;
+    alert('Error cancelling batch:\n\n' + error.message);
   }
 }
 

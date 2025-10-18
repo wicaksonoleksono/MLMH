@@ -50,7 +50,7 @@ opencv-contrib-python==4.11.0.86
 opencv-python==4.10.0.84
 packaging==25.0
 pandas==2.0.3
-pillow==11.3.0
+pillow==9.5.0
 protobuf==3.20.3
 pycparser==2.23
 pyparsing==3.2.5

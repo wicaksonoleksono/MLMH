@@ -62,7 +62,7 @@ mypy_extensions==1.1.0
 numpy==1.26.4
 openai==1.101.0
 packaging==23.2
-Pillow==10.1.0
+Pillow==9.5.0
 prompt_toolkit==3.0.51
 propcache==0.3.2
 protobuf==3.20.3

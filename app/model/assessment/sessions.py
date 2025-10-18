@@ -342,7 +342,7 @@ class PHQResponse(BaseModel):
     __tablename__ = 'phq_responses'
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False, unique=True)
+    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id', ondelete='CASCADE'), nullable=False, unique=True)
     # ADD TIMESTAMP : BY THE SECOND .. D . THX .
 
     # All responses in a single JSON structure, keyed by question_id
@@ -361,9 +361,9 @@ class PHQResponse(BaseModel):
 
 class LLMConversation(BaseModel):
     __tablename__ = 'llm_conversations'
-    
+
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
+    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id', ondelete='CASCADE'), nullable=False)
     # Entire conversation as JSON
     conversation_history: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
     
@@ -378,7 +378,7 @@ class LLMConversation(BaseModel):
 class CameraCapture(BaseModel):
     __tablename__ = 'camera_captures'
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
+    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id', ondelete='CASCADE'), nullable=False)
     assessment_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)  # Can reference either LLM or PHQ record, set after assessment creation
     filenames: Mapped[List[str]] = mapped_column(JSON, nullable=False)
     capture_type: Mapped[str] = mapped_column(String(50), nullable=False)  # LLM or PHQ
@@ -393,7 +393,7 @@ class CameraCapture(BaseModel):
 class LLMAnalysisResult(BaseModel):
     __tablename__ = 'llm_analysis_results'
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
+    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id', ondelete='CASCADE'), nullable=False)
     analysis_model_used: Mapped[str] = mapped_column(String(50), nullable=False)  # gpt-4o-mini, etc.
     conversation_turns_analyzed: Mapped[int] = mapped_column(Integer, nullable=False)  # How many turns were analyzed
     raw_analysis_result: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
@@ -411,7 +411,7 @@ class LLMAnalysisResult(BaseModel):
 class SessionExport(BaseModel):
     __tablename__ = 'session_exports'
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
+    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id', ondelete='CASCADE'), nullable=False)
     export_type: Mapped[str] = mapped_column(String(50), nullable=False)
 
     export_data: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
@@ -432,9 +432,9 @@ class SessionExport(BaseModel):
 
 class EmailNotification(BaseModel):
     __tablename__ = 'email_notifications'
-    
+
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
+    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id', ondelete='CASCADE'), nullable=False)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
 
     # Notification type

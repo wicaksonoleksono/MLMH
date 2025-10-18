@@ -22,7 +22,7 @@ class SessionFacialAnalysis(BaseModel):
     __tablename__ = 'session_facial_analysis'
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
+    session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id', ondelete='CASCADE'), nullable=False)
 
     # Assessment type: 'PHQ' or 'LLM'
     assessment_type: Mapped[str] = mapped_column(String(10), nullable=False)

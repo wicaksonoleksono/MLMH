@@ -1779,36 +1779,92 @@ def register_commands(app):
             raise
 
     @app.cli.command("fix-foreign-key-cascade")
-    @click.confirmation_option(prompt="This will modify ALL user_id foreign keys to add CASCADE DELETE. Are you sure?")
+    @click.confirmation_option(prompt="This will modify ALL foreign keys to add CASCADE DELETE. Are you sure?")
     def fix_foreign_key_cascade():
-        """Add CASCADE DELETE to ALL user_id foreign keys (comprehensive fix)"""
+        """Add CASCADE DELETE to ALL foreign keys (user_id AND session_id) - COMPREHENSIVE FIX"""
         click.echo("[OLKORECT] Fixing ALL foreign key constraints to add CASCADE DELETE...")
+        click.echo("This includes user_id AND session_id foreign keys for complete cascade deletion")
 
-        # List of all tables with user_id foreign keys that need CASCADE DELETE
+        # List of ALL foreign keys that need CASCADE DELETE
         foreign_keys_to_fix = [
+            # === USER_ID FOREIGN KEYS ===
             {
                 "table": "assessment_sessions",
                 "column": "user_id",
+                "reference": "users(id)",
                 "constraint": "assessment_sessions_user_id_fkey",
-                "description": "Assessment sessions"
+                "description": "Assessment sessions -> users"
             },
             {
                 "table": "auto_login_tokens",
                 "column": "user_id",
+                "reference": "users(id)",
                 "constraint": "auto_login_tokens_user_id_fkey",
-                "description": "Auto login tokens"
+                "description": "Auto login tokens -> users"
             },
             {
                 "table": "email_notifications",
                 "column": "user_id",
+                "reference": "users(id)",
                 "constraint": "email_notifications_user_id_fkey",
-                "description": "Email notifications"
+                "description": "Email notifications (user_id) -> users"
             },
             {
                 "table": "session_exports",
                 "column": "requested_by_user",
+                "reference": "users(id)",
                 "constraint": "session_exports_requested_by_user_fkey",
-                "description": "Session exports (requested_by_user)"
+                "description": "Session exports (requested_by_user) -> users"
+            },
+            # === SESSION_ID FOREIGN KEYS ===
+            {
+                "table": "phq_responses",
+                "column": "session_id",
+                "reference": "assessment_sessions(id)",
+                "constraint": "phq_responses_session_id_fkey",
+                "description": "PHQ responses -> assessment_sessions"
+            },
+            {
+                "table": "llm_conversations",
+                "column": "session_id",
+                "reference": "assessment_sessions(id)",
+                "constraint": "llm_conversations_session_id_fkey",
+                "description": "LLM conversations -> assessment_sessions"
+            },
+            {
+                "table": "camera_captures",
+                "column": "session_id",
+                "reference": "assessment_sessions(id)",
+                "constraint": "camera_captures_session_id_fkey",
+                "description": "Camera captures -> assessment_sessions"
+            },
+            {
+                "table": "llm_analysis_results",
+                "column": "session_id",
+                "reference": "assessment_sessions(id)",
+                "constraint": "llm_analysis_results_session_id_fkey",
+                "description": "LLM analysis results -> assessment_sessions"
+            },
+            {
+                "table": "session_exports",
+                "column": "session_id",
+                "reference": "assessment_sessions(id)",
+                "constraint": "session_exports_session_id_fkey",
+                "description": "Session exports (session_id) -> assessment_sessions"
+            },
+            {
+                "table": "email_notifications",
+                "column": "session_id",
+                "reference": "assessment_sessions(id)",
+                "constraint": "email_notifications_session_id_fkey",
+                "description": "Email notifications (session_id) -> assessment_sessions"
+            },
+            {
+                "table": "session_facial_analysis",
+                "column": "session_id",
+                "reference": "assessment_sessions(id)",
+                "constraint": "session_facial_analysis_session_id_fkey",
+                "description": "Facial analysis -> assessment_sessions"
             }
         ]
 
@@ -1816,6 +1872,8 @@ def register_commands(app):
             engine = get_engine()
             with engine.connect() as conn:
                 fixed_count = 0
+                user_fks = 0
+                session_fks = 0
 
                 for fk in foreign_keys_to_fix:
                     click.echo(f"\n  Processing {fk['description']}...")
@@ -1832,18 +1890,28 @@ def register_commands(app):
                     conn.execute(text(f"""
                         ALTER TABLE {fk['table']}
                         ADD CONSTRAINT {fk['constraint']}
-                        FOREIGN KEY ({fk['column']}) REFERENCES users(id) ON DELETE CASCADE
+                        FOREIGN KEY ({fk['column']}) REFERENCES {fk['reference']} ON DELETE CASCADE
                     """))
 
                     click.echo(f"    ✓ {fk['description']} fixed")
                     fixed_count += 1
 
+                    # Track type
+                    if 'users(id)' in fk['reference']:
+                        user_fks += 1
+                    else:
+                        session_fks += 1
+
                 conn.commit()
 
                 click.echo(f"\n[OLKORECT] All foreign key constraints updated successfully!")
-                click.echo(f"  ✓ Fixed {fixed_count} foreign key constraints")
-                click.echo(f"  ✓ All user-related records will now be automatically deleted when user is deleted")
-                click.echo(f"  ✓ OTP cleanup will now work without foreign key violations")
+                click.echo(f"  ✓ Fixed {fixed_count} total foreign key constraints")
+                click.echo(f"  ✓ User cascades: {user_fks} foreign keys")
+                click.echo(f"  ✓ Session cascades: {session_fks} foreign keys")
+                click.echo(f"\n  This means:")
+                click.echo(f"  • Deleting a user will automatically delete all their sessions and related data")
+                click.echo(f"  • Deleting a session will automatically delete all PHQ/LLM/camera/analysis data")
+                click.echo(f"  • OTP cleanup will now work without foreign key violations")
 
         except Exception as e:
             click.echo(f"[SNAFU] Failed to update foreign keys: {str(e)}")

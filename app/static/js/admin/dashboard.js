@@ -1459,62 +1459,29 @@ async function deleteFacialAnalysisSession(sessionId) {
   }
 }
 
-let facialAnalysisBatchProcessing = false;
-
 async function processAllFacialAnalysisSessions() {
-  if (!confirm('Process facial analysis for all eligible sessions?\n\n⚠️ WARNING: This processes 300+ sessions (~45 minutes)\n\nYou can cancel anytime. Processing will continue in background.')) {
+  if (!confirm('Process facial analysis for all eligible sessions?\n\nThis will process both PHQ and LLM assessments for every eligible session. This may take a while.')) {
     return;
   }
 
   const button = document.getElementById('fa-process-all-btn');
-  if (!button || facialAnalysisBatchProcessing) {
+  if (!button) {
     return;
   }
 
-  facialAnalysisBatchProcessing = true;
+  const originalHtml = button.innerHTML;
   button.disabled = true;
   button.innerHTML = `
     <span class="inline-flex items-center">
       <svg class="w-4 h-4 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
       </svg>
-      Processing (click to cancel)...
+      Processing...
     </span>
   `;
-  button.onclick = cancelFacialAnalysisBatchProcessing;
 
   try {
-    // START processing (don't wait for completion)
-    fetch('/admin/facial-analysis/process-all', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    }).then(response => response.json())
-      .then(result => {
-        const data = result.status === 'OLKORECT' ? result.data : result;
-        console.log('[BATCH] Backend processing complete:', data);
-        loadFacialAnalysisSessions();
-      })
-      .catch(error => console.error('[BATCH] Error:', error));
-
-    // IMMEDIATELY return and show cancel button
-    alert('✅ Batch processing started!\n\nProcessing will continue in background.\n\nYou can:\n- Close this page\n- Click "Cancel" to stop new sessions\n\n(Already started sessions will complete)');
-
-  } catch (error) {
-    alert('Failed to start batch processing:\n\n' + error.message);
-    facialAnalysisBatchProcessing = false;
-    button.disabled = false;
-  }
-}
-
-async function cancelFacialAnalysisBatchProcessing() {
-  if (!confirm('Cancel batch processing?\n\n⚠️ Currently processing sessions will still complete.\nOnly NEW sessions will be skipped.')) {
-    return;
-  }
-
-  try {
-    const response = await fetch('/admin/facial-analysis/process-all/cancel', {
+    const response = await fetch('/admin/facial-analysis/process-all', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -1525,25 +1492,31 @@ async function cancelFacialAnalysisBatchProcessing() {
     const data = result.status === 'OLKORECT' ? result.data : result;
 
     if (data.success) {
-      alert('✅ Cancellation requested!\n\n' + data.message);
+      let message = data.message;
+      if (data.summary) {
+        message += `\n\nQueued: ${data.summary.queued}`;
+        if (data.summary.already_processing > 0) message += `\nAlready processing: ${data.summary.already_processing}`;
+        if (data.summary.already_completed > 0) message += `\nAlready completed: ${data.summary.already_completed}`;
+      }
+      alert('✅ ' + message);
     } else {
-      alert('⚠️ ' + data.message);
+      let message = data.message || 'Failed to queue sessions.';
+      if (data.summary) {
+        message += `\n\nQueued: ${data.summary.queued}`;
+        if (data.summary.errors > 0) message += `\nErrors: ${data.summary.errors}`;
+      }
+      if (data.error_details && data.error_details.length > 0) {
+        message += '\n\nError Details:\n' + data.error_details.slice(0, 3).join('\n');
+      }
+      alert('⚠️ ' + message);
     }
 
-    facialAnalysisBatchProcessing = false;
-    const button = document.getElementById('fa-process-all-btn');
-    if (button) {
-      button.disabled = false;
-      button.onclick = processAllFacialAnalysisSessions;
-      button.innerHTML = `
-        <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 01-8 0m0 10a4 4 0 018 0m-4 4v-4m0-6V3"></path>
-        </svg>
-        Process All
-      `;
-    }
+    loadFacialAnalysisSessions();
   } catch (error) {
-    alert('Error cancelling batch:\n\n' + error.message);
+    alert('Batch processing failed:\n\n' + error.message);
+  } finally {
+    button.disabled = false;
+    button.innerHTML = originalHtml;
   }
 }
 

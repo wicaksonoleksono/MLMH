@@ -271,18 +271,17 @@ def process_session(session_id):
 @api_response
 def process_all_sessions():
     """
-    Batch process facial analysis for all eligible sessions (PARALLEL).
+    Batch queue all eligible sessions for facial analysis processing.
 
-    Uses ThreadPoolExecutor to process multiple sessions concurrently.
-    Each session processes PHQ + LLM in sequence, but multiple sessions in parallel.
+    Uses the existing queue system (scheduler) to process sessions sequentially.
+    Max 1 worker processes sessions one at a time, keeping memory usage low.
+    Each session internally uses 4 gRPC workers for image parallelization.
 
-    Returns aggregated results per session along with summary statistics.
-
-    Performance:
-    - 300 sessions with ThreadPoolExecutor(max_workers=3):
-      ~45min instead of 4.5+ hours (serial)
-    - 600 assessments total processed in parallel batches
+    Returns immediately with queuing summary (actual processing happens in background).
     """
+    from ...services.facial_analysis.backgroundProcessingService import FacialAnalysisBackgroundService
+    from ...services.schedulerService import scheduler_service
+
     with get_session() as db:
         sessions = db.query(
             AssessmentSession,
@@ -304,153 +303,86 @@ def process_all_sessions():
             "message": "No eligible sessions found to process."
         }, 200
 
-    print(f"[INFO] Starting parallel processing of {len(sessions)} sessions with ThreadPoolExecutor")
+    queued_count = 0
+    already_processing = 0
+    already_completed = 0
+    errors = []
 
-    # Set processing state
-    with _batch_processing_state['lock']:
-        _batch_processing_state['is_running'] = True
-        _batch_processing_state['cancel_requested'] = False
+    print(f"[INFO] Queuing {len(sessions)} sessions for processing...")
 
-    results: Dict[str, Dict[str, Any]] = {}  # Use dict for thread-safe keying by session_id
-    summary = {
-        "total_sessions": len(sessions),
-        "completed": 0,
-        "partial": 0,
-        "failed": 0
-    }
-    results_lock = threading.Lock()
-
-    def process_single_session(session_data):
-        """Process one session (PHQ + LLM) in parallel thread"""
-        session, username, email = session_data
+    for session, username, email in sessions:
         session_id = session.id
 
-        session_result: Dict[str, Any] = {
-            "session_id": session_id,
-            "username": username,
-            "email": email,
-            "phq": None,
-            "llm": None,
-            "errors": []
-        }
-
-        phq_success = False
-        llm_success = False
-
-        # Check if cancellation was requested BEFORE processing
-        with _batch_processing_state['lock']:
-            if _batch_processing_state['cancel_requested']:
-                print(f"[CANCELLED] Skipping session {session_id[:8]} ({username}) - cancellation requested")
-                session_result['errors'].append("Processing cancelled by user")
-                return session_result, False, False
-
-        # Process PHQ
+        # Queue PHQ if exists
         if session.phq_completed_at:
             try:
-                print(f"[INFO] Processing PHQ for session {session_id[:8]} ({username})")
-                phq_result = FacialAnalysisProcessingService.process_session_assessment(
+                phq_result = FacialAnalysisBackgroundService.queue_processing_task(
                     session_id=session_id,
                     assessment_type='PHQ',
-                    media_save_path=current_app.media_save
+                    media_save_path=current_app.media_save,
+                    scheduler=scheduler_service.scheduler
                 )
-                phq_dict = phq_result.model_dump()
-                session_result['phq'] = phq_dict
-                if not phq_result.success:
-                    session_result['errors'].append(f"PHQ: {phq_result.message}")
-                else:
-                    phq_success = True
-                print(f"[OK] PHQ completed for {username}: {phq_result.success}")
+                status = phq_result.get('status', 'unknown')
+                if status == 'queued':
+                    queued_count += 1
+                    print(f"[QUEUED] PHQ for {username} ({session_id[:8]})")
+                elif status == 'already_processing':
+                    already_processing += 1
+                    print(f"[SKIP] PHQ for {username} - already processing")
+                elif status == 'already_completed':
+                    already_completed += 1
+                    print(f"[SKIP] PHQ for {username} - already completed")
             except Exception as e:
-                session_result['phq'] = {"success": False, "message": str(e)}
-                session_result['errors'].append(f"PHQ exception: {str(e)}")
-                print(f"[ERROR] PHQ failed for {username}: {str(e)}")
-        else:
-            session_result['phq'] = {"success": False, "message": "PHQ assessment not completed"}
-            session_result['errors'].append("PHQ assessment not completed")
+                error_msg = f"Failed to queue PHQ for {username}: {str(e)}"
+                errors.append(error_msg)
+                print(f"[ERROR] {error_msg}")
 
-        # Process LLM
+        # Queue LLM if exists
         if session.llm_completed_at:
             try:
-                print(f"[INFO] Processing LLM for session {session_id[:8]} ({username})")
-                llm_result = FacialAnalysisProcessingService.process_session_assessment(
+                llm_result = FacialAnalysisBackgroundService.queue_processing_task(
                     session_id=session_id,
                     assessment_type='LLM',
-                    media_save_path=current_app.media_save
+                    media_save_path=current_app.media_save,
+                    scheduler=scheduler_service.scheduler
                 )
-                llm_dict = llm_result.model_dump()
-                session_result['llm'] = llm_dict
-                if not llm_result.success:
-                    session_result['errors'].append(f"LLM: {llm_result.message}")
-                else:
-                    llm_success = True
-                print(f"[OK] LLM completed for {username}: {llm_result.success}")
+                status = llm_result.get('status', 'unknown')
+                if status == 'queued':
+                    queued_count += 1
+                    print(f"[QUEUED] LLM for {username} ({session_id[:8]})")
+                elif status == 'already_processing':
+                    already_processing += 1
+                    print(f"[SKIP] LLM for {username} - already processing")
+                elif status == 'already_completed':
+                    already_completed += 1
+                    print(f"[SKIP] LLM for {username} - already completed")
             except Exception as e:
-                session_result['llm'] = {"success": False, "message": str(e)}
-                session_result['errors'].append(f"LLM exception: {str(e)}")
-                print(f"[ERROR] LLM failed for {username}: {str(e)}")
-        else:
-            session_result['llm'] = {"success": False, "message": "LLM assessment not completed"}
-            session_result['errors'].append("LLM assessment not completed")
-
-        return session_result, phq_success, llm_success
-
-    # Process sessions in parallel using ThreadPoolExecutor
-    # Use 3 workers: allows multiple sessions to process simultaneously without overloading
-    # Each session internally uses 4 workers for image processing
-    print(f"[INFO] Processing {len(sessions)} sessions with 3 parallel workers...")
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        # Submit all sessions to executor
-        futures = {
-            executor.submit(process_single_session, session_data): session_data[0].id
-            for session_data in sessions
-        }
-
-        # Collect results as they complete
-        completed_count = 0
-        for future in as_completed(futures):
-            try:
-                session_result, phq_success, llm_success = future.result()
-
-                with results_lock:
-                    results[session_result['session_id']] = session_result
-                    if phq_success and llm_success:
-                        summary['completed'] += 1
-                    elif phq_success or llm_success:
-                        summary['partial'] += 1
-                    else:
-                        summary['failed'] += 1
-                    completed_count += 1
-
-                    if completed_count % 10 == 0:
-                        print(f"[PROGRESS] Completed {completed_count}/{len(sessions)} sessions")
-            except Exception as e:
-                print(f"[ERROR] Thread exception: {str(e)}")
-                # Continue processing other sessions even if one fails
-
-    # Convert results dict back to list for JSON response
-    results_list = list(results.values())
-
-    overall_success = summary['completed'] > 0 and summary['failed'] == 0
+                error_msg = f"Failed to queue LLM for {username}: {str(e)}"
+                errors.append(error_msg)
+                print(f"[ERROR] {error_msg}")
 
     message = (
-        f"Processed {summary['total_sessions']} sessions in parallel. "
-        f"Completed: {summary['completed']}, "
-        f"Partial: {summary['partial']}, "
-        f"Failed: {summary['failed']}."
+        f"Queued {queued_count} assessments for processing. "
+        f"Already processing: {already_processing}, "
+        f"Already completed: {already_completed}."
     )
 
-    print(f"[COMPLETE] Batch processing complete: {message}")
+    if errors:
+        message += f" Errors: {len(errors)}"
 
-    # Reset processing state
-    with _batch_processing_state['lock']:
-        _batch_processing_state['is_running'] = False
-        _batch_processing_state['cancel_requested'] = False
+    print(f"[COMPLETE] Batch queuing complete: {message}")
 
     return {
-        "success": overall_success,
+        "success": queued_count > 0,
         "message": message,
-        "summary": summary,
-        "results": results_list
+        "summary": {
+            "total_sessions": len(sessions),
+            "queued": queued_count,
+            "already_processing": already_processing,
+            "already_completed": already_completed,
+            "errors": len(errors)
+        },
+        "error_details": errors if errors else None
     }, 200
 
 

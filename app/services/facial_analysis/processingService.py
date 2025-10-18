@@ -16,8 +16,10 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
+import asyncio
 
 from ...db import get_session
+from .asyncBatchProcessor import BatchedAsyncProcessor
 from ...model.assessment.sessions import AssessmentSession, CameraCapture, PHQResponse, LLMConversation
 from ...model.assessment.facial_analysis import SessionFacialAnalysis
 from ...facial_analysis.client.inference_client import FacialInferenceClient
@@ -525,6 +527,30 @@ class FacialAnalysisProcessingService:
             avg_time_per_image_ms=avg_time_per_image_ms,
             summary_stats=summary_stats_dict,
             errors=failure_details or None
+        )
+
+    @staticmethod
+    def _process_images_async(session_id: str, assessment_type: str, assessment_id: str,
+                              analysis_id: str, grpc_host: str, grpc_port: int,
+                              device: str, media_save_path: Optional[str]) -> ProcessingResult:
+        """
+        ASYNC BATCH PROCESSING VERSION (Non-blocking, better Flask performance)
+
+        Process images using async batching:
+        1. Send batches to gRPC asynchronously (non-blocking)
+        2. Collect results as they complete
+        3. Batch write to DB
+        4. Sequential JSONL output
+        """
+        print(f"[INFO] Starting ASYNC batch processing for {assessment_type}")
+
+        # This is the new async method - use asyncio.run() to execute
+        # For now, returning a placeholder until full implementation
+        # The old _process_images method is still available as fallback
+
+        return ProcessingResult(
+            success=False,
+            message="Async processing not yet fully implemented - use synchronous method"
         )
 
     @staticmethod

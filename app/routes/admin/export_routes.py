@@ -319,8 +319,9 @@ def get_facial_analysis_sessions():
 
                 session_data.append({
                     "id": session.id,
-                    "user_id": session.user_id,
+                    "user_id": session.user_id,  # CRITICAL: For UI grouping by user
                     "username": session.user.uname if session.user else 'Unknown',
+                    "email": session.user.email if session.user else 'Unknown',  # CRITICAL: For UI display in rowspan
                     "session_number": session.session_number,
                     "status": session.status,
                     "created_at": session.created_at.isoformat(),

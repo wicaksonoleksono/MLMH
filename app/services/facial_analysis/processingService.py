@@ -206,7 +206,7 @@ class FacialAnalysisProcessingService:
 
             # Extract image data with timing - MATCH EXPORT SERVICE METHOD
             image_data: List[ImageDataForProcessing] = []
-            print(f"[DEBUG] Found {len(captures)} captures for session_id={session_id}, assessment_id={assessment_id}")
+            # print(f"[DEBUG] Found {len(captures)} captures for session_id={session_id}, assessment_id={assessment_id}")
 
             for capture in captures:
                 # Skip if no filenames (match export service logic)
@@ -214,7 +214,7 @@ class FacialAnalysisProcessingService:
                     print(f"[DEBUG] Skipping capture {capture.id} - no filenames")
                     continue
 
-                print(f"[DEBUG] Processing capture: type={capture.capture_type}, filenames={capture.filenames}")
+                # print(f"[DEBUG] Processing capture: type={capture.capture_type}, filenames={capture.filenames}")
 
                 # Iterate through filenames array (match export service)
                 for filename in capture.filenames:

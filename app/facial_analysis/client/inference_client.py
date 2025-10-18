@@ -26,20 +26,22 @@ except ImportError:
 class FacialInferenceClient:
     """Client for facial analysis gRPC service"""
 
-    def __init__(self, host: str, port: int, timeout: int = 30):
+    def __init__(self, host: str, port: int, timeout: Optional[int] = None):
         """
         Initialize gRPC client
 
         Args:
             host: gRPC server host (required)
             port: gRPC server port (required)
-            timeout: Request timeout in seconds
+            timeout: Request timeout in seconds (None = infinite, for long image processing)
         """
         if not host or not port:
             raise ValueError("host and port are required - NO DEFAULTS")
 
         self.address = f'{host}:{port}'
-        self.timeout = timeout
+        # For image processing: use infinite timeout (None)
+        # Images can take minutes to process, especially with many images
+        self.timeout = timeout  # None = no timeout
         self.channel = None
         self.stub = None
 
@@ -93,13 +95,14 @@ class FacialInferenceClient:
                 'message': f'Error: {str(e)}'
             }
 
-    def analyze_image(self, image_path: str, device: str = 'cpu') -> Dict[str, Any]:
+    def analyze_image(self, image_path: str, device: str = 'cpu', retry_count: int = 0) -> Dict[str, Any]:
         """
-        Analyze facial expression in image
+        Analyze facial expression in image with retry logic
 
         Args:
             image_path: Absolute path to image file
             device: 'cpu' or 'cuda:0'
+            retry_count: Internal retry counter (don't set manually)
 
         Returns:
             {
@@ -113,6 +116,8 @@ class FacialInferenceClient:
                 'processing_time_ms': int
             }
         """
+        max_retries = 3
+
         if not self.stub:
             if not self.connect():
                 return {
@@ -127,7 +132,7 @@ class FacialInferenceClient:
                 device=device
             )
 
-            # Call gRPC service
+            # Call gRPC service with NO timeout for long image processing
             response = self.stub.AnalyzeImage(request, timeout=self.timeout)
 
             # Convert protobuf to dict
@@ -183,14 +188,34 @@ class FacialInferenceClient:
             return result
 
         except grpc.RpcError as e:
+            error_msg = f'gRPC error: {e.details()}'
+            print(f"[gRPC ERROR] {error_msg} (attempt {retry_count + 1}/{max_retries})")
+
+            # Retry on transient errors
+            if retry_count < max_retries and e.code() in [grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED]:
+                print(f"[RETRY] Retrying image: {image_path}")
+                import time
+                time.sleep(1)  # Wait before retry
+                return self.analyze_image(image_path, device, retry_count + 1)
+
             return {
                 'success': False,
-                'error_message': f'gRPC error: {e.details()}'
+                'error_message': error_msg
             }
         except Exception as e:
+            error_msg = f'Error: {str(e)}'
+            print(f"[EXCEPTION] {error_msg} (attempt {retry_count + 1}/{max_retries})")
+
+            # Retry on transient errors
+            if retry_count < max_retries:
+                print(f"[RETRY] Retrying image: {image_path}")
+                import time
+                time.sleep(1)
+                return self.analyze_image(image_path, device, retry_count + 1)
+
             return {
                 'success': False,
-                'error_message': f'Error: {str(e)}'
+                'error_message': error_msg
             }
 
     def __enter__(self):

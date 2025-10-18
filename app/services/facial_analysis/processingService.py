@@ -14,6 +14,8 @@ import json
 import os
 from datetime import datetime
 from typing import Optional, Dict, Any, List
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 from ...db import get_session
 from ...model.assessment.sessions import AssessmentSession, CameraCapture, PHQResponse, LLMConversation
@@ -284,6 +286,10 @@ class FacialAnalysisProcessingService:
         total_inference_time_ms = 0
         failure_details: List[Dict[str, Any]] = []
 
+        # Thread-safe locks for shared state
+        stats_lock = threading.Lock()
+        jsonl_lock = threading.Lock()
+
         with open(full_results_path, 'w') as jsonl_file:
             # Line 1: Write metadata wrapper
             metadata = {
@@ -292,31 +298,99 @@ class FacialAnalysisProcessingService:
                 'assessment_id': assessment_id,
                 'assessment_type': assessment_type,
                 'total_images': len(image_data),
-                'started_at': start_time.isoformat()
+                'started_at': start_time.isoformat(),
+                'parallel_workers': 4  # Indicate parallel processing
             }
             jsonl_file.write(json.dumps(metadata) + '\n')
 
-            # Lines 2-N: Stream each image result as it's processed
-            for img_data in image_data:
+            # Process images in parallel using ThreadPoolExecutor
+            # 4 workers match the gRPC server workers
+            print(f"[INFO] Starting parallel processing with 4 workers for {len(image_data)} images")
+
+            def process_single_image(idx_data):
+                """Process a single image and return result dict"""
+                idx, img_data = idx_data
                 filename = img_data.filename
-                timing = img_data.timing  # CaptureTimingData Pydantic model
-                timestamp = img_data.timestamp  # ISO timestamp
+                timing = img_data.timing
+                timestamp = img_data.timestamp
                 image_path = os.path.join(media_save_path or '', filename)
-                # print(f"[DEBUG] Processing image: {filename} -> {image_path}")
+
+                result_entry = {
+                    'index': idx,
+                    'filename': filename,
+                    'timing': timing,
+                    'timestamp': timestamp,
+                    'inference_result': None,
+                    'success': False,
+                    'error': None
+                }
+
+                # Check if image exists
                 if not os.path.exists(image_path):
-                    print(f"[ERROR] Image not found: {image_path}")
-                    failed += 1
+                    result_entry['error'] = f'Image not found: {image_path}'
+                    print(f"[ERROR] Image {idx + 1}/{len(image_data)} not found: {filename}")
+                    return result_entry
+
+                # Call gRPC service for inference (parallel!)
+                print(f"[INFO] Processing image {idx + 1}/{len(image_data)}: {filename}")
+                try:
+                    inference_result = client.analyze_image(image_path, device=device)
+                    result_entry['inference_result'] = inference_result
+                    result_entry['success'] = inference_result.get('success', False)
+
+                    if not result_entry['success']:
+                        result_entry['error'] = inference_result.get('error_message', 'Unknown error')
+
+                    return result_entry
+                except Exception as e:
+                    result_entry['error'] = str(e)
+                    print(f"[ERROR] Exception processing image {idx + 1}: {filename} - {str(e)}")
+                    return result_entry
+
+            # Submit all images to thread pool for parallel processing
+            # But collect results in order by image index to maintain JSONL sequence
+            results_by_index = {}  # Store results keyed by original image index
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = {
+                    executor.submit(process_single_image, (idx, img_data)): idx
+                    for idx, img_data in enumerate(image_data)
+                }
+
+                # Collect all results (can complete in any order from threads)
+                print(f"[INFO] Processing {len(image_data)} images in parallel...")
+                for future in as_completed(futures):
+                    try:
+                        result_entry = future.result()
+                        idx = result_entry['index']
+                        results_by_index[idx] = result_entry
+                        print(f"[INFO] Completed image {idx + 1}/{len(image_data)}")
+                    except Exception as e:
+                        print(f"[ERROR] Thread exception: {str(e)}")
+
+            # Write results to JSONL in SEQUENTIAL order (by original image index)
+            print(f"[INFO] Writing results to JSONL in sequential order...")
+            for idx in range(len(image_data)):
+                if idx not in results_by_index:
+                    print(f"[WARNING] Image {idx + 1} missing from results")
                     continue
 
-                # Call gRPC service for inference
-                inference_result = client.analyze_image(image_path, device=device)
+                result_entry = results_by_index[idx]
+                filename = result_entry['filename']
+                timing = result_entry['timing']
+                timestamp = result_entry['timestamp']
+                inference_result = result_entry['inference_result']
 
-                total_processed += 1
+                with stats_lock:
+                    total_processed += 1
 
-                if not inference_result.get('success'):
-                    failed += 1
-                    error_message = inference_result.get('error_message') or 'Unknown inference error'
-                    print(f"[WARNING] Facial analysis failed for {filename}: {error_message}")
+                if result_entry['error']:
+                    with stats_lock:
+                        failed += 1
+
+                    error_message = result_entry['error']
+                    print(f"[ERROR] Image {total_processed}/{len(image_data)} failed: {filename}")
+                    print(f"[ERROR] Error message: {error_message}")
+
                     failure_detail = {
                         'filename': filename,
                         'assessment_type': assessment_type,
@@ -339,9 +413,10 @@ class FacialAnalysisProcessingService:
                     jsonl_file.write(json.dumps(error_entry) + '\n')
                     continue
 
-                if inference_result['success']:
-                    faces_detected += 1
-                    total_inference_time_ms += inference_result.get('processing_time_ms', 0)
+                if inference_result and inference_result['success']:
+                    with stats_lock:
+                        faces_detected += 1
+                        total_inference_time_ms += inference_result.get('processing_time_ms', 0)
 
                     # Build structured Pydantic models for analysis data
                     head_pose = HeadPoseData(**inference_result['head_pose'])
@@ -358,7 +433,7 @@ class FacialAnalysisProcessingService:
                     image_result = FacialAnalysisImageResult(
                         filename=filename,
                         assessment_type=assessment_type,
-                        timing=timing,  # Already a CaptureTimingData model
+                        timing=timing,
                         timestamp=timestamp,
                         analysis=facial_analysis,
                         inference_time_ms=inference_result['processing_time_ms']
@@ -367,7 +442,7 @@ class FacialAnalysisProcessingService:
                     # Keep for summary calculation
                     results_for_summary.append(image_result)
 
-                    # Stream write to JSONL immediately
+                    # Write to JSONL in sequential order
                     result_dict = image_result.model_dump()
                     result_dict['type'] = 'result'
                     jsonl_file.write(json.dumps(result_dict) + '\n')

@@ -160,12 +160,12 @@ start_server() {
 
     PORT=$GRPC_FACIAL_ANALYSIS_PORT
     DEVICE=$GRPC_FACIAL_ANALYSIS_DEVICE
-    WORKERS=1
+    WORKERS=4              # Parallel inference threads for faster processing
 
     echo "Starting gRPC Facial Analysis Server..."
     echo "  Port: $PORT"
     echo "  Device: $DEVICE"
-    echo "  Workers: $WORKERS"
+    echo "  Workers: $WORKERS (parallel inference threads)"
     echo "  Log: $LOG_FILE"
 
     nohup python app/facial_analysis/server/inference_server.py \

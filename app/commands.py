@@ -1778,3 +1778,38 @@ def register_commands(app):
             traceback.print_exc()
             raise
 
+    @app.cli.command("fix-foreign-key-cascade")
+    @click.confirmation_option(prompt="This will modify the assessment_sessions foreign key to add CASCADE DELETE. Are you sure?")
+    def fix_foreign_key_cascade():
+        """Add CASCADE DELETE to assessment_sessions.user_id foreign key"""
+        click.echo("[OLKORECT] Fixing foreign key constraint to add CASCADE DELETE...")
+
+        try:
+            engine = get_engine()
+            with engine.connect() as conn:
+                # Step 1: Drop existing foreign key
+                click.echo("  - Dropping existing foreign key constraint...")
+                conn.execute(text("""
+                    ALTER TABLE assessment_sessions
+                    DROP CONSTRAINT IF EXISTS assessment_sessions_user_id_fkey
+                """))
+
+                # Step 2: Re-add with CASCADE DELETE
+                click.echo("  - Adding foreign key with CASCADE DELETE...")
+                conn.execute(text("""
+                    ALTER TABLE assessment_sessions
+                    ADD CONSTRAINT assessment_sessions_user_id_fkey
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                """))
+
+                conn.commit()
+
+                click.echo("[OLKORECT] Foreign key constraint updated successfully!")
+                click.echo("  ✓ Assessment sessions will now be automatically deleted when user is deleted")
+                click.echo("  ✓ OTP cleanup will now work without foreign key violations")
+
+        except Exception as e:
+            click.echo(f"[SNAFU] Failed to update foreign key: {str(e)}")
+            click.echo("This command works with PostgreSQL. For other databases, modify the SQL syntax.")
+            raise
+

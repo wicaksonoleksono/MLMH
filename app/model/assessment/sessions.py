@@ -10,7 +10,7 @@ class AssessmentSession(BaseModel):
     __tablename__ = 'assessment_sessions'
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
 
     # FK references to admin settings used for this session
     phq_settings_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey('phq_settings.id'), nullable=True)

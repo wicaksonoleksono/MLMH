@@ -22,77 +22,98 @@ download_weights() {
     activate_venv
 
     WEIGHTS_DIR="$SCRIPT_DIR/weights_libreface"
-    mkdir -p "$WEIGHTS_DIR"
 
     echo "Downloading LibreFace weights to $WEIGHTS_DIR ..."
-    if python -m libreface.cli download-weights --output "$WEIGHTS_DIR" 2>/dev/null; then
-        echo "✓ Weights downloaded successfully via LibreFace CLI"
+    echo "This will use LibreFace's automatic download feature..."
+
+    # Create a temporary Python script to trigger weight download
+    TMP_SCRIPT=$(mktemp --suffix=.py)
+    cat > "$TMP_SCRIPT" << 'PYTHON_EOF'
+import os
+import sys
+from pathlib import Path
+
+try:
+    import libreface
+
+    # Get the weights directory argument
+    weights_dir = sys.argv[1] if len(sys.argv) > 1 else "./weights_libreface"
+    weights_path = Path(weights_dir).resolve()
+    weights_path.mkdir(parents=True, exist_ok=True)
+
+    print(f"Triggering LibreFace weight download to: {weights_path}")
+
+    # LibreFace automatically downloads weights when initialized
+    # We'll use a dummy image path to trigger the download
+    # The actual processing doesn't matter, we just need to trigger weight download
+
+    # Create a minimal test to trigger weight download
+    import numpy as np
+    from PIL import Image
+
+    # Create a dummy image (required to trigger initialization)
+    dummy_img = Image.fromarray(np.zeros((224, 224, 3), dtype=np.uint8))
+    dummy_path = weights_path / "dummy_test.jpg"
+    dummy_img.save(dummy_path)
+
+    # This will trigger automatic weight download
+    try:
+        # Set the weights directory via environment variable if supported
+        os.environ['LIBREFACE_WEIGHTS_DIR'] = str(weights_path)
+
+        result = libreface.get_facial_attributes(
+            str(dummy_path),
+            weights_download_dir=str(weights_path)
+        )
+        print("✓ Weights downloaded successfully!")
+
+        # Clean up dummy file
+        dummy_path.unlink()
+
+    except Exception as e:
+        print(f"Note: Weight download triggered but processing failed (expected): {e}")
+        print("Checking if weights were downloaded...")
+
+        # Check if any weight files exist
+        weight_files = list(weights_path.glob("*.onnx")) + list(weights_path.glob("*.tflite")) + list(weights_path.glob("*.pt"))
+        if weight_files:
+            print(f"✓ Found {len(weight_files)} weight files:")
+            for wf in weight_files:
+                print(f"  - {wf.name}")
+        else:
+            print("⚠ WARNING: No weight files found. LibreFace may download weights on first actual use.")
+            sys.exit(1)
+
+        # Clean up dummy file if it exists
+        if dummy_path.exists():
+            dummy_path.unlink()
+
+except ImportError as e:
+    print(f"ERROR: LibreFace not installed properly: {e}")
+    sys.exit(1)
+except Exception as e:
+    print(f"ERROR: Failed to download weights: {e}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+PYTHON_EOF
+
+    # Run the Python script with the weights directory
+    if python "$TMP_SCRIPT" "$WEIGHTS_DIR"; then
+        rm "$TMP_SCRIPT"
+        echo "✓ LibreFace weights installation complete at $WEIGHTS_DIR"
+        echo ""
+        echo "Weight files downloaded:"
+        ls -lh "$WEIGHTS_DIR"
         return 0
-    fi
-
-    echo "LibreFace CLI unavailable; falling back to manual download from GitHub releases..."
-
-    ZIP_URL=${LIBREFACE_WEIGHTS_URL:-https://github.com/ihp-lab/LibreFace/releases/download/v0.1.1/libreface_weights.zip}
-    TMP_DIR=$(mktemp -d)
-    ZIP_FILE="$TMP_DIR/libreface_weights.zip"
-
-    if command -v curl >/dev/null 2>&1; then
-        if ! curl -L -o "$ZIP_FILE" "$ZIP_URL"; then
-            echo "ERROR: Failed to download weights archive with curl"
-            rm -rf "$TMP_DIR"
-            exit 1
-        fi
-    elif command -v wget >/dev/null 2>&1; then
-        if ! wget -O "$ZIP_FILE" "$ZIP_URL"; then
-            echo "ERROR: Failed to download weights archive with wget"
-            rm -rf "$TMP_DIR"
-            exit 1
-        fi
     else
-        echo "ERROR: Neither curl nor wget is available to download weights"
-        rm -rf "$TMP_DIR"
+        rm "$TMP_SCRIPT"
+        echo "ERROR: Failed to download LibreFace weights"
+        echo ""
+        echo "Alternative: Weights will be auto-downloaded on first inference run."
+        echo "The server will download weights automatically when processing the first image."
         exit 1
     fi
-
-    EXTRACT_DIR="$TMP_DIR/extracted"
-    mkdir -p "$EXTRACT_DIR"
-    if ! unzip -q "$ZIP_FILE" -d "$EXTRACT_DIR"; then
-        echo "ERROR: Failed to unzip downloaded weights archive"
-        rm -rf "$TMP_DIR"
-        exit 1
-    fi
-
-    declare -A REQUIRED_FILES=(
-        [detector]="detector.onnx face_detector.onnx"
-        [expression]="expression.onnx expression_model.onnx"
-        [action_units]="action_units.onnx au_model.onnx action_units_model.onnx"
-        [landmarks]="landmarks_2d.tflite face_landmarks.tflite landmarks.tflite landmarks.onnx"
-    )
-
-    for category in "${!REQUIRED_FILES[@]}"; do
-        candidates=${REQUIRED_FILES[$category]}
-        primary=$(echo "$candidates" | awk '{print $1}')
-        found_file=""
-        for candidate in $candidates; do
-            candidate_path=$(find "$EXTRACT_DIR" -name "$candidate" -print -quit)
-            if [ -n "$candidate_path" ]; then
-                found_file="$candidate_path"
-                break
-            fi
-        done
-        if [ -n "$found_file" ]; then
-            cp "$found_file" "$WEIGHTS_DIR/$primary"
-            echo "  ✓ ${category} weights -> $(basename "$primary")"
-        else
-            echo "  ⚠ WARNING: Could not find weights for ${category} in archive"
-        fi
-    done
-
-    # Copy any remaining files for reference (optional)
-    find "$EXTRACT_DIR" -maxdepth 1 -type f -name "*.pt" -exec cp {} "$WEIGHTS_DIR/" \;
-
-    rm -rf "$TMP_DIR"
-    echo "✓ Manual weight download complete"
 }
 
 # Activate virtual environment

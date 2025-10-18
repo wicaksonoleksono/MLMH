@@ -1216,7 +1216,7 @@ function getFacialAnalysisActionButton(session) {
 
 // Process facial analysis session
 async function processFacialAnalysisSession(sessionId) {
-  if (!confirm('Start facial analysis processing for this session?\n\nThis will process both PHQ and LLM assessments.')) {
+  if (!confirm('Start facial analysis processing for this session?\n\nThis will process both PHQ and LLM assessments in the background.\n\nYou can close this page, the processing will continue.')) {
     return;
   }
 
@@ -1228,18 +1228,76 @@ async function processFacialAnalysisSession(sessionId) {
       }
     });
 
+    // Check if response is JSON
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      alert('Server error: Expected JSON response but got HTML.\n\nThis usually means the server encountered an internal error.\n\nPlease check server logs.');
+      return;
+    }
+
     const result = await response.json();
     const data = result.status === 'OLKORECT' ? result.data : result;
 
     if (data.success) {
-      alert('Processing started successfully!\n\nPHQ: ' + (data.phq?.message || 'N/A') + '\nLLM: ' + (data.llm?.message || 'N/A'));
+      alert('Processing queued successfully!\n\nPHQ Task ID: ' + (data.phq_task_id || 'N/A') + '\nLLM Task ID: ' + (data.llm_task_id || 'N/A') + '\n\nProcessing happens in background. Refresh to see updated status.');
       loadFacialAnalysisSessions(); // Reload to show updated status
+
+      // Start polling for status updates every 5 seconds
+      pollProcessingStatus(sessionId, data.phq_task_id, data.llm_task_id);
     } else {
       alert('Processing failed:\n\n' + (data.message || 'Unknown error'));
     }
   } catch (error) {
     alert('Error starting processing:\n\n' + error.message);
   }
+}
+
+// Poll for processing status
+async function pollProcessingStatus(sessionId, phqTaskId, llmTaskId, maxPollCount = 720) {
+  // Poll for up to 1 hour (720 * 5 seconds = 3600 seconds)
+  let pollCount = 0;
+
+  const pollInterval = setInterval(async () => {
+    pollCount++;
+
+    try {
+      const phqStatus = await fetch(`/admin/facial-analysis/task-status/${sessionId}/PHQ`).then(r => r.json());
+      const llmStatus = await fetch(`/admin/facial-analysis/task-status/${sessionId}/LLM`).then(r => r.json());
+
+      const phqData = phqStatus.status === 'OLKORECT' ? phqStatus.data : phqStatus;
+      const llmData = llmStatus.status === 'OLKORECT' ? llmStatus.data : llmStatus;
+
+      console.log(`[Poll #${pollCount}] PHQ: ${phqData.details?.status || 'unknown'}, LLM: ${llmData.details?.status || 'unknown'}`);
+
+      // Check if both are done
+      const phqDone = ['completed', 'failed'].includes(phqData.details?.status);
+      const llmDone = ['completed', 'failed'].includes(llmData.details?.status);
+
+      if (phqDone && llmDone) {
+        clearInterval(pollInterval);
+        console.log('Processing complete!');
+
+        // Build summary message
+        const phqMsg = phqData.details?.status === 'completed' ? '✓ PHQ completed' : '✗ PHQ failed';
+        const llmMsg = llmData.details?.status === 'completed' ? '✓ LLM completed' : '✗ LLM failed';
+
+        alert(`Processing finished!\n\n${phqMsg}\n${llmMsg}`);
+        loadFacialAnalysisSessions(); // Reload to show final status
+        return;
+      }
+
+      // Stop polling after max attempts
+      if (pollCount >= maxPollCount) {
+        clearInterval(pollInterval);
+        alert('Polling timeout. Processing may still be running in the background.');
+        loadFacialAnalysisSessions();
+        return;
+      }
+
+    } catch (error) {
+      console.error('Error polling status:', error);
+    }
+  }, 5000); // Poll every 5 seconds
 }
 
 async function reanalyzeFacialAnalysisSession(sessionId) {

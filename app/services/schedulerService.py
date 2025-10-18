@@ -45,13 +45,16 @@ class SchedulerService:
         """Register all scheduled jobs"""
         if self._jobs_registered:
             return
-            
+
         # Job 1: OTP Cleanup - Process scheduled deletions hourly
         self._add_otp_cleanup_job(app)
-        
+
         # Job 2: SESMAN Notifications - Daily at specified hour
         self._add_sesman_notification_job(app)
-        
+
+        # Job 3: Facial Analysis Task Cleanup - Daily cleanup of old task history
+        self._add_facial_analysis_cleanup_job(app)
+
         self._jobs_registered = True
         logger.info("All scheduled jobs registered successfully")
     
@@ -74,7 +77,7 @@ class SchedulerService:
     def _add_sesman_notification_job(self, app):
         """Add daily job for Session 2 notifications"""
         notification_hour = app.config.get('SESMAN_NOTIFICATION_HOUR', 9)
-        
+
         self.scheduler.add_job(
             func=self._execute_sesman_notifications,
             trigger=CronTrigger(hour=notification_hour, minute=0),
@@ -86,6 +89,20 @@ class SchedulerService:
             kwargs={'app': app}
         )
         logger.info(f"SESMAN notification job scheduled daily at {notification_hour}:00")
+
+    def _add_facial_analysis_cleanup_job(self, app):
+        """Add daily job to cleanup old facial analysis task history"""
+        self.scheduler.add_job(
+            func=self._execute_facial_analysis_cleanup,
+            trigger=CronTrigger(hour=2, minute=0),  # 2 AM daily
+            id='facial_analysis_task_cleanup',
+            name='Facial Analysis Task Cleanup Job',
+            replace_existing=True,
+            max_instances=1,
+            misfire_grace_time=3600,  # 1 hour grace time
+            kwargs={'app': app}
+        )
+        logger.info("Facial analysis task cleanup job scheduled daily at 02:00")
     
     def _execute_otp_cleanup(self, app):
         """Execute OTP cleanup task within Flask app context"""
@@ -181,6 +198,25 @@ class SchedulerService:
                     'error': str(e)
                 }
     
+    def _execute_facial_analysis_cleanup(self, app):
+        """Execute facial analysis task cleanup within Flask app context"""
+        with app.app_context():
+            try:
+                logger.info("Starting facial analysis task cleanup...")
+
+                from .facial_analysis.backgroundProcessingService import FacialAnalysisBackgroundService
+
+                # Clean up tasks older than 7 days
+                removed_count = FacialAnalysisBackgroundService.clean_old_tasks(days=7)
+
+                logger.info(f"Facial analysis cleanup completed: {removed_count} old tasks removed")
+                return {'removed_tasks': removed_count}
+
+            except Exception as e:
+                logger.error(f"Facial analysis cleanup task failed: {e}")
+                # Don't re-raise to prevent scheduler from stopping
+                return {'removed_tasks': 0, 'error': str(e)}
+
     def _shutdown_scheduler(self):
         """Gracefully shutdown the scheduler"""
         if self.scheduler and self.scheduler.running:

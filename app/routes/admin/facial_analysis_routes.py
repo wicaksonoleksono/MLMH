@@ -137,7 +137,10 @@ def get_eligible_sessions():
 @api_response
 def process_session(session_id):
     """
-    Start facial analysis processing for BOTH PHQ and LLM assessments in a session
+    Queue facial analysis processing for BOTH PHQ and LLM assessments (ASYNC)
+
+    Processing now happens in background. Returns immediately with task IDs.
+    Use /status endpoint to check progress.
 
     Args:
         session_id: Session UUID
@@ -146,10 +149,15 @@ def process_session(session_id):
         {
             "success": bool,
             "message": str,
-            "phq": {...},
-            "llm": {...}
+            "phq_task_id": str,
+            "llm_task_id": str,
+            "phq": {...task status...},
+            "llm": {...task status...}
         }
     """
+    from ...services.facial_analysis.backgroundProcessingService import FacialAnalysisBackgroundService
+    from ...services.schedulerService import scheduler_service
+
     # Check session exists
     with get_session() as db:
         session = db.query(AssessmentSession).filter_by(id=session_id).first()
@@ -158,80 +166,86 @@ def process_session(session_id):
 
     results = {
         "phq": None,
-        "llm": None
+        "llm": None,
+        "phq_task_id": None,
+        "llm_task_id": None
     }
 
     errors = []
 
-    # Process PHQ if it exists
+    # Queue PHQ processing if it exists
     if session.phq_completed_at:
         try:
-            phq_result = FacialAnalysisProcessingService.process_session_assessment(
+            phq_queue_result = FacialAnalysisBackgroundService.queue_processing_task(
                 session_id=session_id,
                 assessment_type='PHQ',
-                media_save_path=current_app.media_save
+                media_save_path=current_app.media_save,
+                scheduler=scheduler_service.scheduler
             )
-            # Convert Pydantic model to dict
-            results['phq'] = phq_result.model_dump()
+            results['phq'] = phq_queue_result
+            results['phq_task_id'] = phq_queue_result.get('task_id')
 
-            # Check if processing itself failed
-            if not phq_result.success:
-                errors.append(f"PHQ: {phq_result.message}")
+            if not phq_queue_result.get('success'):
+                errors.append(f"PHQ: {phq_queue_result.get('message')}")
         except Exception as e:
             import traceback
-            error_detail = f"PHQ exception: {str(e)}\n{traceback.format_exc()}"
-            print(f"[ERROR] {error_detail}")  # Log to console
-            errors.append(f"PHQ processing exception: {str(e)}")
+            error_detail = f"PHQ queuing exception: {str(e)}\n{traceback.format_exc()}"
+            print(f"[ERROR] {error_detail}")
+            errors.append(f"PHQ queuing exception: {str(e)}")
             results['phq'] = {"success": False, "message": str(e)}
     else:
         results['phq'] = {"success": False, "message": "PHQ assessment not completed"}
 
-    # Process LLM if it exists
+    # Queue LLM processing if it exists
     if session.llm_completed_at:
         try:
-            llm_result = FacialAnalysisProcessingService.process_session_assessment(
+            llm_queue_result = FacialAnalysisBackgroundService.queue_processing_task(
                 session_id=session_id,
                 assessment_type='LLM',
-                media_save_path=current_app.media_save
+                media_save_path=current_app.media_save,
+                scheduler=scheduler_service.scheduler
             )
-            # Convert Pydantic model to dict
-            results['llm'] = llm_result.model_dump()
+            results['llm'] = llm_queue_result
+            results['llm_task_id'] = llm_queue_result.get('task_id')
 
-            # Check if processing itself failed
-            if not llm_result.success:
-                errors.append(f"LLM: {llm_result.message}")
+            if not llm_queue_result.get('success'):
+                errors.append(f"LLM: {llm_queue_result.get('message')}")
         except Exception as e:
             import traceback
-            error_detail = f"LLM exception: {str(e)}\n{traceback.format_exc()}"
-            print(f"[ERROR] {error_detail}")  # Log to console
-            errors.append(f"LLM processing exception: {str(e)}")
+            error_detail = f"LLM queuing exception: {str(e)}\n{traceback.format_exc()}"
+            print(f"[ERROR] {error_detail}")
+            errors.append(f"LLM queuing exception: {str(e)}")
             results['llm'] = {"success": False, "message": str(e)}
     else:
         results['llm'] = {"success": False, "message": "LLM assessment not completed"}
 
-    # Determine overall success
-    phq_success = results['phq'] and results['phq'].get('success', False)
-    llm_success = results['llm'] and results['llm'].get('success', False)
+    # Determine overall success (based on queuing, not processing result)
+    phq_queued = results['phq'] and results['phq'].get('success', False)
+    llm_queued = results['llm'] and results['llm'].get('success', False)
 
-    if phq_success and llm_success:
+    if phq_queued and llm_queued:
         return {
             "success": True,
-            "message": "Both PHQ and LLM processed successfully",
+            "message": "Both PHQ and LLM queued for processing",
+            "phq_task_id": results['phq_task_id'],
+            "llm_task_id": results['llm_task_id'],
             "phq": results['phq'],
             "llm": results['llm']
-        }, 200
-    elif phq_success or llm_success:
+        }, 202  # 202 Accepted - request accepted for processing
+    elif phq_queued or llm_queued:
         return {
             "success": True,
-            "message": "Partial success - check individual results",
+            "message": "Processing queued (check individual status)",
+            "phq_task_id": results['phq_task_id'],
+            "llm_task_id": results['llm_task_id'],
             "phq": results['phq'],
             "llm": results['llm'],
             "errors": errors
-        }, 200
+        }, 202
     else:
         return {
             "success": False,
-            "message": "Processing failed for both assessments",
+            "message": "Failed to queue processing for both assessments",
             "phq": results['phq'],
             "llm": results['llm'],
             "errors": errors
@@ -358,13 +372,65 @@ def process_all_sessions():
     }, 200
 
 
+@facial_analysis_bp.route('/task-status/<session_id>/<assessment_type>', methods=['GET'])
+@login_required
+@admin_required
+@api_response
+def get_task_status(session_id, assessment_type):
+    """
+    Get background processing task status for a specific assessment
+
+    Args:
+        session_id: Session UUID
+        assessment_type: 'PHQ' or 'LLM'
+
+    Returns:
+        {
+            "success": bool,
+            "task_id": str,
+            "status": str,  # 'queued', 'processing', 'completed', 'failed', 'not_found'
+            "progress": int (0-100),
+            "started_at": str (ISO format),
+            "completed_at": str (ISO format),
+            "error": str or None,
+            "result": {...} or None
+        }
+    """
+    from ...services.facial_analysis.backgroundProcessingService import FacialAnalysisBackgroundService
+
+    # Validate assessment_type
+    if assessment_type not in ['PHQ', 'LLM']:
+        return {
+            "success": False,
+            "message": "Invalid assessment_type. Must be 'PHQ' or 'LLM'"
+        }, 400
+
+    try:
+        status = FacialAnalysisBackgroundService.get_task_status(
+            session_id=session_id,
+            assessment_type=assessment_type
+        )
+
+        return {
+            "success": True,
+            "status": status.get('status'),
+            "details": status
+        }, 200
+
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Failed to get task status: {str(e)}"
+        }, 500
+
+
 @facial_analysis_bp.route('/status/<session_id>/<assessment_type>', methods=['GET'])
 @login_required
 @admin_required
 @api_response
 def get_processing_status(session_id, assessment_type):
     """
-    Get processing status for a specific assessment
+    Get processing status for a specific assessment (DEPRECATED - use /task-status instead)
 
     Args:
         session_id: Session UUID

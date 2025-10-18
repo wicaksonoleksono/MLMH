@@ -338,9 +338,9 @@ function getActionButton(session) {
   return `<div class="flex flex-wrap gap-1">${buttons.join('')}</div>`;
 }
 
-// Process a session
+// Process a session (async background processing)
 async function processSession(sessionId) {
-  if (!confirm('Start facial analysis processing for this session?\n\nThis will process both PHQ and LLM assessments.')) {
+  if (!confirm('Start facial analysis processing for this session?\n\nThis will process both PHQ and LLM assessments in the background.\n\nYou can close this page, the processing will continue.')) {
     return;
   }
 
@@ -365,14 +365,78 @@ async function processSession(sessionId) {
     const data = result.status === 'OLKORECT' ? result.data : result;
 
     if (data.success) {
-      alert('Processing started successfully!\n\nPHQ: ' + (data.phq?.message || 'N/A') + '\nLLM: ' + (data.llm?.message || 'N/A'));
+      alert('Processing queued successfully!\n\nPHQ Task ID: ' + (data.phq_task_id || 'N/A') + '\nLLM Task ID: ' + (data.llm_task_id || 'N/A') + '\n\nProcessing happens in background. Refresh to see updated status.');
       loadSessions(); // Reload to show updated status
+
+      // Start polling for status updates
+      startStatusPolling(sessionId);
     } else {
       alert('Processing failed:\n\n' + (data.message || 'Unknown error'));
     }
   } catch (error) {
     alert('Error starting processing:\n\n' + error.message);
   }
+}
+
+// Start polling for processing status
+let activePollingIntervals = {};
+
+function startStatusPolling(sessionId, maxPollCount = 720) {
+  // Don't start multiple polls for same session
+  if (activePollingIntervals[sessionId]) {
+    return;
+  }
+
+  let pollCount = 0;
+  const pollInterval = setInterval(async () => {
+    pollCount++;
+
+    try {
+      // Fetch status for both assessments
+      const phqResponse = await fetch(`/admin/facial-analysis/task-status/${sessionId}/PHQ`);
+      const llmResponse = await fetch(`/admin/facial-analysis/task-status/${sessionId}/LLM`);
+
+      const phqData = (await phqResponse.json()).details || {};
+      const llmData = (await llmResponse.json()).details || {};
+
+      const phqStatus = phqData.status || 'unknown';
+      const llmStatus = llmData.status || 'unknown';
+
+      console.log(`[Poll #${pollCount}] Session ${sessionId.substring(0, 8)}: PHQ=${phqStatus}, LLM=${llmStatus}`);
+
+      // Check if both are done
+      const phqDone = ['completed', 'failed'].includes(phqStatus);
+      const llmDone = ['completed', 'failed'].includes(llmStatus);
+
+      if (phqDone && llmDone) {
+        clearInterval(pollInterval);
+        delete activePollingIntervals[sessionId];
+        console.log('Processing complete for session:', sessionId);
+
+        // Build summary
+        const phqMsg = phqStatus === 'completed' ? '✓ PHQ completed' : '✗ PHQ failed';
+        const llmMsg = llmStatus === 'completed' ? '✓ LLM completed' : '✗ LLM failed';
+
+        console.log(`Processing finished!\n\n${phqMsg}\n${llmMsg}`);
+        loadSessions(); // Refresh to show final status
+        return;
+      }
+
+      // Stop polling after timeout
+      if (pollCount >= maxPollCount) {
+        clearInterval(pollInterval);
+        delete activePollingIntervals[sessionId];
+        console.log('Polling timeout for session:', sessionId);
+        loadSessions();
+        return;
+      }
+
+    } catch (error) {
+      console.error('Error polling status:', error);
+    }
+  }, 5000); // Poll every 5 seconds
+
+  activePollingIntervals[sessionId] = pollInterval;
 }
 
 // Re-analyze an assessment

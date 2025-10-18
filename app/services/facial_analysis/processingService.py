@@ -363,8 +363,11 @@ class FacialAnalysisProcessingService:
 
             # PHASE 2: Process images in parallel using cached metadata
             # Submit all images to thread pool for parallel processing
-            print(f"[INFO] Phase 2: Processing {len(image_cache)} images in parallel...")
+            print(f"[INFO] Phase 2: Processing {len(image_cache)} images in parallel with 4 workers...")
             results_by_index = {}  # Store results keyed by original image index
+            import time
+            phase2_start = time.time()
+
             with ThreadPoolExecutor(max_workers=4) as executor:
                 futures = {
                     executor.submit(process_single_image, idx): idx
@@ -372,20 +375,35 @@ class FacialAnalysisProcessingService:
                 }
 
                 # Collect all results (can complete in any order from threads)
+                completed_count = 0
                 for future in as_completed(futures):
                     try:
                         result_entry = future.result()
                         idx = result_entry['index']
                         results_by_index[idx] = result_entry
-                        print(f"[INFO] Completed image {idx + 1}/{len(image_cache)}")
+                        completed_count += 1
+                        if completed_count % 100 == 0:  # Log every 100 images
+                            print(f"[INFO] Completed {completed_count}/{len(image_cache)} images")
                     except Exception as e:
+                        import traceback
+                        error_trace = traceback.format_exc()
                         print(f"[ERROR] Thread exception: {str(e)}")
+                        print(f"[TRACEBACK] {error_trace}")
+                        # Continue processing even if one thread fails
+                        continue
+
+                phase2_time = time.time() - phase2_start
+                print(f"[INFO] All {completed_count} threads completed in {phase2_time:.1f}s. Checking for missing results...")
+                if missing_indices := [i for i in range(len(image_cache)) if i not in results_by_index]:
+                    print(f"[WARNING] {len(missing_indices)} images missing results: {missing_indices[:10]}{'...' if len(missing_indices) > 10 else ''}")
 
             # PHASE 3: Write results to JSONL in SEQUENTIAL order (reorder by original mapping)
             print(f"[INFO] Phase 3: Reordering and writing results to JSONL in sequential order...")
+            missing_indices = []
             for idx in range(len(image_data)):
                 if idx not in results_by_index:
-                    print(f"[WARNING] Image {idx + 1} missing from results")
+                    print(f"[WARNING] Image {idx + 1} missing from results (no thread result)")
+                    missing_indices.append(idx)
                     continue
 
                 result_entry = results_by_index[idx]

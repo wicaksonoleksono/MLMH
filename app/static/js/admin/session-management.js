@@ -9,7 +9,6 @@ let currentSearchQuery = "";
 let searchDebounceTimer = null;
 let currentSortBy = "session_end";
 let currentSortOrder = "desc";
-let selectedUsers = new Set(); // Track selected user IDs
 
 // Tab configuration
 const tabConfig = {
@@ -388,15 +387,9 @@ function updateSelectedCount() {
 
     // Update button text based on current tab
     if (currentTab === "eligible") {
-      batchButton.textContent =
-        selectedCount > 0
-          ? "Send Selected Session 2 Notifications"
-          : "Send Selected Session 2 Notifications";
+      batchButton.textContent = "Send Selected Session 2 Notifications";
     } else {
-      batchButton.textContent =
-        selectedCount > 0
-          ? "Send Selected Reminders"
-          : "Send Selected Reminders";
+      batchButton.textContent = "Send Selected Reminders";
     }
   }
 
@@ -744,6 +737,9 @@ function updateEligibleUsersTable(headerEl, bodyEl, users) {
   `
     )
     .join("");
+
+  // Reset selected count after table update
+  updateSelectedCount();
 }
 
 // Update unstarted users table
@@ -1211,41 +1207,4 @@ function applySortFilter() {
   }
 }
 
-// Toggle user selection
-function toggleUserSelection(userId, checkbox) {
-  if (checkbox.checked) {
-    selectedUsers.add(userId);
-  } else {
-    selectedUsers.delete(userId);
-  }
-  updateSelectedCount();
-}
-
-// Toggle all users selection
-function toggleSelectAll(checkbox) {
-  const allCheckboxes = document.querySelectorAll('.user-checkbox');
-  allCheckboxes.forEach(cb => {
-    cb.checked = checkbox.checked;
-    const userId = parseInt(cb.dataset.userId);
-    if (checkbox.checked) {
-      selectedUsers.add(userId);
-    } else {
-      selectedUsers.delete(userId);
-    }
-  });
-  updateSelectedCount();
-}
-
-// Update selected count display
-function updateSelectedCount() {
-  const selectedCountElement = document.getElementById("selected-count");
-  const batchSendBtn = document.getElementById("send-batch-reminders-btn");
-
-  if (selectedCountElement) {
-    selectedCountElement.textContent = selectedUsers.size;
-  }
-
-  if (batchSendBtn) {
-    batchSendBtn.disabled = selectedUsers.size === 0;
-  }
-}
+// Note: toggleSelectAll for unstarted users is defined separately above (line ~421)

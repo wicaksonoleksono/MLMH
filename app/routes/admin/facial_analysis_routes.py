@@ -127,6 +127,9 @@ def get_eligible_sessions():
             elif phq_status == 'not_started' and llm_status == 'not_started':
                 stats['pending'] += 1
 
+        # Sort by user_id, then session_number for proper UI grouping
+        eligible_sessions.sort(key=lambda x: (x['user_id'], x['session_number']))
+
         return {
             'success': True,
             'sessions': eligible_sessions,

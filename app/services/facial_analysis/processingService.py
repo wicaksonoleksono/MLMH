@@ -278,6 +278,21 @@ class FacialAnalysisProcessingService:
         full_results_path = os.path.join(media_save_path or '', results_path)
         os.makedirs(os.path.dirname(full_results_path), exist_ok=True)
 
+        # PHASE 1: Memoize input metadata in memory (sequential mapping)
+        # NOTE: Only caching FILENAMES & PATHS, NOT image data (images stay on disk)
+        # This allows processing 1000s of images without RAM issues (e.g., 40GB+ image sets)
+        print(f"[INFO] Phase 1: Memoizing {len(image_data)} image metadata (filenames, paths, timing)...")
+        image_cache = {}  # Map index → filename/path/timing metadata (lightweight)
+        for idx, img_data in enumerate(image_data):
+            image_cache[idx] = {
+                'index': idx,
+                'filename': img_data.filename,  # Just the filename string
+                'timing': img_data.timing,      # Just timing data (small)
+                'timestamp': img_data.timestamp,  # Just timestamp string
+                'image_path': os.path.join(media_save_path or '', img_data.filename)  # Just the path string
+            }
+        print(f"[INFO] Cached {len(image_cache)} image metadata (~{len(image_cache) * 0.5}KB estimated)")
+
         # Open JSONL file for streaming writes
         results_for_summary: List[FacialAnalysisImageResult] = []
         total_processed = 0
@@ -288,18 +303,16 @@ class FacialAnalysisProcessingService:
 
         # Thread-safe locks for shared state
         stats_lock = threading.Lock()
-        jsonl_lock = threading.Lock()
 
         with open(full_results_path, 'w') as jsonl_file:
-            # Line 1: Write metadata wrapper
+            # Line 1: Write metadata wrapper (minimal, no worker info)
             metadata = {
                 'type': 'metadata',
                 'session_id': session_id,
                 'assessment_id': assessment_id,
                 'assessment_type': assessment_type,
                 'total_images': len(image_data),
-                'started_at': start_time.isoformat(),
-                'parallel_workers': 4  # Indicate parallel processing
+                'started_at': start_time.isoformat()
             }
             jsonl_file.write(json.dumps(metadata) + '\n')
 
@@ -307,13 +320,14 @@ class FacialAnalysisProcessingService:
             # 4 workers match the gRPC server workers
             print(f"[INFO] Starting parallel processing with 4 workers for {len(image_data)} images")
 
-            def process_single_image(idx_data):
-                """Process a single image and return result dict"""
-                idx, img_data = idx_data
-                filename = img_data.filename
-                timing = img_data.timing
-                timestamp = img_data.timestamp
-                image_path = os.path.join(media_save_path or '', filename)
+            def process_single_image(idx):
+                """Process a single image using cached metadata"""
+                # Retrieve from memory cache (already has all metadata sequentially mapped)
+                cached = image_cache[idx]
+                filename = cached['filename']
+                timing = cached['timing']
+                timestamp = cached['timestamp']
+                image_path = cached['image_path']
 
                 result_entry = {
                     'index': idx,
@@ -347,28 +361,28 @@ class FacialAnalysisProcessingService:
                     print(f"[ERROR] Exception processing image {idx + 1}: {filename} - {str(e)}")
                     return result_entry
 
+            # PHASE 2: Process images in parallel using cached metadata
             # Submit all images to thread pool for parallel processing
-            # But collect results in order by image index to maintain JSONL sequence
+            print(f"[INFO] Phase 2: Processing {len(image_cache)} images in parallel...")
             results_by_index = {}  # Store results keyed by original image index
             with ThreadPoolExecutor(max_workers=4) as executor:
                 futures = {
-                    executor.submit(process_single_image, (idx, img_data)): idx
-                    for idx, img_data in enumerate(image_data)
+                    executor.submit(process_single_image, idx): idx
+                    for idx in range(len(image_cache))
                 }
 
                 # Collect all results (can complete in any order from threads)
-                print(f"[INFO] Processing {len(image_data)} images in parallel...")
                 for future in as_completed(futures):
                     try:
                         result_entry = future.result()
                         idx = result_entry['index']
                         results_by_index[idx] = result_entry
-                        print(f"[INFO] Completed image {idx + 1}/{len(image_data)}")
+                        print(f"[INFO] Completed image {idx + 1}/{len(image_cache)}")
                     except Exception as e:
                         print(f"[ERROR] Thread exception: {str(e)}")
 
-            # Write results to JSONL in SEQUENTIAL order (by original image index)
-            print(f"[INFO] Writing results to JSONL in sequential order...")
+            # PHASE 3: Write results to JSONL in SEQUENTIAL order (reorder by original mapping)
+            print(f"[INFO] Phase 3: Reordering and writing results to JSONL in sequential order...")
             for idx in range(len(image_data)):
                 if idx not in results_by_index:
                     print(f"[WARNING] Image {idx + 1} missing from results")

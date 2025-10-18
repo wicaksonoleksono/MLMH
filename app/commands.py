@@ -1779,37 +1779,74 @@ def register_commands(app):
             raise
 
     @app.cli.command("fix-foreign-key-cascade")
-    @click.confirmation_option(prompt="This will modify the assessment_sessions foreign key to add CASCADE DELETE. Are you sure?")
+    @click.confirmation_option(prompt="This will modify ALL user_id foreign keys to add CASCADE DELETE. Are you sure?")
     def fix_foreign_key_cascade():
-        """Add CASCADE DELETE to assessment_sessions.user_id foreign key"""
-        click.echo("[OLKORECT] Fixing foreign key constraint to add CASCADE DELETE...")
+        """Add CASCADE DELETE to ALL user_id foreign keys (comprehensive fix)"""
+        click.echo("[OLKORECT] Fixing ALL foreign key constraints to add CASCADE DELETE...")
+
+        # List of all tables with user_id foreign keys that need CASCADE DELETE
+        foreign_keys_to_fix = [
+            {
+                "table": "assessment_sessions",
+                "column": "user_id",
+                "constraint": "assessment_sessions_user_id_fkey",
+                "description": "Assessment sessions"
+            },
+            {
+                "table": "auto_login_tokens",
+                "column": "user_id",
+                "constraint": "auto_login_tokens_user_id_fkey",
+                "description": "Auto login tokens"
+            },
+            {
+                "table": "email_notifications",
+                "column": "user_id",
+                "constraint": "email_notifications_user_id_fkey",
+                "description": "Email notifications"
+            },
+            {
+                "table": "session_exports",
+                "column": "requested_by_user",
+                "constraint": "session_exports_requested_by_user_fkey",
+                "description": "Session exports (requested_by_user)"
+            }
+        ]
 
         try:
             engine = get_engine()
             with engine.connect() as conn:
-                # Step 1: Drop existing foreign key
-                click.echo("  - Dropping existing foreign key constraint...")
-                conn.execute(text("""
-                    ALTER TABLE assessment_sessions
-                    DROP CONSTRAINT IF EXISTS assessment_sessions_user_id_fkey
-                """))
+                fixed_count = 0
 
-                # Step 2: Re-add with CASCADE DELETE
-                click.echo("  - Adding foreign key with CASCADE DELETE...")
-                conn.execute(text("""
-                    ALTER TABLE assessment_sessions
-                    ADD CONSTRAINT assessment_sessions_user_id_fkey
-                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-                """))
+                for fk in foreign_keys_to_fix:
+                    click.echo(f"\n  Processing {fk['description']}...")
+
+                    # Step 1: Drop existing foreign key
+                    click.echo(f"    - Dropping constraint {fk['constraint']}...")
+                    conn.execute(text(f"""
+                        ALTER TABLE {fk['table']}
+                        DROP CONSTRAINT IF EXISTS {fk['constraint']}
+                    """))
+
+                    # Step 2: Re-add with CASCADE DELETE
+                    click.echo(f"    - Adding constraint with CASCADE DELETE...")
+                    conn.execute(text(f"""
+                        ALTER TABLE {fk['table']}
+                        ADD CONSTRAINT {fk['constraint']}
+                        FOREIGN KEY ({fk['column']}) REFERENCES users(id) ON DELETE CASCADE
+                    """))
+
+                    click.echo(f"    ✓ {fk['description']} fixed")
+                    fixed_count += 1
 
                 conn.commit()
 
-                click.echo("[OLKORECT] Foreign key constraint updated successfully!")
-                click.echo("  ✓ Assessment sessions will now be automatically deleted when user is deleted")
-                click.echo("  ✓ OTP cleanup will now work without foreign key violations")
+                click.echo(f"\n[OLKORECT] All foreign key constraints updated successfully!")
+                click.echo(f"  ✓ Fixed {fixed_count} foreign key constraints")
+                click.echo(f"  ✓ All user-related records will now be automatically deleted when user is deleted")
+                click.echo(f"  ✓ OTP cleanup will now work without foreign key violations")
 
         except Exception as e:
-            click.echo(f"[SNAFU] Failed to update foreign key: {str(e)}")
+            click.echo(f"[SNAFU] Failed to update foreign keys: {str(e)}")
             click.echo("This command works with PostgreSQL. For other databases, modify the SQL syntax.")
             raise
 

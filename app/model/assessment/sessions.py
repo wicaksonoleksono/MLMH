@@ -417,7 +417,7 @@ class SessionExport(BaseModel):
     export_data: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
     file_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
-    requested_by_user: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
+    requested_by_user: Mapped[int] = mapped_column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     export_status: Mapped[str] = mapped_column(String(20), default='PENDING')
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow())
@@ -435,8 +435,8 @@ class EmailNotification(BaseModel):
     
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     session_id: Mapped[str] = mapped_column(String(36), ForeignKey('assessment_sessions.id'), nullable=False)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id'), nullable=False)
-    
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+
     # Notification type
     notification_type: Mapped[str] = mapped_column(String(50), nullable=False)  # 'SESSION_COMPLETED', 'FOLLOWUP_REMINDER'
     

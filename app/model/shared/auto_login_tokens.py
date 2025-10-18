@@ -8,7 +8,7 @@ from ..base import BaseModel
 class AutoLoginToken(BaseModel):
     __tablename__ = 'auto_login_tokens'
     
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete='CASCADE'), nullable=False)
     token_jti: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)  # JWT ID for tracking
     purpose: Mapped[str] = mapped_column(String(50), nullable=False)  # auto_login_session2, auto_login_password_reset, etc.
     used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

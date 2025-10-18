@@ -151,13 +151,14 @@ function renderSessions(sessions) {
 
   emptyState.classList.add('hidden');
 
-  // Group sessions by user for visual styling
+  // Group sessions by user with username coupled to both sessions
   let html = '';
   let previousUserId = null;
 
   sessions.forEach((session, index) => {
     const isNewUser = session.user_id !== previousUserId;
     const isLastOfUser = (index === sessions.length - 1) || (sessions[index + 1].user_id !== session.user_id);
+    const sessionCount = isLastOfUser && isNewUser ? 1 : (isLastOfUser ? 2 : (isNewUser ? 2 : 1));
 
     // Determine row classes for grouping effect
     let rowClasses = 'transition-colors';
@@ -177,15 +178,24 @@ function renderSessions(sessions) {
     }
 
     html += `
-      <tr class="${rowClasses}">
-        <td class="px-6 py-4">
-          <div>
-            <div class="text-sm font-medium text-gray-900">${session.username}</div>
-            <div class="text-sm text-gray-500">${session.email}</div>
+      <tr class="${rowClasses}">`;
+
+    // Add username column with rowspan only on first session of user
+    if (isNewUser) {
+      const rowspanValue = (isLastOfUser) ? 1 : 2;
+      html += `
+        <td class="px-6 py-4 font-medium" rowspan="${rowspanValue}">
+          <div class="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-lg p-3 border border-indigo-200">
+            <div class="text-sm font-semibold text-gray-900">${session.username}</div>
+            <div class="text-xs text-gray-600 mt-1">${session.email}</div>
+            ${rowspanValue === 2 ? `<div class="text-xs text-indigo-600 mt-2 font-medium">2 Sessions</div>` : ''}
           </div>
-        </td>
+        </td>`;
+    }
+
+    html += `
         <td class="px-6 py-4">
-          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${session.session_number === 1 ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}">
             Session ${session.session_number}
           </span>
         </td>

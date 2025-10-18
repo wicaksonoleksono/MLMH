@@ -438,14 +438,19 @@ function updateUserSessionTable(items) {
     return;
   }
 
-  // Build table rows for each user session
+  // Build table rows for each user session (2 rows per user, coupled with username)
   let rowsHtml = '';
   items.forEach((user_session) => {
-    // Session 1 Row
+    // Session 1 Row (Username shown on first row)
     rowsHtml += `
       <tr class="border-b border-gray-100 hover:bg-blue-50 transition-colors duration-150">
-        <td class="py-4 px-6 font-medium text-gray-900">${user_session.user_id}</td>
-        <td class="py-4 px-6 font-medium text-gray-900">${user_session.username}</td>
+        <td class="py-4 px-6 font-medium text-gray-900" rowspan="2">${user_session.user_id}</td>
+        <td class="py-4 px-6 font-medium text-gray-900 text-center bg-gray-50" rowspan="2">
+          <div class="flex flex-col items-center justify-center space-y-1">
+            <span class="text-sm font-semibold text-gray-800">${user_session.username}</span>
+            <span class="text-xs text-gray-500 px-2 py-1 bg-white rounded border border-gray-200">2 Sessions</span>
+          </div>
+        </td>
         <td class="py-4 px-6 text-gray-900">
           <div class="flex items-center">
             <div class="w-3 h-3 rounded-full bg-blue-500 mr-2"></div>
@@ -464,11 +469,9 @@ function updateUserSessionTable(items) {
           </div>
         </td>
       </tr>
-      
-      <!-- Session 2 Row -->
-      <tr class="border-b border-gray-100 hover:bg-blue-50 transition-colors duration-150">
-        <td class="py-4 px-6 font-medium text-gray-900">${user_session.user_id}</td>
-        <td class="py-4 px-6 font-medium text-gray-900">${user_session.username}</td>
+
+      <!-- Session 2 Row (No username repeat - rowspan covers it) -->
+      <tr class="border-b-2 border-gray-200 hover:bg-purple-50 transition-colors duration-150">
         <td class="py-4 px-6 text-gray-900">
           <div class="flex items-center">
             <div class="w-3 h-3 rounded-full bg-purple-500 mr-2"></div>
@@ -486,11 +489,6 @@ function updateUserSessionTable(items) {
             ${getActionButtons(user_session.session2, user_session.session2_id, user_session.user_id, user_session.username, 2)}
           </div>
         </td>
-      </tr>
-      
-      <!-- User Separator -->
-      <tr class="border-b-2 border-gray-200">
-        <td colspan="6" class="py-2 px-6 bg-gradient-to-r from-gray-50 to-gray-100"></td>
       </tr>
     `;
   });
@@ -1096,39 +1094,78 @@ function renderFacialAnalysisSessions() {
 
   if (emptyState) emptyState.classList.add('hidden');
 
-  tbody.innerHTML = filteredFacialAnalysisSessions.map(session => `
-    <tr class="hover:bg-gray-50 transition-colors">
-      <td class="px-6 py-4">
-        <div>
-          <div class="text-sm font-medium text-gray-900">${session.username}</div>
-          <div class="text-sm text-gray-500">${session.email}</div>
-        </div>
-      </td>
-      <td class="px-6 py-4">
-        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-          Session ${session.session_number}
-        </span>
-      </td>
-      <td class="px-6 py-4 text-sm text-gray-500">
-        ${session.session_end ? new Date(session.session_end).toLocaleDateString() : 'N/A'}
-      </td>
-      <td class="px-6 py-4">
-        ${getFacialAnalysisStatusBadge(session.phq_status)}
-      </td>
-      <td class="px-6 py-4">
-        ${getFacialAnalysisStatusBadge(session.llm_status)}
-      </td>
-      <td class="px-6 py-4">
-        <div class="text-sm">
-          <span class="text-blue-600 font-medium">${session.phq_images_count}</span> PHQ |
-          <span class="text-purple-600 font-medium">${session.llm_images_count}</span> LLM
-        </div>
-      </td>
-      <td class="px-6 py-4">
-        ${getFacialAnalysisActionButton(session)}
-      </td>
-    </tr>
-  `).join('');
+  let rowsHtml = '';
+  let previousUserId = null;
+
+  filteredFacialAnalysisSessions.forEach((session, index) => {
+    // Detect if this is a new user and if it's the last session for this user
+    const isNewUser = session.user_id !== previousUserId;
+    const isLastOfUser = (index === filteredFacialAnalysisSessions.length - 1) || (filteredFacialAnalysisSessions[index + 1].user_id !== session.user_id);
+
+    // Determine row classes for grouping effect
+    let rowClasses = 'transition-colors';
+
+    if (isNewUser && isLastOfUser) {
+      // Single session for this user
+      rowClasses += ' bg-white hover:bg-gray-50';
+    } else if (isNewUser) {
+      // First session of multiple for this user
+      rowClasses += ' bg-indigo-50/30 hover:bg-indigo-50/50 border-t-2 border-indigo-200';
+    } else if (isLastOfUser) {
+      // Last session for this user
+      rowClasses += ' bg-indigo-50/30 hover:bg-indigo-50/50 border-b-2 border-indigo-200';
+    } else {
+      // Middle session for this user
+      rowClasses += ' bg-indigo-50/30 hover:bg-indigo-50/50';
+    }
+
+    rowsHtml += `
+      <tr class="${rowClasses}">`;
+
+    // Add username column with rowspan only on first session of user
+    if (isNewUser) {
+      const rowspanValue = (isLastOfUser) ? 1 : 2;
+      rowsHtml += `
+        <td class="px-6 py-4 font-medium" rowspan="${rowspanValue}">
+          <div class="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-lg p-3 border border-indigo-200">
+            <div class="text-sm font-semibold text-gray-900">${session.username}</div>
+            <div class="text-xs text-gray-600 mt-1">${session.email || 'N/A'}</div>
+            ${rowspanValue === 2 ? `<div class="text-xs text-indigo-600 mt-2 font-medium">2 Sessions</div>` : ''}
+          </div>
+        </td>`;
+    }
+
+    rowsHtml += `
+        <td class="px-6 py-4">
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+            Session ${session.session_number}
+          </span>
+        </td>
+        <td class="px-6 py-4 text-sm text-gray-500">
+          ${session.session_end ? new Date(session.session_end).toLocaleDateString() : 'N/A'}
+        </td>
+        <td class="px-6 py-4">
+          ${getFacialAnalysisStatusBadge(session.phq_status)}
+        </td>
+        <td class="px-6 py-4">
+          ${getFacialAnalysisStatusBadge(session.llm_status)}
+        </td>
+        <td class="px-6 py-4">
+          <div class="text-sm">
+            <span class="text-blue-600 font-medium">${session.phq_images_count}</span> PHQ |
+            <span class="text-purple-600 font-medium">${session.llm_images_count}</span> LLM
+          </div>
+        </td>
+        <td class="px-6 py-4">
+          ${getFacialAnalysisActionButton(session)}
+        </td>
+      </tr>
+    `;
+
+    previousUserId = session.user_id;
+  });
+
+  tbody.innerHTML = rowsHtml;
 }
 
 // Get facial analysis status badge
@@ -1642,7 +1679,7 @@ function renderFacialExportSessions() {
   if (paginatedSessions.length === 0) {
     bodyEl.innerHTML = `
       <tr>
-        <td colspan="7" class="px-6 py-12 text-center text-sm text-gray-500">
+        <td colspan="8" class="px-6 py-12 text-center text-sm text-gray-500">
           <div class="flex flex-col items-center justify-center">
             <svg class="w-12 h-12 text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
@@ -1657,17 +1694,54 @@ function renderFacialExportSessions() {
   }
 
   let rowsHtml = '';
-  paginatedSessions.forEach((session) => {
+  let previousUserId = null;
+
+  paginatedSessions.forEach((session, index) => {
     const canDownload = session.can_download;
     const isChecked = selectedFacialExportSessions.has(session.id);
 
+    // Detect if this is a new user and if it's the last session for this user
+    const isNewUser = session.user_id !== previousUserId;
+    const isLastOfUser = (index === paginatedSessions.length - 1) || (paginatedSessions[index + 1].user_id !== session.user_id);
+
+    // Determine row classes for grouping effect
+    let rowClasses = 'transition-colors';
+
+    if (isNewUser && isLastOfUser) {
+      // Single session for this user
+      rowClasses += ' bg-white hover:bg-gray-50';
+    } else if (isNewUser) {
+      // First session of multiple for this user
+      rowClasses += ' bg-indigo-50/30 hover:bg-indigo-50/50 border-t-2 border-indigo-200';
+    } else if (isLastOfUser) {
+      // Last session for this user
+      rowClasses += ' bg-indigo-50/30 hover:bg-indigo-50/50 border-b-2 border-indigo-200';
+    } else {
+      // Middle session for this user
+      rowClasses += ' bg-indigo-50/30 hover:bg-indigo-50/50';
+    }
+
     rowsHtml += `
-      <tr class="border-b border-gray-100 hover:bg-blue-50 transition-colors duration-150">
+      <tr class="border-b border-gray-100 ${rowClasses}">
         <td class="px-6 py-4">
           ${canDownload ? `<input type="checkbox" class="facial-export-checkbox rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" data-session-id="${session.id}" ${isChecked ? 'checked' : ''}>` : ''}
-        </td>
-        <td class="py-4 px-6 font-medium text-gray-900">${session.user_id}</td>
-        <td class="py-4 px-6 font-medium text-gray-900">${session.username}</td>
+        </td>`;
+
+    // Add User ID and Username columns with rowspan only on first session of user
+    if (isNewUser) {
+      const rowspanValue = (isLastOfUser) ? 1 : 2;
+      rowsHtml += `
+        <td class="py-4 px-6 font-medium text-gray-900" rowspan="${rowspanValue}">${session.user_id}</td>
+        <td class="py-4 px-6 font-medium" rowspan="${rowspanValue}">
+          <div class="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-lg p-3 border border-indigo-200">
+            <div class="text-sm font-semibold text-gray-900">${session.username}</div>
+            <div class="text-xs text-gray-600 mt-1">${session.email || 'N/A'}</div>
+            ${rowspanValue === 2 ? `<div class="text-xs text-indigo-600 mt-2 font-medium">2 Sessions</div>` : ''}
+          </div>
+        </td>`;
+    }
+
+    rowsHtml += `
         <td class="py-4 px-6 text-gray-900">
           <div class="flex items-center">
             <div class="w-3 h-3 rounded-full ${session.session_number === 1 ? 'bg-blue-500' : 'bg-purple-500'} mr-2"></div>
@@ -1681,6 +1755,8 @@ function renderFacialExportSessions() {
         </td>
       </tr>
     `;
+
+    previousUserId = session.user_id;
   });
 
   bodyEl.innerHTML = rowsHtml;

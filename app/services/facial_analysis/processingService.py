@@ -313,6 +313,32 @@ class FacialAnalysisProcessingService:
 
                 total_processed += 1
 
+                if not inference_result.get('success'):
+                    failed += 1
+                    error_message = inference_result.get('error_message') or 'Unknown inference error'
+                    print(f"[WARNING] Facial analysis failed for {filename}: {error_message}")
+                    failure_detail = {
+                        'filename': filename,
+                        'assessment_type': assessment_type,
+                        'timestamp': timestamp,
+                        'error_message': error_message
+                    }
+                    failure_details.append(failure_detail)
+
+                    error_entry = {
+                        'type': 'error',
+                        'filename': filename,
+                        'assessment_type': assessment_type,
+                        'timestamp': timestamp,
+                        'message': error_message
+                    }
+                    timing_dict = timing.model_dump(exclude_none=True)
+                    if timing_dict:
+                        error_entry['timing'] = timing_dict
+
+                    jsonl_file.write(json.dumps(error_entry) + '\n')
+                    continue
+
                 if inference_result['success']:
                     faces_detected += 1
                     total_inference_time_ms += inference_result.get('processing_time_ms', 0)
@@ -345,30 +371,6 @@ class FacialAnalysisProcessingService:
                     result_dict = image_result.model_dump()
                     result_dict['type'] = 'result'
                     jsonl_file.write(json.dumps(result_dict) + '\n')
-                else:
-                    failed += 1
-                    error_message = inference_result.get('error_message') or 'Unknown inference error'
-                    failure_detail = {
-                        'filename': filename,
-                        'assessment_type': assessment_type,
-                        'timestamp': timestamp,
-                        'error_message': error_message
-                    }
-                    failure_details.append(failure_detail)
-
-                    error_entry = {
-                        'type': 'error',
-                        'filename': filename,
-                        'assessment_type': assessment_type,
-                        'timestamp': timestamp,
-                        'message': error_message
-                    }
-                    timing_dict = timing.model_dump(exclude_none=True)
-                    if timing_dict:
-                        error_entry['timing'] = timing_dict
-
-                    jsonl_file.write(json.dumps(error_entry) + '\n')
-                    print(f"[ERROR] Facial analysis failed for {filename}: {error_message}")
 
             # Last line: Write summary stats
             end_time = datetime.now()

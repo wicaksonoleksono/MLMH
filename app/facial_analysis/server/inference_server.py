@@ -323,6 +323,15 @@ class FacialInferenceServicer(inference_pb2_grpc.FacialInferenceServicer):
                             z=float(landmark.get('z', 0.0))
                         ))
 
+            # Check if face was detected (at least some landmarks or action units)
+            has_face = len(key_landmarks) > 0 or any(aus.values() for aus in [normalized['action_units']])
+
+            if not has_face:
+                return inference_pb2.ImageResponse(
+                    success=False,
+                    error_message="No face landmarks detected in image"
+                )
+
             # Calculate processing time
             processing_time_ms = int((time.time() - start_time) * 1000)
 
@@ -339,6 +348,10 @@ class FacialInferenceServicer(inference_pb2_grpc.FacialInferenceServicer):
             )
 
         except Exception as e:
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"[ERROR] Image analysis failed: {str(e)}")
+            print(f"[TRACEBACK] {error_trace}")
             return inference_pb2.ImageResponse(
                 success=False,
                 error_message=f"Analysis failed: {str(e)}"

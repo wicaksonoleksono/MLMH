@@ -22,6 +22,25 @@ function normalizeStatus(status) {
 async function checkGrpcHealth() {
   try {
     const response = await fetch('/admin/facial-analysis/health');
+
+    // Check if response is JSON
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      console.error('Health check: Expected JSON, got', contentType);
+      const banner = document.getElementById('grpc-status-banner');
+      banner.innerHTML = `
+        <div class="flex items-center justify-between p-4 bg-red-50 rounded-lg border border-red-200">
+          <div class="flex items-center">
+            <svg class="w-5 h-5 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <span class="text-sm font-medium text-red-700">Health check failed - server error</span>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
     const result = await response.json();
     const data = result.status === 'OLKORECT' ? result.data : result;
 
@@ -62,6 +81,15 @@ async function loadSessions() {
 
   try {
     const response = await fetch('/admin/facial-analysis/eligible-sessions');
+
+    // Check if response is JSON
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      hideLoading();
+      showError('Server error: Expected JSON response but got ' + (contentType || 'unknown content type'));
+      return;
+    }
+
     const result = await response.json();
 
     // Handle @api_response decorator wrapper
@@ -323,6 +351,15 @@ async function processSession(sessionId) {
         'Content-Type': 'application/json'
       }
     });
+
+    // Check if response is JSON
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await response.text();
+      console.error('Expected JSON response, got:', contentType, text.substring(0, 200));
+      alert('Server error: Expected JSON response but got HTML.\n\nThis usually means the server encountered an internal error.\n\nPlease check server logs.');
+      return;
+    }
 
     const result = await response.json();
     const data = result.status === 'OLKORECT' ? result.data : result;

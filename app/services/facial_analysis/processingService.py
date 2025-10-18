@@ -150,6 +150,11 @@ class FacialAnalysisProcessingService:
             # Update final status
             with get_session() as db:
                 analysis_record = db.query(SessionFacialAnalysis).filter_by(id=analysis_id).first()
+                if not analysis_record:
+                    # Record was deleted or lost - log and continue
+                    print(f"[WARNING] SessionFacialAnalysis record not found for id={analysis_id}")
+                    return result
+
                 if result.success:
                     analysis_record.status = 'completed'
                     analysis_record.completed_at = datetime.utcnow()
@@ -172,6 +177,11 @@ class FacialAnalysisProcessingService:
             # Mark as failed
             with get_session() as db:
                 analysis_record = db.query(SessionFacialAnalysis).filter_by(id=analysis_id).first()
+                if not analysis_record:
+                    # Record was deleted or lost - log and return error
+                    print(f"[WARNING] SessionFacialAnalysis record not found for id={analysis_id} during exception handling")
+                    return ProcessingResult(success=False, message=f'Processing error: {str(e)}')
+
                 analysis_record.status = 'failed'
                 analysis_record.error_message = str(e)
                 analysis_record.completed_at = datetime.utcnow()

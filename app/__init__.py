@@ -131,12 +131,39 @@ def create_app():
     # Error handlers
     @app.errorhandler(403)
     def forbidden_error(error):
-        from flask import render_template
+        from flask import render_template, request
+        # Return JSON for API calls, HTML for regular requests
+        if request.path.startswith('/admin/') and request.path.endswith(('.json', '/process', '/delete', '/health')):
+            return {'success': False, 'message': 'Forbidden'}, 403
         return render_template('errors/403.html'), 403
-    
+
     @app.errorhandler(404)
     def not_found_error(error):
-        from flask import render_template
+        from flask import render_template, request
+        # Return JSON for API calls, HTML for regular requests
+        if request.path.startswith('/admin/') and request.path.endswith(('.json', '/process', '/delete', '/health')):
+            return {'success': False, 'message': 'Not found'}, 404
         return render_template('errors/404.html'), 404
-    
+
+    @app.errorhandler(500)
+    def internal_error(error):
+        from flask import render_template, request, jsonify
+        import traceback
+
+        # Log the error
+        error_msg = str(error)
+        print(f"[ERROR] 500 Internal Server Error: {error_msg}")
+        print(f"[TRACEBACK] {traceback.format_exc()}")
+
+        # Return JSON for API calls (including facial-analysis endpoints)
+        if request.path.startswith('/admin/facial-analysis/') or request.content_type == 'application/json':
+            return {
+                'success': False,
+                'message': 'Internal server error',
+                'error': error_msg if app.debug else 'An error occurred'
+            }, 500
+
+        # Return HTML for regular requests
+        return render_template('errors/500.html', error=error_msg), 500
+
     return app

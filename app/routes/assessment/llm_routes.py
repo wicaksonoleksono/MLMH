@@ -570,7 +570,7 @@ def save_timing_data(session_id):
         if ai_timing:
             updates['ai_timing'] = ai_timing
             
-        print(f"DEBUG: Updating turn {target_turn.get('turn_number')} with timing: user={bool(user_timing)}, ai={bool(ai_timing)}")
+        # print(f"DEBUG: Updating turn {target_turn.get('turn_number')} with timing: user={bool(user_timing)}, ai={bool(ai_timing)}")
         
         if updates:
             LLMConversationService.update_conversation_turn(
@@ -578,13 +578,13 @@ def save_timing_data(session_id):
                 turn_number=target_turn.get('turn_number'),
                 updates=updates
             )
-            print(f"DEBUG: Successfully updated turn {target_turn.get('turn_number')} with timing data")
+            # print(f"DEBUG: Successfully updated turn {target_turn.get('turn_number')} with timing data")
             return {"message": "Timing data saved successfully"}
         else:
-            print("DEBUG: No timing updates provided")
+            # print("DEBUG: No timing updates provided")
             return {"message": "No timing data provided"}, 400
     else:
-        print(f"DEBUG: No matching turn found for user_message: '{user_message[:50]}...' or turn_number: {turn_number}")
+        # print(f"DEBUG: No matching turn found for user_message: '{user_message[:50]}...' or turn_number: {turn_number}")
         return {"message": f"No matching turn found for message or turn number"}, 404
     
 

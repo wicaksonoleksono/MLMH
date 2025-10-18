@@ -141,7 +141,7 @@ class CameraService:
     @staticmethod
     def update_settings(settings_id: int, updates: Dict[str, Any]) -> Dict[str, Any]:
         """Update camera settings"""
-        print(f" DEBUG update_settings received: {updates}")
+        # print(f" DEBUG update_settings received: {updates}")
         for key, value in updates.items():
             print(f"  {key}: {type(value).__name__} = {value}")
         with get_session() as db:

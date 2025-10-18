@@ -183,8 +183,68 @@ function performSearch(query) {
   // Update URL without refresh
   updateUrlParams();
 
-  // Load dashboard data with new search
-  loadDashboardData();
+  // ONLY update table data, not entire dashboard (like session-management.js)
+  loadUserSessionsOnly();
+}
+
+// Load ONLY user sessions table data (without stats cards)
+function loadUserSessionsOnly() {
+  // Show loading on table only (don't hide entire content area)
+  const tableBody = document.getElementById("table-body");
+  if (tableBody) {
+    tableBody.innerHTML = `
+      <tr>
+        <td colspan="6" class="px-6 py-8 text-center">
+          <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+          <p class="mt-2 text-sm text-gray-500">Loading...</p>
+        </td>
+      </tr>
+    `;
+  }
+
+  hideError();
+
+  // Build URL with pagination, search, and sort
+  let url = `/admin/ajax-dashboard-data?page=${currentPage}&per_page=${currentPerPage}`;
+  if (currentSearchQuery) {
+    url += `&q=${encodeURIComponent(currentSearchQuery)}`;
+  }
+  url += `&sort_by=${currentSortBy}&sort_order=${currentSortOrder}`;
+
+  fetch(url, {
+    headers: {
+      "X-Requested-With": "XMLHttpRequest",
+    },
+  })
+    .then((response) => response.json())
+    .then((data) => {
+      console.log("[DEBUG] User sessions only response:", data);
+
+      // Handle API response wrapper format from @api_response decorator
+      const actualData = data.status === "OLKORECT" ? data.data : data;
+
+      if (
+        actualData.status === "success" ||
+        actualData.user_sessions ||
+        data.status === "OLKORECT"
+      ) {
+        const responseData = actualData.data || actualData;
+
+        // ONLY update table and pagination - DO NOT update stats cards
+        updateUserSessionTable(responseData.user_sessions.items);
+        updatePagination(responseData.user_sessions.pagination);
+
+        // Update search count display
+        updateUserCount(responseData.user_sessions.pagination, currentSearchQuery);
+      } else {
+        console.error("[ERROR] User sessions load failed:", actualData);
+        showError(actualData.message || data.error || "Unknown error");
+      }
+    })
+    .catch((error) => {
+      console.error("[ERROR] User sessions request failed:", error);
+      showError(error.message);
+    });
 }
 
 // Update URL parameters without refresh
@@ -1099,12 +1159,21 @@ function getFacialAnalysisActionButton(session) {
 
   if (isProcessing) {
     return `
-      <button disabled class="inline-flex items-center px-3 py-2 bg-gray-300 text-gray-600 text-xs font-medium rounded-md cursor-not-allowed">
-        <svg class="w-4 h-4 mr-1.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-        </svg>
-        Processing...
-      </button>
+      <div class="flex flex-wrap gap-1">
+        <button disabled class="inline-flex items-center px-3 py-2 bg-gray-300 text-gray-600 text-xs font-medium rounded-md cursor-not-allowed">
+          <svg class="w-4 h-4 mr-1.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+          </svg>
+          Processing...
+        </button>
+        <button onclick="cancelFacialAnalysisSession('${session.id}')"
+                class="inline-flex items-center px-3 py-2 bg-red-600 text-white text-xs font-medium rounded-md hover:bg-red-700 transition-colors">
+          <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+          Cancel
+        </button>
+      </div>
     `;
   }
 
@@ -1208,6 +1277,50 @@ async function reanalyzeFacialAnalysisSession(sessionId) {
     loadFacialAnalysisSessions();
   } catch (error) {
     alert(`Error re-analyzing session:\n\n${error.message}`);
+  }
+}
+
+async function cancelFacialAnalysisSession(sessionId) {
+  if (!confirm(`Cancel processing for this session?\n\nThis will:\n- Stop any ongoing processing\n- Mark the session as failed/cancelled\n- Delete any partial results\n\nYou can re-process the session afterwards.`)) {
+    return;
+  }
+
+  try {
+    const assessments = ['PHQ', 'LLM'];
+    const errors = [];
+    let cancelledCount = 0;
+
+    for (const assessmentType of assessments) {
+      const response = await fetch(`/admin/facial-analysis/cancel/${sessionId}/${assessmentType}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const httpStatus = response.status;
+      const result = await response.json();
+      const data = result.status === 'OLKORECT' ? result.data : result;
+
+      if (data.success) {
+        cancelledCount++;
+      } else if (httpStatus !== 400) {
+        // 400 means status was not 'processing' - this is expected
+        errors.push(`${assessmentType}: ${data.message || 'Cancel failed'}`);
+      }
+    }
+
+    if (cancelledCount > 0) {
+      alert(`Processing cancelled successfully!\n\nCancelled ${cancelledCount} assessment(s).`);
+    } else if (errors.length === 0) {
+      alert('No processing to cancel - session is not in processing state.');
+    } else {
+      alert('Cancel failed:\n\n' + errors.join('\n'));
+    }
+
+    loadFacialAnalysisSessions();
+  } catch (error) {
+    alert(`Error cancelling processing:\n\n${error.message}`);
   }
 }
 

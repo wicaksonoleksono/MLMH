@@ -515,23 +515,50 @@ def sessions_list():
 def get_sessions_data():
     """
     Get all completed sessions with image counts
-    Reuses dashboard query logic but for image viewing
+    Now with pagination and search support
     """
+    from flask import request
+
+    # Get pagination and search parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 15, type=int)
+    search_query = request.args.get('q', '').strip()
+
+    # Limit per_page options
+    if per_page not in [10, 15, 20, 50]:
+        per_page = 15
+
     with get_session() as db:
-        # Get all completed sessions
-        sessions = db.query(
+        # Base query for completed sessions with images
+        base_query = db.query(
             AssessmentSession,
             User.uname.label('username'),
-            User.email.label('email')
+            User.email.label('email'),
+            User.id.label('user_id')
         ).join(
             User, AssessmentSession.user_id == User.id
         ).filter(
             AssessmentSession.status == 'COMPLETED'
-        ).all()
+        )
 
-        sessions_data = []
+        # Apply search filter
+        if search_query:
+            search_filter = f"%{search_query}%"
+            base_query = base_query.filter(
+                (User.uname.ilike(search_filter)) |
+                (User.email.ilike(search_filter))
+            )
 
-        for session, username, email in sessions:
+        # Order by username first, then session_number (to group sessions by user)
+        base_query = base_query.order_by(User.uname.asc(), AssessmentSession.session_number.asc())
+
+        # Get all matching sessions (we need to filter by image count first)
+        all_sessions = base_query.all()
+
+        # Build sessions data with image counts
+        sessions_with_images = []
+
+        for session, username, email, user_id in all_sessions:
             # Get PHQ and LLM assessment IDs
             phq_response = db.query(PHQResponse).filter_by(session_id=session.id).first()
             llm_conversation = db.query(LLMConversation).filter_by(session_id=session.id).first()
@@ -556,9 +583,9 @@ def get_sessions_data():
 
             # Only include sessions with images
             if total_images > 0:
-                sessions_data.append({
+                sessions_with_images.append({
                     'session_id': session.id,
-                    'user_id': session.user_id,
+                    'user_id': user_id,
                     'username': username,
                     'email': email,
                     'session_number': session.session_number,
@@ -568,10 +595,35 @@ def get_sessions_data():
                     'total_images': total_images
                 })
 
+        # Manual pagination on the filtered list
+        total_count = len(sessions_with_images)
+        total_pages = (total_count + per_page - 1) // per_page if total_count > 0 else 1
+
+        # Ensure page is valid
+        if page < 1:
+            page = 1
+        if page > total_pages and total_pages > 0:
+            page = total_pages
+
+        # Calculate pagination slice
+        start_idx = (page - 1) * per_page
+        end_idx = start_idx + per_page
+        paginated_sessions = sessions_with_images[start_idx:end_idx]
+
         return {
             'success': True,
-            'sessions': sessions_data,
-            'total': len(sessions_data)
+            'sessions': paginated_sessions,
+            'pagination': {
+                'page': page,
+                'per_page': per_page,
+                'total': total_count,
+                'pages': total_pages,
+                'has_prev': page > 1,
+                'has_next': page < total_pages,
+                'prev_num': page - 1 if page > 1 else None,
+                'next_num': page + 1 if page < total_pages else None
+            },
+            'search_query': search_query
         }
 
 
@@ -715,6 +767,84 @@ def delete_analysis(session_id, assessment_type):
         return {
             "success": False,
             "message": f"Failed to delete analysis: {str(e)}"
+        }, 500
+
+
+@facial_analysis_bp.route('/cancel/<session_id>/<assessment_type>', methods=['POST'])
+@login_required
+@admin_required
+@api_response
+def cancel_processing(session_id, assessment_type):
+    """
+    Cancel ongoing facial analysis processing
+
+    This endpoint is used to stop stuck or long-running processing.
+    It marks the analysis as failed and deletes any partial results.
+
+    Args:
+        session_id: Session UUID
+        assessment_type: 'PHQ' or 'LLM'
+
+    Returns:
+        {"success": bool, "message": str}
+    """
+    # Validate assessment_type
+    if assessment_type not in ['PHQ', 'LLM']:
+        return {
+            "success": False,
+            "message": "Invalid assessment_type. Must be 'PHQ' or 'LLM'"
+        }, 400
+
+    try:
+        with get_session() as db:
+            # Get the analysis record
+            analysis = db.query(SessionFacialAnalysis).filter_by(
+                session_id=session_id,
+                assessment_type=assessment_type
+            ).first()
+
+            if not analysis:
+                return {
+                    "success": False,
+                    "message": f"No {assessment_type} analysis found for this session"
+                }, 404
+
+            # Check if it's actually processing
+            if analysis.status != 'processing':
+                return {
+                    "success": False,
+                    "message": f"Cannot cancel - status is '{analysis.status}', not 'processing'"
+                }, 400
+
+            # Delete partial JSONL file if it exists
+            jsonl_path = os.path.join(current_app.media_save, analysis.jsonl_file_path)
+            if os.path.exists(jsonl_path):
+                try:
+                    os.remove(jsonl_path)
+                    print(f"[INFO] Deleted partial JSONL file: {jsonl_path}")
+                except Exception as e:
+                    print(f"[WARNING] Failed to delete JSONL file {jsonl_path}: {str(e)}")
+
+            # Mark as cancelled (using failed status with specific message)
+            from datetime import datetime
+            analysis.status = 'failed'
+            analysis.error_message = 'Processing cancelled by admin'
+            analysis.completed_at = datetime.utcnow()
+            db.commit()
+
+            print(f"[INFO] Cancelled {assessment_type} processing for session {session_id}")
+
+        return {
+            "success": True,
+            "message": f"{assessment_type} processing cancelled successfully"
+        }, 200
+
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] Cancel processing failed: {str(e)}\n{traceback.format_exc()}")
+        return {
+            "success": False,
+            "message": f"Failed to cancel processing: {str(e)}"
         }, 500
 
 

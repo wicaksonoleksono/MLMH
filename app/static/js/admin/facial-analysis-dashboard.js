@@ -572,6 +572,140 @@ async function processAllFacialAnalysisSessions() {
 
 // Update facial analysis pagination
 function updateFacialAnalysisPagination(pagination) {
-  // Handle pagination updates if needed
-  // For now, we rely on the endpoint's pagination
+  const paginationContainer = document.getElementById('facial-analysis-pagination');
+  const paginationInfo = document.getElementById('fa-pagination-info');
+  const paginationControls = document.getElementById('fa-pagination-controls');
+
+  if (!paginationContainer || !pagination) return;
+
+  // Hide pagination if no results or only one page
+  if (pagination.total === 0 || pagination.pages <= 1) {
+    paginationContainer.classList.add('hidden');
+    return;
+  }
+
+  // Show pagination
+  paginationContainer.classList.remove('hidden');
+
+  // Update pagination info
+  const start = (pagination.page - 1) * pagination.per_page + 1;
+  const end = Math.min(pagination.page * pagination.per_page, pagination.total);
+
+  if (paginationInfo) {
+    paginationInfo.innerHTML = `
+      Showing <span class="font-medium">${start}</span> to <span class="font-medium">${end}</span> of
+      <span class="font-medium">${pagination.total}</span> results
+    `;
+  }
+
+  // Build pagination controls
+  if (paginationControls) {
+    let controlsHtml = '';
+
+    // Previous button
+    if (pagination.has_prev) {
+      controlsHtml += `
+        <button onclick="changeFacialAnalysisPage(${pagination.prev_num})"
+                class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+          <span class="sr-only">Previous</span>
+          <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+          </svg>
+        </button>
+      `;
+    } else {
+      controlsHtml += `
+        <button disabled class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-gray-50 text-sm font-medium text-gray-300 cursor-not-allowed">
+          <span class="sr-only">Previous</span>
+          <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+          </svg>
+        </button>
+      `;
+    }
+
+    // Page numbers (show max 7 pages)
+    const maxPages = 7;
+    let startPage = Math.max(1, pagination.page - Math.floor(maxPages / 2));
+    let endPage = Math.min(pagination.pages, startPage + maxPages - 1);
+
+    if (endPage - startPage + 1 < maxPages) {
+      startPage = Math.max(1, endPage - maxPages + 1);
+    }
+
+    // First page
+    if (startPage > 1) {
+      controlsHtml += `
+        <button onclick="changeFacialAnalysisPage(1)"
+                class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+          1
+        </button>
+      `;
+      if (startPage > 2) {
+        controlsHtml += `<span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">...</span>`;
+      }
+    }
+
+    // Page numbers
+    for (let i = startPage; i <= endPage; i++) {
+      if (i === pagination.page) {
+        controlsHtml += `
+          <button aria-current="page"
+                  class="z-10 bg-indigo-50 border-indigo-500 text-indigo-600 relative inline-flex items-center px-4 py-2 border text-sm font-medium">
+            ${i}
+          </button>
+        `;
+      } else {
+        controlsHtml += `
+          <button onclick="changeFacialAnalysisPage(${i})"
+                  class="bg-white border-gray-300 text-gray-500 hover:bg-gray-50 relative inline-flex items-center px-4 py-2 border text-sm font-medium">
+            ${i}
+          </button>
+        `;
+      }
+    }
+
+    // Last page
+    if (endPage < pagination.pages) {
+      if (endPage < pagination.pages - 1) {
+        controlsHtml += `<span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">...</span>`;
+      }
+      controlsHtml += `
+        <button onclick="changeFacialAnalysisPage(${pagination.pages})"
+                class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+          ${pagination.pages}
+        </button>
+      `;
+    }
+
+    // Next button
+    if (pagination.has_next) {
+      controlsHtml += `
+        <button onclick="changeFacialAnalysisPage(${pagination.next_num})"
+                class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+          <span class="sr-only">Next</span>
+          <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+          </svg>
+        </button>
+      `;
+    } else {
+      controlsHtml += `
+        <button disabled class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-gray-50 text-sm font-medium text-gray-300 cursor-not-allowed">
+          <span class="sr-only">Next</span>
+          <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+          </svg>
+        </button>
+      `;
+    }
+
+    paginationControls.innerHTML = controlsHtml;
+  }
+}
+
+// Change facial analysis page
+function changeFacialAnalysisPage(page) {
+  currentFacialPage = page;
+  loadFacialAnalysisSessions();
 }

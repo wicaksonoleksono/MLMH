@@ -21,6 +21,7 @@ function normalizeFacialStatus(status) {
 // Load facial analysis sessions with pagination and search
 async function loadFacialAnalysisSessions() {
   checkFacialAnalysisGrpcHealth();
+  updateFacialAnalysisStats(); // Update stats cards
 
   try {
     // Build URL with pagination, search, and sort parameters
@@ -86,6 +87,36 @@ async function loadFacialAnalysisSessions() {
     }
   } catch (error) {
     console.error('Error loading facial analysis sessions:', error);
+  }
+}
+
+// Update stats cards (Total, Pending, Processing, Completed)
+async function updateFacialAnalysisStats() {
+  try {
+    const response = await fetch('/admin/facial-analysis/process-all/status');
+    const result = await response.json();
+    const data = result.status === 'OLKORECT' ? result.data : result;
+
+    if (!data.success) {
+      console.error('Failed to load stats:', data.message);
+      return;
+    }
+
+    const stats = data.stats;
+
+    // Update stat cards
+    const totalEl = document.getElementById('fa-stat-total');
+    const pendingEl = document.getElementById('fa-stat-pending');
+    const processingEl = document.getElementById('fa-stat-processing');
+    const completedEl = document.getElementById('fa-stat-completed');
+
+    if (totalEl) totalEl.textContent = data.total || 0;
+    if (pendingEl) pendingEl.textContent = stats.queued || 0;
+    if (processingEl) processingEl.textContent = stats.processing || 0;
+    if (completedEl) completedEl.textContent = stats.completed || 0;
+
+  } catch (error) {
+    console.error('Error loading stats:', error);
   }
 }
 
@@ -535,7 +566,7 @@ async function deleteFacialAnalysisSession(sessionId) {
 }
 
 async function processAllFacialAnalysisSessions() {
-  if (!confirm('Process facial analysis for all eligible sessions?')) {
+  if (!confirm('Process facial analysis for all eligible sessions?\n\nThis will queue all sessions and process them sequentially.')) {
     return;
   }
 
@@ -544,7 +575,7 @@ async function processAllFacialAnalysisSessions() {
 
   const originalHtml = button.innerHTML;
   button.disabled = true;
-  button.innerHTML = `<span>Processing...</span>`;
+  button.innerHTML = `<span>Queueing...</span>`;
 
   try {
     const response = await fetch('/admin/facial-analysis/process-all', {
@@ -556,18 +587,85 @@ async function processAllFacialAnalysisSessions() {
     const data = result.status === 'OLKORECT' ? result.data : result;
 
     if (data.success) {
-      alert('✅ ' + data.message);
+      alert('✅ ' + data.message + '\n\nProcessing will continue in the background.\nRefresh the page to see progress.');
+
+      // Start polling for overall progress
+      pollProcessAllProgress(button, originalHtml);
     } else {
       alert('⚠️ ' + (data.message || 'Failed to queue sessions.'));
+      button.disabled = false;
+      button.innerHTML = originalHtml;
     }
 
     loadFacialAnalysisSessions();
   } catch (error) {
     alert('Error: ' + error.message);
-  } finally {
     button.disabled = false;
     button.innerHTML = originalHtml;
   }
+}
+
+async function pollProcessAllProgress(button, originalHtml) {
+  /**
+   * Poll /process-all/status to show real-time progress
+   * Updates button text with progress stats
+   */
+  let pollCount = 0;
+  const maxPolls = 1200; // 1200 * 10s = 200 minutes max
+
+  const pollInterval = setInterval(async () => {
+    pollCount++;
+
+    try {
+      const response = await fetch('/admin/facial-analysis/process-all/status');
+      const result = await response.json();
+      const data = result.status === 'OLKORECT' ? result.data : result;
+
+      if (!data.success) {
+        console.error('Failed to get progress:', data.message);
+        return;
+      }
+
+      const stats = data.stats;
+      const completed = stats.completed + stats.failed;
+      const total = data.total;
+      const percentage = data.progress_percentage;
+
+      // Update button with progress
+      button.innerHTML = `
+        <span>Processing ${completed}/${total} (${percentage}%)</span>
+      `;
+
+      // Check if done
+      if (!data.is_running || completed >= total) {
+        clearInterval(pollInterval);
+        button.disabled = false;
+        button.innerHTML = originalHtml;
+
+        alert(`✅ Batch processing complete!\n\nCompleted: ${stats.completed}\nFailed: ${stats.failed}\nTotal: ${total}`);
+        loadFacialAnalysisSessions();
+        return;
+      }
+
+      // Timeout check
+      if (pollCount >= maxPolls) {
+        clearInterval(pollInterval);
+        button.disabled = false;
+        button.innerHTML = originalHtml;
+        alert('⚠️ Progress polling timeout. Processing may still be running in the background.');
+        loadFacialAnalysisSessions();
+        return;
+      }
+
+      // Refresh table periodically
+      if (pollCount % 6 === 0) { // Every minute (6 * 10s)
+        loadFacialAnalysisSessions();
+      }
+
+    } catch (error) {
+      console.error('Error polling progress:', error);
+    }
+  }, 10000); // Poll every 10 seconds
 }
 
 // Update facial analysis pagination

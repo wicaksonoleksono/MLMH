@@ -20,13 +20,6 @@ import threading
 
 facial_analysis_bp = Blueprint('facial_analysis', __name__, url_prefix='/admin/facial-analysis')
 
-# Global state for batch processing cancellation
-_batch_processing_state = {
-    'is_running': False,
-    'cancel_requested': False,
-    'lock': threading.Lock()
-}
-
 
 @facial_analysis_bp.route('/')
 @login_required
@@ -297,25 +290,36 @@ def process_all_sessions():
 @api_response
 def cancel_process_all():
     """
-    Cancel the batch processing (process-all).
+    Cancel all queued facial analysis tasks.
 
-    Sets a flag that prevents new sessions from starting.
-    Sessions already in progress will complete (can't kill gRPC calls),
-    but any remaining sessions will be skipped.
+    Changes all 'queued' tasks to 'failed' status with cancellation message.
+    Tasks already 'processing' will continue (can't kill gRPC calls).
     """
-    with _batch_processing_state['lock']:
-        if not _batch_processing_state['is_running']:
+    from ...model.assessment.facial_analysis import SessionFacialAnalysis
+
+    with get_session() as db:
+        # Count queued tasks
+        queued_count = db.query(SessionFacialAnalysis).filter_by(status='queued').count()
+
+        if queued_count == 0:
             return {
                 "success": False,
-                "message": "No batch processing currently running"
+                "message": "No queued tasks to cancel"
             }, 400
 
-        _batch_processing_state['cancel_requested'] = True
-        print(f"[CANCEL] Batch processing cancellation requested by {current_user.email}")
+        # Cancel all queued tasks
+        db.query(SessionFacialAnalysis).filter_by(status='queued').update({
+            'status': 'failed',
+            'error_message': f'Cancelled by admin ({current_user.email})',
+            'completed_at': datetime.utcnow()
+        })
+        db.commit()
+
+        print(f"[CANCEL] Cancelled {queued_count} queued tasks by {current_user.email}")
 
     return {
         "success": True,
-        "message": "Batch processing cancellation requested. Remaining sessions will be skipped. Currently processing sessions will complete."
+        "message": f"Cancelled {queued_count} queued tasks. Currently processing tasks will complete."
     }, 200
 
 
@@ -324,11 +328,46 @@ def cancel_process_all():
 @admin_required
 @api_response
 def get_process_all_status():
-    """Get the current status of batch processing"""
-    with _batch_processing_state['lock']:
+    """
+    Get real-time progress stats for all queued facial analysis tasks
+
+    Returns counts of sessions by status: queued, processing, completed, failed
+    """
+    from ...model.assessment.facial_analysis import SessionFacialAnalysis
+    from sqlalchemy import func
+
+    with get_session() as db:
+        # Get counts grouped by status
+        status_counts = db.query(
+            SessionFacialAnalysis.status,
+            func.count(SessionFacialAnalysis.id).label('count')
+        ).group_by(SessionFacialAnalysis.status).all()
+
+        # Build result dict
+        stats = {
+            'queued': 0,
+            'processing': 0,
+            'completed': 0,
+            'failed': 0,
+            'not_started': 0
+        }
+
+        for status, count in status_counts:
+            if status in stats:
+                stats[status] = count
+
+        # Calculate totals
+        total = sum(stats.values())
+        in_progress = stats['queued'] + stats['processing']
+        is_running = in_progress > 0
+
         return {
-            "is_running": _batch_processing_state['is_running'],
-            "cancel_requested": _batch_processing_state['cancel_requested']
+            "success": True,
+            "is_running": is_running,
+            "stats": stats,
+            "total": total,
+            "in_progress": in_progress,
+            "progress_percentage": int((stats['completed'] + stats['failed']) / total * 100) if total > 0 else 0
         }, 200
 
 

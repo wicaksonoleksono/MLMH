@@ -16,11 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class FacialAnalysisBackgroundService:
-    """Service for managing facial analysis background processing tasks"""
-
-    # Store for tracking queued and active tasks
-    _task_queue: Dict[str, Dict[str, Any]] = {}
-    _active_tasks: Dict[str, Dict[str, Any]] = {}
+    """Service for managing facial analysis background processing tasks using database queue"""
 
     @classmethod
     def queue_processing_task(
@@ -109,54 +105,11 @@ class FacialAnalysisBackgroundService:
             'status': 'queued'
         }
 
-    @classmethod
-    def _execute_processing_task(
-        cls,
-        session_id: str,
-        assessment_type: str,
-        media_save_path: Optional[str]
-    ):
-        """
-        Execute facial analysis processing task (runs in background)
-
-        Args:
-            session_id: Assessment session ID
-            assessment_type: 'PHQ' or 'LLM'
-            media_save_path: Base path for media files
-        """
-        task_id = f"{session_id}_{assessment_type}"
-
-        try:
-            logger.info(f"Starting background processing task: {task_id}")
-            cls._active_tasks[task_id] = {
-                'status': 'processing',
-                'started_at': datetime.utcnow(),
-                'progress': 0
-            }
-
-            # Call the synchronous processing service
-            result = FacialAnalysisProcessingService.process_session_assessment(
-                session_id=session_id,
-                assessment_type=assessment_type,
-                media_save_path=media_save_path
-            )
-
-            cls._active_tasks[task_id]['status'] = 'completed'
-            cls._active_tasks[task_id]['result'] = result.model_dump()
-            cls._active_tasks[task_id]['completed_at'] = datetime.utcnow()
-
-            logger.info(f"Completed background processing task: {task_id}")
-
-        except Exception as e:
-            logger.error(f"Background processing task failed: {task_id} - {str(e)}")
-            cls._active_tasks[task_id]['status'] = 'failed'
-            cls._active_tasks[task_id]['error'] = str(e)
-            cls._active_tasks[task_id]['completed_at'] = datetime.utcnow()
 
     @classmethod
     def get_task_status(cls, session_id: str, assessment_type: str) -> Dict[str, Any]:
         """
-        Get status of a facial analysis processing task
+        Get status of a facial analysis processing task from database
 
         Args:
             session_id: Assessment session ID
@@ -169,26 +122,13 @@ class FacialAnalysisBackgroundService:
                 'progress': int (0-100),
                 'started_at': str (ISO format),
                 'completed_at': str (ISO format),
-                'result': dict or None,
+                'analysis_id': str or None,
                 'error': str or None
             }
         """
         task_id = f"{session_id}_{assessment_type}"
 
-        # Check in-memory task tracking
-        if task_id in cls._active_tasks:
-            task_info = cls._active_tasks[task_id].copy()
-            task_info['task_id'] = task_id
-
-            # Convert datetime objects to ISO format strings
-            if 'started_at' in task_info and task_info['started_at']:
-                task_info['started_at'] = task_info['started_at'].isoformat()
-            if 'completed_at' in task_info and task_info['completed_at']:
-                task_info['completed_at'] = task_info['completed_at'].isoformat()
-
-            return task_info
-
-        # Check database for completed analysis
+        # Check database for analysis record
         with get_session() as db:
             analysis = db.query(SessionFacialAnalysis).filter_by(
                 session_id=session_id,
@@ -196,10 +136,19 @@ class FacialAnalysisBackgroundService:
             ).first()
 
             if analysis:
+                # Calculate progress based on status
+                progress = 0
+                if analysis.status == 'completed':
+                    progress = 100
+                elif analysis.status == 'processing':
+                    progress = 50  # Rough estimate
+                elif analysis.status == 'queued':
+                    progress = 0
+
                 return {
                     'task_id': task_id,
                     'status': analysis.status,
-                    'progress': 100 if analysis.status == 'completed' else 0,
+                    'progress': progress,
                     'started_at': analysis.started_at.isoformat() if analysis.started_at else None,
                     'completed_at': analysis.completed_at.isoformat() if analysis.completed_at else None,
                     'analysis_id': analysis.id,
@@ -215,24 +164,29 @@ class FacialAnalysisBackgroundService:
     @classmethod
     def clean_old_tasks(cls, days: int = 7):
         """
-        Clean up old completed/failed tasks from memory
+        Clean up old completed/failed tasks from database
 
         Args:
             days: Number of days to keep task history
+
+        Returns:
+            int: Number of records deleted
         """
+        from ...db import get_session
+
         cutoff_time = datetime.utcnow() - timedelta(days=days)
-        tasks_to_remove = []
 
-        for task_id, task_info in cls._active_tasks.items():
-            if task_info.get('completed_at'):
-                if task_info['completed_at'] < cutoff_time:
-                    tasks_to_remove.append(task_id)
+        with get_session() as db:
+            # Delete old completed/failed records
+            deleted_count = db.query(SessionFacialAnalysis).filter(
+                SessionFacialAnalysis.status.in_(['completed', 'failed']),
+                SessionFacialAnalysis.completed_at < cutoff_time
+            ).delete(synchronize_session=False)
 
-        for task_id in tasks_to_remove:
-            del cls._active_tasks[task_id]
-            logger.info(f"Cleaned old task: {task_id}")
+            db.commit()
+            logger.info(f"Cleaned {deleted_count} old facial analysis records")
 
-        return len(tasks_to_remove)
+        return deleted_count
 
     @classmethod
     def process_queue(cls):

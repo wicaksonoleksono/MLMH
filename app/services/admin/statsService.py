@@ -118,18 +118,37 @@ class StatsService:
                 # Pre-fetch all related data in bulk to avoid N+1 queries
                 user_ids = [user.id for user in users_on_page]
                 if user_ids:
-                    # Get all sessions for these users in one query
-                    all_sessions = db.query(AssessmentSession).filter(
+                    # Get the LATEST session for each (user_id, session_number) pair
+                    # This ensures we get the most recent attempt, not old/reset sessions
+                    from sqlalchemy import and_
+
+                    subquery = db.query(
+                        AssessmentSession.user_id,
+                        AssessmentSession.session_number,
+                        func.max(AssessmentSession.created_at).label('latest_created_at')
+                    ).filter(
                         AssessmentSession.user_id.in_(user_ids)
-                    ).order_by(AssessmentSession.user_id, AssessmentSession.created_at).all()
-                    
-                    # Group sessions by user_id for easier access
+                    ).group_by(
+                        AssessmentSession.user_id,
+                        AssessmentSession.session_number
+                    ).subquery()
+
+                    all_sessions = db.query(AssessmentSession).join(
+                        subquery,
+                        and_(
+                            AssessmentSession.user_id == subquery.c.user_id,
+                            AssessmentSession.session_number == subquery.c.session_number,
+                            AssessmentSession.created_at == subquery.c.latest_created_at
+                        )
+                    ).order_by(AssessmentSession.user_id, AssessmentSession.session_number).all()
+
+                    # Group sessions by user_id and organize by session_number (not array index)
                     sessions_by_user = {}
                     for session in all_sessions:
                         if session.user_id not in sessions_by_user:
-                            sessions_by_user[session.user_id] = []
-                        sessions_by_user[session.user_id].append(session)
-                    
+                            sessions_by_user[session.user_id] = {}
+                        sessions_by_user[session.user_id][session.session_number] = session
+
                     # Get all PHQ responses for these sessions in one query
                     session_ids = [session.id for session in all_sessions]
                     all_phq_responses = {}
@@ -141,36 +160,42 @@ class StatsService:
                 else:
                     sessions_by_user = {}
                     all_phq_responses = {}
-                
+
                 # Process data for preview
                 preview_data = []
                 for user in users_on_page:
-                    # Get user's sessions from pre-fetched data
-                    user_sessions = sessions_by_user.get(user.id, [])
-                    
-                    # Get PHQ scores for each session using pre-fetched data
+                    # Get user's sessions from pre-fetched data, organized by session_number
+                    user_sessions_by_number = sessions_by_user.get(user.id, {})
+
+                    # Get PHQ scores and status for each session using session_number
                     session1_phq_score = None
                     session2_phq_score = None
-                    
-                    if len(user_sessions) >= 1:
-                        session1_response_record = all_phq_responses.get(user_sessions[0].id)
+
+                    # Session 1 (session_number=1) - Get LATEST attempt
+                    session1_obj = user_sessions_by_number.get(1)
+                    session1_status = session1_obj.status if session1_obj else "Not done"
+                    session1_id = session1_obj.id if session1_obj else None
+
+                    if session1_obj:
+                        session1_response_record = all_phq_responses.get(session1_obj.id)
                         if session1_response_record and session1_response_record.responses:
                             session1_phq_score = sum(
-                                response_data.get('response_value', 0) 
+                                response_data.get('response_value', 0)
                                 for response_data in session1_response_record.responses.values()
                             )
-                    
-                    if len(user_sessions) >= 2:
-                        session2_response_record = all_phq_responses.get(user_sessions[1].id)
+
+                    # Session 2 (session_number=2) - Get LATEST attempt
+                    session2_obj = user_sessions_by_number.get(2)
+                    session2_status = session2_obj.status if session2_obj else "Not done"
+                    session2_id = session2_obj.id if session2_obj else None
+
+                    if session2_obj:
+                        session2_response_record = all_phq_responses.get(session2_obj.id)
                         if session2_response_record and session2_response_record.responses:
                             session2_phq_score = sum(
-                                response_data.get('response_value', 0) 
+                                response_data.get('response_value', 0)
                                 for response_data in session2_response_record.responses.values()
                             )
-                
-                    # Just rawdog the backend status values
-                    session1_status = user_sessions[0].status if len(user_sessions) >= 1 else "Not done"
-                    session2_status = user_sessions[1].status if len(user_sessions) >= 2 else "Not done"
 
                     preview_data.append({
                         'user_id': user.id,
@@ -179,8 +204,8 @@ class StatsService:
                         'session2': session2_status,
                         'session1_phq_score': session1_phq_score,
                         'session2_phq_score': session2_phq_score,
-                        'session1_id': user_sessions[0].id if len(user_sessions) >= 1 else None,
-                        'session2_id': user_sessions[1].id if len(user_sessions) >= 2 else None
+                        'session1_id': session1_id,
+                        'session2_id': session2_id
                     })
                 
                 # Calculate pagination info
@@ -227,15 +252,38 @@ class StatsService:
                 incomplete_users = []  # Only session 1 completed
                 
                 for user in users:
-                    # Get user's sessions
-                    sessions = db.query(AssessmentSession).filter(
+                    # Get the LATEST session for each session_number for this user
+                    from sqlalchemy import and_
+
+                    subquery = db.query(
+                        AssessmentSession.session_number,
+                        func.max(AssessmentSession.created_at).label('latest_created_at')
+                    ).filter(
                         AssessmentSession.user_id == user.id
-                    ).order_by(AssessmentSession.created_at).all()
-                    
-                    # Check completion status
-                    session1_complete = len(sessions) >= 1 and sessions[0].status == 'COMPLETED'
-                    session2_complete = len(sessions) >= 2 and sessions[1].status == 'COMPLETED'
-                    
+                    ).group_by(
+                        AssessmentSession.session_number
+                    ).subquery()
+
+                    sessions = db.query(AssessmentSession).join(
+                        subquery,
+                        and_(
+                            AssessmentSession.session_number == subquery.c.session_number,
+                            AssessmentSession.created_at == subquery.c.latest_created_at
+                        )
+                    ).filter(
+                        AssessmentSession.user_id == user.id
+                    ).order_by(AssessmentSession.session_number).all()
+
+                    # Organize by session_number to get latest attempt for each
+                    sessions_by_number = {s.session_number: s for s in sessions}
+
+                    # Check completion status using session_number, not array index
+                    session1_obj = sessions_by_number.get(1)
+                    session2_obj = sessions_by_number.get(2)
+
+                    session1_complete = session1_obj is not None and session1_obj.status == 'COMPLETED'
+                    session2_complete = session2_obj is not None and session2_obj.status == 'COMPLETED'
+
                     if session1_complete and session2_complete:
                         completed_users.append({
                             'user': user,

@@ -76,22 +76,60 @@ const facialAnalysis = {
 
   async loadSessions() {
     try {
-      const response = await fetch("/admin/facial-analysis/eligible-sessions");
+      const response = await fetch("/admin/ajax-dashboard-data?tab=facial-analysis");
       const result = await response.json();
 
       // Handle @api_response decorator wrapper
       if (result.status === "OLKORECT" && result.data) {
         const data = result.data;
 
-        if (data.success) {
-          this.sessions = data.sessions;
+        if (data.status === "success") {
+          // Extract facial analysis sessions from user_sessions data
+          this.sessions = [];
+
+          for (const item of data.user_sessions.items) {
+            // Process Session 1
+            if (item.session1_id && item.session1_facial_analysis) {
+              this.sessions.push({
+                id: item.session1_id,
+                user_id: item.user_id,
+                username: item.username,
+                email: item.email || '',
+                session_number: 1,
+                session_end: item.session1_end,
+                phq_status: item.session1_facial_analysis.phq_status,
+                llm_status: item.session1_facial_analysis.llm_status,
+                phq_images_count: item.session1_facial_analysis.phq_images || 0,
+                llm_images_count: item.session1_facial_analysis.llm_images || 0,
+                total_images: (item.session1_facial_analysis.phq_images || 0) + (item.session1_facial_analysis.llm_images || 0)
+              });
+            }
+
+            // Process Session 2
+            if (item.session2_id && item.session2_facial_analysis) {
+              this.sessions.push({
+                id: item.session2_id,
+                user_id: item.user_id,
+                username: item.username,
+                email: item.email || '',
+                session_number: 2,
+                session_end: item.session2_end,
+                phq_status: item.session2_facial_analysis.phq_status,
+                llm_status: item.session2_facial_analysis.llm_status,
+                phq_images_count: item.session2_facial_analysis.phq_images || 0,
+                llm_images_count: item.session2_facial_analysis.llm_images || 0,
+                total_images: (item.session2_facial_analysis.phq_images || 0) + (item.session2_facial_analysis.llm_images || 0)
+              });
+            }
+          }
+
           this.renderSessions();
           this.updateStats(data.stats);
         }
 
         document.getElementById("loading-state").classList.add("hidden");
 
-        if (!data.sessions || data.sessions.length === 0) {
+        if (!this.sessions || this.sessions.length === 0) {
           document.getElementById("empty-state").classList.remove("hidden");
         }
       } else if (result.status === "SNAFU") {

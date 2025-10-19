@@ -505,15 +505,23 @@ class FacialAnalysisProcessingService:
 
         client.disconnect()
 
-        if faces_detected == 0:
+        # Determine success: should succeed if ANY images were successfully processed
+        # Only fail if NO images were processed at all
+        if total_processed == 0:
             processing_success = False
-            status_message = f'Processing failed: {failed} images'
-        elif failed > 0:
-            processing_success = True
-            status_message = f'Processed {total_processed} images (partial success, {failed} failed)'
+            status_message = 'Processing failed: No images were processed'
+        elif faces_detected > 0:
+            # Success if at least some faces were detected
+            if failed > 0:
+                processing_success = True
+                status_message = f'Processed {total_processed} images: {faces_detected} successful, {failed} failed'
+            else:
+                processing_success = True
+                status_message = f'Processed {total_processed} images successfully'
         else:
+            # No faces detected in any images (but images were processed)
             processing_success = True
-            status_message = f'Processed {total_processed} images'
+            status_message = f'Processed {total_processed} images (no faces detected in any images)'
 
         return ProcessingResult(
             success=processing_success,

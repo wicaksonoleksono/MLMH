@@ -141,11 +141,17 @@ function showTab(tabName) {
   if (tabName === 'user-sessions' || tabName === 'overview') {
     loadDashboardData();
   } else if (tabName === 'facial-analysis') {
-    loadFacialAnalysisSessions();
-    initializeFacialAnalysisControls();
+    // Load facial analysis tab (uses facial-analysis-dashboard.js)
+    if (typeof loadFacialAnalysisSessions === 'function') {
+      loadFacialAnalysisSessions();
+      initializeFacialAnalysisControls();
+    }
   } else if (tabName === 'facial-analysis-exports') {
-    loadFacialAnalysisExports();
-    initializeFacialAnalysisExportsControls();
+    // Load session exports tab (uses session-exports-dashboard.js)
+    if (typeof loadSessionExportSessions === 'function') {
+      loadSessionExportSessions();
+      initializeSessionExportControls();
+    }
   }
 }
 
@@ -945,37 +951,9 @@ function downloadAllSessions() {
   }, 2000);
 }
 
-// ============================================================================
-// FACIAL ANALYSIS TAB FUNCTIONS
-// ============================================================================
-
-// Global state for facial analysis
-let allFacialAnalysisSessions = [];
-let filteredFacialAnalysisSessions = [];
-let facialAnalysisSearchDebounceTimer = null;
-
-// Load facial analysis sessions
-async function loadFacialAnalysisSessions() {
-  // Check gRPC health
-  checkFacialAnalysisGrpcHealth();
-
-  try {
-    const response = await fetch('/admin/facial-analysis/eligible-sessions');
-    const result = await response.json();
-    const data = result.status === 'OLKORECT' ? result.data : result;
-
-    if (data.success) {
-      allFacialAnalysisSessions = data.sessions;
-      filteredFacialAnalysisSessions = allFacialAnalysisSessions;
-      applyFacialAnalysisFilters();
-      updateFacialAnalysisStats(data.stats);
-    } else {
-      console.error('Failed to load facial analysis sessions:', data.message);
-    }
-  } catch (error) {
-    console.error('Error loading facial analysis sessions:', error);
-  }
-}
+// NOTE: Facial analysis functionality has been moved to facial-analysis-dashboard.js
+// Session exports functionality has been moved to session-exports-dashboard.js
+// These separate modules are loaded in the dashboard template
 
 // Check gRPC health
 async function checkFacialAnalysisGrpcHealth() {

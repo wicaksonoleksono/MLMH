@@ -31,13 +31,14 @@ class FacialAnalysisBackgroundService:
         scheduler=None
     ) -> Dict[str, Any]:
         """
-        Queue a facial analysis processing task to run in background
+        Queue a facial analysis processing task by creating a database record.
+        The queue processor will pick it up and process it sequentially.
 
         Args:
             session_id: Assessment session ID
             assessment_type: 'PHQ' or 'LLM'
-            media_save_path: Base path for media files
-            scheduler: APScheduler instance
+            media_save_path: Base path for media files (unused, kept for compatibility)
+            scheduler: APScheduler instance (unused, kept for compatibility)
 
         Returns:
             {
@@ -72,32 +73,38 @@ class FacialAnalysisBackgroundService:
                         'status': 'already_completed',
                         'analysis_id': analysis.id
                     }
+                elif analysis.status == 'queued':
+                    return {
+                        'success': False,
+                        'message': f'{assessment_type} analysis already queued',
+                        'task_id': task_id,
+                        'status': 'already_queued'
+                    }
 
-        # Queue the task
-        if scheduler:
-            try:
-                scheduler.add_job(
-                    func=cls._execute_processing_task,
-                    args=(session_id, assessment_type, media_save_path),
-                    id=task_id,
-                    replace_existing=True,
-                    max_instances=1
-                )
-                logger.info(f"Queued facial analysis task: {task_id}")
-            except Exception as e:
-                logger.error(f"Failed to queue task {task_id}: {e}")
-                return {
-                    'success': False,
-                    'message': f'Failed to queue task: {str(e)}',
-                    'task_id': task_id,
-                    'status': 'failed'
-                }
-        else:
-            logger.warning(f"No scheduler provided, cannot queue task {task_id}")
+            # Create database record with status='queued'
+            # Generate JSONL path (will be created during processing)
+            timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+            jsonl_filename = f"session_{session_id[:8]}_{assessment_type}_{timestamp}.jsonl"
+            jsonl_path = f"facial_analysis/{jsonl_filename}"
+
+            # Create new analysis record in database
+            new_analysis = SessionFacialAnalysis(
+                session_id=session_id,
+                assessment_type=assessment_type,
+                jsonl_file_path=jsonl_path,
+                status='queued',
+                total_images_processed=0,
+                images_with_faces_detected=0,
+                images_failed=0
+            )
+            db.add(new_analysis)
+            db.commit()
+
+            logger.info(f"[QUEUE] Created database record for task: {task_id}")
 
         return {
             'success': True,
-            'message': f'{assessment_type} processing queued',
+            'message': f'{assessment_type} processing queued in database',
             'task_id': task_id,
             'status': 'queued'
         }
@@ -230,64 +237,95 @@ class FacialAnalysisBackgroundService:
     @classmethod
     def process_queue(cls):
         """
-        Process the task queue sequentially (called by scheduler every 5 seconds)
-        Processes ONE task at a time to prevent resource exhaustion
+        Process the task queue using I/O overseer pattern (called by scheduler every 10 seconds).
+
+        Acts as a "hook" that:
+        - Exits immediately if queue is empty (no wasted resources)
+        - Processes ONE session at a time (sequential)
+        - Uses async/context-switching to send images to gRPC
+        - Keeps all 4 gRPC workers busy with concurrent image requests
+        - WSGI worker acts as I/O coordinator (non-blocking)
+
+        Architecture:
+        - 1 WSGI worker oversees the I/O (network requests to gRPC)
+        - Each session sends images with controlled concurrency
+        - gRPC server (4 workers) does ML computation (CPU-intensive)
+        - Context switches while waiting for RPC responses
 
         Returns:
             {
-                'processed': bool - whether a task was processed
+                'processed': int - number of tasks processed (0 or 1)
                 'task_id': str - the task that was processed (if any)
                 'queue_size': int - remaining tasks in queue
             }
         """
         from ...db import get_session
 
-        # Find a task that's not yet being processed
         with get_session() as db:
+            # Get ONE pending task (sequential processing)
             pending_task = db.query(SessionFacialAnalysis).filter_by(
                 status='queued'
             ).first()
 
             if not pending_task:
-                # No pending tasks
+                # No pending tasks - exit early (queue is empty)
                 return {
-                    'processed': False,
+                    'processed': 0,
                     'task_id': None,
                     'queue_size': 0
                 }
 
+            # Mark as processing
             task_id = f"{pending_task.session_id}_{pending_task.assessment_type}"
-            logger.info(f"[QUEUE-PROCESSOR] Processing task: {task_id}")
+            pending_task.status = 'processing'
+            session_id = pending_task.session_id
+            assessment_type = pending_task.assessment_type
+            db.commit()
 
-            try:
-                # Mark as processing
-                pending_task.status = 'processing'
-                db.commit()
+            logger.info(f"[QUEUE-PROCESSOR] Starting task: {task_id}")
 
-                # Execute the processing
-                result = FacialAnalysisProcessingService.process_session_assessment(
-                    session_id=pending_task.session_id,
-                    assessment_type=pending_task.assessment_type,
-                    media_save_path=None  # Will be fetched from config
-                )
+        # Process task (outside db session to avoid locks)
+        try:
+            # Execute the processing
+            # This uses ThreadPoolExecutor(max_workers=4) internally
+            # which sends 4 concurrent RPC requests, fully utilizing gRPC's 4 workers
+            result = FacialAnalysisProcessingService.process_session_assessment(
+                session_id=session_id,
+                assessment_type=assessment_type,
+                media_save_path=None  # Will be fetched from config
+            )
+            logger.info(f"[QUEUE-PROCESSOR] Completed task: {task_id}")
 
-                logger.info(f"[QUEUE-PROCESSOR] Completed task: {task_id}")
+            # Get remaining queue size
+            with get_session() as db:
+                remaining = db.query(SessionFacialAnalysis).filter_by(status='queued').count()
 
-                return {
-                    'processed': True,
-                    'task_id': task_id,
-                    'queue_size': db.query(SessionFacialAnalysis).filter_by(status='queued').count()
-                }
+            return {
+                'processed': 1,
+                'task_id': task_id,
+                'queue_size': remaining
+            }
 
-            except Exception as e:
-                logger.error(f"[QUEUE-PROCESSOR] Failed task {task_id}: {str(e)}")
-                pending_task.status = 'failed'
-                pending_task.error_message = str(e)
-                db.commit()
+        except Exception as e:
+            logger.error(f"[QUEUE-PROCESSOR] Failed task {task_id}: {str(e)}")
+            # Update status to failed
+            with get_session() as db:
+                failed_task = db.query(SessionFacialAnalysis).filter_by(
+                    session_id=session_id,
+                    assessment_type=assessment_type
+                ).first()
+                if failed_task:
+                    failed_task.status = 'failed'
+                    failed_task.error_message = str(e)
+                    db.commit()
 
-                return {
-                    'processed': False,
-                    'task_id': task_id,
-                    'error': str(e),
-                    'queue_size': db.query(SessionFacialAnalysis).filter_by(status='queued').count()
-                }
+            # Get remaining queue size
+            with get_session() as db:
+                remaining = db.query(SessionFacialAnalysis).filter_by(status='queued').count()
+
+            return {
+                'processed': 0,
+                'task_id': task_id,
+                'error': str(e),
+                'queue_size': remaining
+            }

@@ -127,24 +127,40 @@ class SchedulerService:
 
         self.scheduler.add_job(
             func=self._execute_facial_analysis_queue_processor,
-            trigger=IntervalTrigger(seconds=5),  # Check queue every 5 seconds
+            trigger=IntervalTrigger(seconds=10),  # Check queue every 10 seconds
             id='facial_analysis_queue_processor',
             name='Facial Analysis Queue Processor',
             replace_existing=True,
             max_instances=1,  # Ensure only one processor runs at a time
-            misfire_grace_time=10,
+            misfire_grace_time=15,
             kwargs={'app': app}
         )
-        logger.info("Facial analysis queue processor scheduled to run every 5 seconds")
+        logger.info("Facial analysis queue processor scheduled to run every 10 seconds")
 
     def _execute_facial_analysis_queue_processor(self, app):
-        """Execute the facial analysis task queue processor - processes one task at a time sequentially"""
+        """
+        Execute the facial analysis task queue processor.
+
+        I/O Overseer Pattern:
+        - Processes ONE session at a time sequentially
+        - Each session sends 4 concurrent RPC requests (matches gRPC's 4 workers)
+        - WSGI worker acts as I/O coordinator (network requests)
+        - gRPC workers do ML computation (CPU/GPU intensive)
+        - Context switches while waiting for RPC responses
+        """
         with app.app_context():
             try:
                 from .facial_analysis.backgroundProcessingService import FacialAnalysisBackgroundService
 
                 # Process one task from the queue
-                FacialAnalysisBackgroundService.process_queue()
+                # Uses ThreadPoolExecutor(max_workers=4) internally to keep gRPC busy
+                result = FacialAnalysisBackgroundService.process_queue()
+
+                if result['processed'] > 0:
+                    logger.info(f"[QUEUE-PROCESSOR] Processed task {result['task_id']}, {result['queue_size']} remaining in queue")
+                else:
+                    # Queue is empty, exit early (no logging to reduce noise)
+                    pass
 
             except Exception as e:
                 logger.error(f"Facial analysis queue processor failed: {e}")

@@ -226,3 +226,68 @@ class FacialAnalysisBackgroundService:
             logger.info(f"Cleaned old task: {task_id}")
 
         return len(tasks_to_remove)
+
+    @classmethod
+    def process_queue(cls):
+        """
+        Process the task queue sequentially (called by scheduler every 5 seconds)
+        Processes ONE task at a time to prevent resource exhaustion
+
+        Returns:
+            {
+                'processed': bool - whether a task was processed
+                'task_id': str - the task that was processed (if any)
+                'queue_size': int - remaining tasks in queue
+            }
+        """
+        from ...db import get_session
+
+        # Find a task that's not yet being processed
+        with get_session() as db:
+            pending_task = db.query(SessionFacialAnalysis).filter_by(
+                status='queued'
+            ).first()
+
+            if not pending_task:
+                # No pending tasks
+                return {
+                    'processed': False,
+                    'task_id': None,
+                    'queue_size': 0
+                }
+
+            task_id = f"{pending_task.session_id}_{pending_task.assessment_type}"
+            logger.info(f"[QUEUE-PROCESSOR] Processing task: {task_id}")
+
+            try:
+                # Mark as processing
+                pending_task.status = 'processing'
+                db.commit()
+
+                # Execute the processing
+                result = FacialAnalysisProcessingService.process_session_assessment(
+                    session_id=pending_task.session_id,
+                    assessment_type=pending_task.assessment_type,
+                    media_save_path=None  # Will be fetched from config
+                )
+
+                logger.info(f"[QUEUE-PROCESSOR] Completed task: {task_id}")
+
+                return {
+                    'processed': True,
+                    'task_id': task_id,
+                    'queue_size': db.query(SessionFacialAnalysis).filter_by(status='queued').count()
+                }
+
+            except Exception as e:
+                logger.error(f"[QUEUE-PROCESSOR] Failed task {task_id}: {str(e)}")
+                pending_task.status = 'failed'
+                pending_task.error_message = str(e)
+                db.commit()
+
+                return {
+                    'processed': False,
+                    'task_id': task_id,
+                    'error': str(e),
+                    'queue_size': db.query(SessionFacialAnalysis).filter_by(status='queued').count()
+                }

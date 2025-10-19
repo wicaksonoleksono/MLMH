@@ -143,65 +143,78 @@ def dashboard_ajax_data():
 
     elif tab == 'facial-analysis':
         # Facial analysis tab - add facial analysis data to each session
+        # Only show sessions that have COMPLETED status (eligible for processing)
         from ..db import get_session
-        from ..model.assessment.sessions import CameraCapture, PHQResponse, LLMConversation
-        from sqlalchemy import func
+        from ..model.assessment.sessions import CameraCapture, AssessmentSession
+        from sqlalchemy import func, and_
 
         with get_session() as db:
-            # Add facial analysis status to each session item
+            # Filter to only show sessions that are COMPLETED (eligible for facial analysis)
+            filtered_items = []
+
             for item in response_data['user_sessions']['items']:
                 session1_id = item.get('session1_id')
                 session2_id = item.get('session2_id')
+                has_eligible_session = False
 
-                # Get facial analysis for session 1
+                # Get facial analysis for session 1 (if session is COMPLETED)
                 if session1_id:
-                    phq_analysis = db.query(SessionFacialAnalysis).filter_by(
-                        session_id=session1_id,
-                        assessment_type='PHQ'
-                    ).first()
-                    llm_analysis = db.query(SessionFacialAnalysis).filter_by(
-                        session_id=session1_id,
-                        assessment_type='LLM'
-                    ).first()
+                    session1_obj = db.query(AssessmentSession).filter_by(id=session1_id).first()
+                    if session1_obj and session1_obj.status == 'COMPLETED':
+                        phq_analysis = db.query(SessionFacialAnalysis).filter_by(
+                            session_id=session1_id,
+                            assessment_type='PHQ'
+                        ).first()
+                        llm_analysis = db.query(SessionFacialAnalysis).filter_by(
+                            session_id=session1_id,
+                            assessment_type='LLM'
+                        ).first()
 
-                    phq_images = db.query(func.count(CameraCapture.id)).filter_by(
-                        session_id=session1_id
-                    ).scalar() or 0
-                    llm_images = db.query(func.count(CameraCapture.id)).filter_by(
-                        session_id=session1_id
-                    ).scalar() or 0
+                        # Count images for this session (should be same count for both PHQ and LLM assessments of same session)
+                        images_count = db.query(func.count(CameraCapture.id)).filter_by(
+                            session_id=session1_id
+                        ).scalar() or 0
 
-                    item['session1_facial_analysis'] = {
-                        'phq_status': phq_analysis.status if phq_analysis else 'not_started',
-                        'llm_status': llm_analysis.status if llm_analysis else 'not_started',
-                        'phq_images': phq_images,
-                        'llm_images': llm_images
-                    }
+                        item['session1_facial_analysis'] = {
+                            'phq_status': phq_analysis.status if phq_analysis else 'not_started',
+                            'llm_status': llm_analysis.status if llm_analysis else 'not_started',
+                            'phq_images': images_count,
+                            'llm_images': images_count
+                        }
+                        has_eligible_session = True
 
-                # Get facial analysis for session 2
+                # Get facial analysis for session 2 (if session is COMPLETED)
                 if session2_id:
-                    phq_analysis = db.query(SessionFacialAnalysis).filter_by(
-                        session_id=session2_id,
-                        assessment_type='PHQ'
-                    ).first()
-                    llm_analysis = db.query(SessionFacialAnalysis).filter_by(
-                        session_id=session2_id,
-                        assessment_type='LLM'
-                    ).first()
+                    session2_obj = db.query(AssessmentSession).filter_by(id=session2_id).first()
+                    if session2_obj and session2_obj.status == 'COMPLETED':
+                        phq_analysis = db.query(SessionFacialAnalysis).filter_by(
+                            session_id=session2_id,
+                            assessment_type='PHQ'
+                        ).first()
+                        llm_analysis = db.query(SessionFacialAnalysis).filter_by(
+                            session_id=session2_id,
+                            assessment_type='LLM'
+                        ).first()
 
-                    phq_images = db.query(func.count(CameraCapture.id)).filter_by(
-                        session_id=session2_id
-                    ).scalar() or 0
-                    llm_images = db.query(func.count(CameraCapture.id)).filter_by(
-                        session_id=session2_id
-                    ).scalar() or 0
+                        # Count images for this session
+                        images_count = db.query(func.count(CameraCapture.id)).filter_by(
+                            session_id=session2_id
+                        ).scalar() or 0
 
-                    item['session2_facial_analysis'] = {
-                        'phq_status': phq_analysis.status if phq_analysis else 'not_started',
-                        'llm_status': llm_analysis.status if llm_analysis else 'not_started',
-                        'phq_images': phq_images,
-                        'llm_images': llm_images
-                    }
+                        item['session2_facial_analysis'] = {
+                            'phq_status': phq_analysis.status if phq_analysis else 'not_started',
+                            'llm_status': llm_analysis.status if llm_analysis else 'not_started',
+                            'phq_images': images_count,
+                            'llm_images': images_count
+                        }
+                        has_eligible_session = True
+
+                # Only include this user if they have at least one eligible session
+                if has_eligible_session:
+                    filtered_items.append(item)
+
+            # Replace the items with filtered list
+            response_data['user_sessions']['items'] = filtered_items
 
     elif tab == 'session-exports':
         # Session exports tab - add facial analysis status and download flag

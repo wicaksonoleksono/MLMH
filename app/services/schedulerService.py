@@ -20,10 +20,24 @@ class SchedulerService:
         if self.scheduler is not None:
             logger.info("APScheduler already initialized, skipping...")
             return
-        
-        # Create BackgroundScheduler with timezone from config
+
+        # Create BackgroundScheduler with timezone and executor configuration
         timezone = app.config.get('SCHEDULER_TIMEZONE', 'Asia/Jakarta')
-        self.scheduler = BackgroundScheduler(timezone=timezone)
+        executors = {
+            'default': {
+                'type': 'threadpool',
+                'max_workers': 5  # Allow up to 5 concurrent tasks (but each facial analysis job has max_instances=1)
+            }
+        }
+        job_defaults = {
+            'coalesce': True,  # Combine multiple pending jobs
+            'max_instances': 1  # Prevent duplicate execution
+        }
+        self.scheduler = BackgroundScheduler(
+            timezone=timezone,
+            executors=executors,
+            job_defaults=job_defaults
+        )
         
         # Add scheduled jobs with Flask app context
         with app.app_context():
@@ -54,6 +68,9 @@ class SchedulerService:
 
         # Job 3: Facial Analysis Task Cleanup - Daily cleanup of old task history
         self._add_facial_analysis_cleanup_job(app)
+
+        # Job 4: Facial Analysis Queue Processor - Process facial analysis tasks sequentially (every 5 seconds)
+        self._add_facial_analysis_queue_processor_job(app)
 
         self._jobs_registered = True
         logger.info("All scheduled jobs registered successfully")
@@ -103,7 +120,36 @@ class SchedulerService:
             kwargs={'app': app}
         )
         logger.info("Facial analysis task cleanup job scheduled daily at 02:00")
-    
+
+    def _add_facial_analysis_queue_processor_job(self, app):
+        """Add high-frequency job to process facial analysis tasks from queue sequentially"""
+        from apscheduler.triggers.interval import IntervalTrigger
+
+        self.scheduler.add_job(
+            func=self._execute_facial_analysis_queue_processor,
+            trigger=IntervalTrigger(seconds=5),  # Check queue every 5 seconds
+            id='facial_analysis_queue_processor',
+            name='Facial Analysis Queue Processor',
+            replace_existing=True,
+            max_instances=1,  # Ensure only one processor runs at a time
+            misfire_grace_time=10,
+            kwargs={'app': app}
+        )
+        logger.info("Facial analysis queue processor scheduled to run every 5 seconds")
+
+    def _execute_facial_analysis_queue_processor(self, app):
+        """Execute the facial analysis task queue processor - processes one task at a time sequentially"""
+        with app.app_context():
+            try:
+                from .facial_analysis.backgroundProcessingService import FacialAnalysisBackgroundService
+
+                # Process one task from the queue
+                FacialAnalysisBackgroundService.process_queue()
+
+            except Exception as e:
+                logger.error(f"Facial analysis queue processor failed: {e}")
+                # Don't re-raise to prevent scheduler from stopping
+
     def _execute_otp_cleanup(self, app):
         """Execute OTP cleanup task within Flask app context"""
         with app.app_context():

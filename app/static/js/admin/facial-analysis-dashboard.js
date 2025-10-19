@@ -284,9 +284,22 @@ function getFacialAnalysisStatusBadge(status) {
 function getFacialAnalysisActionButton(session) {
   const phqStatus = normalizeFacialStatus(session.phq_status);
   const llmStatus = normalizeFacialStatus(session.llm_status);
-  const canProcess = phqStatus === 'not_started' || llmStatus === 'not_started';
+  const hasImages = (session.phq_images_count > 0) || (session.llm_images_count > 0);
+  const canProcess = hasImages && (phqStatus === 'not_started' || llmStatus === 'not_started');
   const isProcessing = phqStatus === 'processing' || llmStatus === 'processing';
   const hasAnalysis = [phqStatus, llmStatus].some(status => status !== 'not_started');
+
+  // No images captured - session incomplete, disable button
+  if (!hasImages) {
+    return `
+      <button disabled class="inline-flex items-center px-3 py-2 bg-gray-200 text-gray-400 text-xs font-medium rounded-md cursor-not-allowed" title="No images captured for this session">
+        <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path>
+        </svg>
+        No Images
+      </button>
+    `;
+  }
 
   if (isProcessing) {
     return `

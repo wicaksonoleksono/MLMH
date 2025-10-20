@@ -64,8 +64,10 @@ async function loadSessionExportSessions() {
       }
 
       filteredSessionExportSessions = allSessionExportSessions;
+      currentSessionExportPage = 1;  // Reset to page 1 when data reloads
       renderSessionExportSessions();
-      updateSessionExportPagination(data.user_sessions.pagination);
+      // Calculate pagination based on FILTERED sessions, not API pagination
+      updateSessionExportPagination();
       updateSessionExportCount();
     } else {
       console.error('[SESSION-EXPORTS] Failed to load:', {
@@ -273,13 +275,14 @@ function getSessionExportActionButtons(session) {
 }
 
 // Update session export pagination
-function updateSessionExportPagination(pagination) {
+function updateSessionExportPagination() {
   const containerEl = document.getElementById("facial-export-pagination-container");
   const infoEl = document.getElementById("facial-export-pagination-info");
   const controlsEl = document.getElementById("facial-export-pagination-controls");
 
   if (!containerEl || !infoEl || !controlsEl) return;
 
+  // Calculate pagination based on FILTERED sessions only
   const total = filteredSessionExportSessions.length;
   const totalPages = Math.ceil(total / currentSessionExportPerPage);
 
@@ -352,7 +355,7 @@ async function downloadBulkSessions() {
   const sessionIds = Array.from(selectedSessionExportSessions);
 
   try {
-    const response = await fetch('/admin/export/facial-analysis/bulk', {
+    const response = await fetch('/admin/facial-analysis/export/bulk', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_ids: sessionIds })

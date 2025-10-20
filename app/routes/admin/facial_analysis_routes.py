@@ -1108,3 +1108,44 @@ def reanalyze_assessment(session_id, assessment_type):
             "success": False,
             "message": f"Re-analysis failed: {str(e)}"
         }, 500
+
+
+@facial_analysis_bp.route('/export/bulk', methods=['POST'])
+@login_required
+@admin_required
+def bulk_export_facial_analysis():
+    """
+    Bulk export facial analysis results as ZIP file.
+
+    Request body:
+    {
+        "session_ids": ["session_id_1", "session_id_2", ...]
+    }
+    """
+    from flask import request
+    from ...services.admin.exportService import ExportService
+
+    try:
+        data = request.get_json()
+        session_ids = data.get('session_ids', [])
+
+        if not session_ids or not isinstance(session_ids, list):
+            return {
+                "error": "Invalid session_ids. Must be a non-empty array."
+            }, 400
+
+        # Bulk export facial analysis
+        zip_buffer = ExportService.export_bulk_facial_analysis(session_ids)
+        filename = ExportService.get_bulk_facial_analysis_export_filename()
+
+        return send_file(
+            zip_buffer,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=filename
+        )
+
+    except Exception as e:
+        return {
+            "error": f"Bulk export failed: {str(e)}"
+        }, 500

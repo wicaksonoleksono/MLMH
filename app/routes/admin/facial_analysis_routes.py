@@ -21,22 +21,7 @@ import threading
 facial_analysis_bp = Blueprint('facial_analysis', __name__, url_prefix='/admin/facial-analysis')
 
 
-@facial_analysis_bp.route('/')
-@login_required
-@admin_required
-@raw_response
-def index():
-    """Main facial analysis management page"""
-    return render_template('admin/facial_analysis/index.html', user=current_user)
 
-
-@facial_analysis_bp.route('/processing')
-@login_required
-@admin_required
-@raw_response
-def processing():
-    """Facial analysis processing management page"""
-    return render_template('admin/facial_analysis/processing.html', user=current_user)
 
 # DEPRECATED: Use /admin/ajax-dashboard-data?tab=facial-analysis instead
 # This endpoint is kept for backward compatibility but is no longer used

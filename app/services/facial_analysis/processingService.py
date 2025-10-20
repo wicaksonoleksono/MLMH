@@ -12,7 +12,7 @@ Completely separate from gRPC service - only uses gRPC client.
 
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading

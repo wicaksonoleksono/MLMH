@@ -43,7 +43,7 @@ async function loadSessionExportSessions() {
     }
 
     if (data && data.user_sessions) {
-      // CRITICAL: Capture backend pagination metadata (by users, not by sessions)
+      // Capture backend pagination metadata (by SESSIONS now, not users)
       const backendPagination = data.user_sessions.pagination || {};
       sessionExportPaginationMeta = {
         page: backendPagination.page || 1,
@@ -54,37 +54,17 @@ async function loadSessionExportSessions() {
         has_next: backendPagination.has_next || false
       };
 
-      // Extract session export data from user sessions
-      // ONLY include sessions that are COMPLETED (have session_id and facial_analysis data)
-      allSessionExportSessions = [];
-
-      for (const item of data.user_sessions.items) {
-        // Process Session 1 - ONLY if completed (has session1_id and facial_analysis)
-        if (item.session1_id && item.session1_facial_analysis) {
-          allSessionExportSessions.push({
-            id: item.session1_id,
-            user_id: item.user_id,
-            username: item.username,
-            session_number: 1,
-            phq_status: item.session1_facial_analysis.phq_status,
-            llm_status: item.session1_facial_analysis.llm_status,
-            can_download: item.session1_facial_analysis.can_download
-          });
-        }
-
-        // Process Session 2 - ONLY if completed (has session2_id and facial_analysis)
-        if (item.session2_id && item.session2_facial_analysis) {
-          allSessionExportSessions.push({
-            id: item.session2_id,
-            user_id: item.user_id,
-            username: item.username,
-            session_number: 2,
-            phq_status: item.session2_facial_analysis.phq_status,
-            llm_status: item.session2_facial_analysis.llm_status,
-            can_download: item.session2_facial_analysis.can_download
-          });
-        }
-      }
+      // Extract session export data from sessions (now flattened at session level, not user level)
+      // Items are already individual sessions with facial_analysis data included
+      allSessionExportSessions = data.user_sessions.items.map(item => ({
+        id: item.id,
+        user_id: item.user_id,
+        username: item.username,
+        session_number: item.session_number,
+        phq_status: item.phq_status,
+        llm_status: item.llm_status,
+        can_download: item.can_download
+      }));
 
       filteredSessionExportSessions = allSessionExportSessions;
       // Don't reset to page 1 here - pagination is server-side

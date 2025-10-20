@@ -303,56 +303,84 @@ def dashboard_ajax_data():
             }
 
     elif tab == 'session-exports':
-        # Session exports tab - add facial analysis status and download flag
+        # Session exports tab - flatten users into individual sessions and paginate by SESSIONS
         from ..db import get_session
 
         with get_session() as db:
-            # Add facial analysis status to each session item
-            for item in response_data['user_sessions']['items']:
-                session1_id = item.get('session1_id')
-                session2_id = item.get('session2_id')
+            # Step 1: Flatten all users' sessions into a flat list of individual sessions
+            all_sessions = []
+            for user_item in response_data['user_sessions']['items']:
+                # Add session 1 if it exists
+                if user_item.get('session1_id'):
+                    all_sessions.append({
+                        'id': user_item['session1_id'],
+                        'user_id': user_item['user_id'],
+                        'username': user_item['username'],
+                        'session_number': 1
+                    })
+                # Add session 2 if it exists
+                if user_item.get('session2_id'):
+                    all_sessions.append({
+                        'id': user_item['session2_id'],
+                        'user_id': user_item['user_id'],
+                        'username': user_item['username'],
+                        'session_number': 2
+                    })
 
-                # Get facial analysis for session 1
-                if session1_id:
-                    phq_analysis = db.query(SessionFacialAnalysis).filter_by(
-                        session_id=session1_id,
-                        assessment_type='PHQ'
-                    ).first()
-                    llm_analysis = db.query(SessionFacialAnalysis).filter_by(
-                        session_id=session1_id,
-                        assessment_type='LLM'
-                    ).first()
+            # Step 2: Get facial analysis for all sessions in one query
+            session_ids = [s['id'] for s in all_sessions]
+            facial_analysis_map = {}
+            if session_ids:
+                analyses = db.query(SessionFacialAnalysis).filter(
+                    SessionFacialAnalysis.session_id.in_(session_ids)
+                ).all()
+                for analysis in analyses:
+                    if analysis.session_id not in facial_analysis_map:
+                        facial_analysis_map[analysis.session_id] = {}
+                    facial_analysis_map[analysis.session_id][analysis.assessment_type] = analysis
 
-                    phq_status = phq_analysis.status if phq_analysis else 'not_started'
-                    llm_status = llm_analysis.status if llm_analysis else 'not_started'
-                    both_completed = (phq_status == 'completed' and llm_status == 'completed')
+            # Step 3: Add facial analysis data to each session
+            for session in all_sessions:
+                analyses = facial_analysis_map.get(session['id'], {})
+                phq_analysis = analyses.get('PHQ')
+                llm_analysis = analyses.get('LLM')
 
-                    item['session1_facial_analysis'] = {
-                        'phq_status': phq_status,
-                        'llm_status': llm_status,
-                        'can_download': both_completed
-                    }
+                phq_status = phq_analysis.status if phq_analysis else 'not_started'
+                llm_status = llm_analysis.status if llm_analysis else 'not_started'
+                can_download = (phq_status == 'completed' and llm_status == 'completed')
 
-                # Get facial analysis for session 2
-                if session2_id:
-                    phq_analysis = db.query(SessionFacialAnalysis).filter_by(
-                        session_id=session2_id,
-                        assessment_type='PHQ'
-                    ).first()
-                    llm_analysis = db.query(SessionFacialAnalysis).filter_by(
-                        session_id=session2_id,
-                        assessment_type='LLM'
-                    ).first()
+                session['phq_status'] = phq_status
+                session['llm_status'] = llm_status
+                session['can_download'] = can_download
 
-                    phq_status = phq_analysis.status if phq_analysis else 'not_started'
-                    llm_status = llm_analysis.status if llm_analysis else 'not_started'
-                    both_completed = (phq_status == 'completed' and llm_status == 'completed')
+            # Step 4: Re-paginate at SESSION level (not user level)
+            # Calculate total sessions and pagination
+            total_sessions = len(all_sessions)
+            pages = (total_sessions + per_page - 1) // per_page if total_sessions > 0 else 1
+            has_prev = page > 1
+            has_next = (page * per_page) < total_sessions
+            prev_num = page - 1 if has_prev else None
+            next_num = page + 1 if has_next else None
 
-                    item['session2_facial_analysis'] = {
-                        'phq_status': phq_status,
-                        'llm_status': llm_status,
-                        'can_download': both_completed
-                    }
+            # Apply pagination to flattened session list
+            start_idx = (page - 1) * per_page
+            end_idx = start_idx + per_page
+            paginated_sessions = all_sessions[start_idx:end_idx]
+
+            # Step 5: Replace response data with session-level pagination
+            response_data['user_sessions'] = {
+                'items': paginated_sessions,
+                'pagination': {
+                    'page': page,
+                    'pages': pages,
+                    'per_page': per_page,
+                    'total': total_sessions,
+                    'has_prev': has_prev,
+                    'has_next': has_next,
+                    'prev_num': prev_num,
+                    'next_num': next_num
+                }
+            }
 
     return {
         'status': 'success',

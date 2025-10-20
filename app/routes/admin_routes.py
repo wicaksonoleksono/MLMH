@@ -303,32 +303,36 @@ def dashboard_ajax_data():
             }
 
     elif tab == 'session-exports':
-        # Session exports tab - flatten users into individual sessions and paginate by SESSIONS
+        # Session exports tab - query ALL completed sessions directly, filter by facial analysis completion
         from ..db import get_session
+        from ..model.assessment.sessions import AssessmentSession
+        from ..model.shared.users import User
+        from sqlalchemy import func, and_
 
         with get_session() as db:
-            # Step 1: Flatten all users' sessions into a flat list of individual sessions
-            all_sessions = []
-            for user_item in response_data['user_sessions']['items']:
-                # Add session 1 if it exists
-                if user_item.get('session1_id'):
-                    all_sessions.append({
-                        'id': user_item['session1_id'],
-                        'user_id': user_item['user_id'],
-                        'username': user_item['username'],
-                        'session_number': 1
-                    })
-                # Add session 2 if it exists
-                if user_item.get('session2_id'):
-                    all_sessions.append({
-                        'id': user_item['session2_id'],
-                        'user_id': user_item['user_id'],
-                        'username': user_item['username'],
-                        'session_number': 2
-                    })
+            # Step 1: Get ALL COMPLETED sessions (latest for each user+session_number)
+            subquery = db.query(
+                AssessmentSession.user_id,
+                AssessmentSession.session_number,
+                func.max(AssessmentSession.created_at).label('latest_created_at')
+            ).filter(
+                AssessmentSession.status == 'COMPLETED'
+            ).group_by(
+                AssessmentSession.user_id,
+                AssessmentSession.session_number
+            ).subquery()
+
+            completed_sessions = db.query(AssessmentSession).join(
+                subquery,
+                and_(
+                    AssessmentSession.user_id == subquery.c.user_id,
+                    AssessmentSession.session_number == subquery.c.session_number,
+                    AssessmentSession.created_at == subquery.c.latest_created_at
+                )
+            ).join(User).order_by(User.id, AssessmentSession.session_number).all()
 
             # Step 2: Get facial analysis for all sessions in one query
-            session_ids = [s['id'] for s in all_sessions]
+            session_ids = [s.id for s in completed_sessions]
             facial_analysis_map = {}
             if session_ids:
                 analyses = db.query(SessionFacialAnalysis).filter(
@@ -339,35 +343,49 @@ def dashboard_ajax_data():
                         facial_analysis_map[analysis.session_id] = {}
                     facial_analysis_map[analysis.session_id][analysis.assessment_type] = analysis
 
-            # Step 3: Add facial analysis data to each session
-            for session in all_sessions:
-                analyses = facial_analysis_map.get(session['id'], {})
+            # Step 3: Build flat list of individual sessions with facial analysis data
+            # ONLY include sessions where BOTH PHQ and LLM are completed
+            all_sessions = []
+            for session in completed_sessions:
+                analyses = facial_analysis_map.get(session.id, {})
                 phq_analysis = analyses.get('PHQ')
                 llm_analysis = analyses.get('LLM')
 
                 phq_status = phq_analysis.status if phq_analysis else 'not_started'
                 llm_status = llm_analysis.status if llm_analysis else 'not_started'
-                can_download = (phq_status == 'completed' and llm_status == 'completed')
 
-                session['phq_status'] = phq_status
-                session['llm_status'] = llm_status
-                session['can_download'] = can_download
+                # CONSTRAINT: Only include if BOTH are completed
+                if phq_status == 'completed' and llm_status == 'completed':
+                    all_sessions.append({
+                        'id': session.id,
+                        'user_id': session.user_id,
+                        'username': session.user.uname,
+                        'session_number': session.session_number,
+                        'phq_status': phq_status,
+                        'llm_status': llm_status,
+                        'can_download': True  # Always true if we reach here
+                    })
 
-            # Step 4: Re-paginate at SESSION level (not user level)
-            # Calculate total sessions and pagination
+            # Step 4: Apply search filter if provided
+            if search_query:
+                all_sessions = [
+                    s for s in all_sessions
+                    if search_query.lower() in s['username'].lower()
+                ]
+
+            # Step 5: Paginate filtered sessions
             total_sessions = len(all_sessions)
-            pages = (total_sessions + per_page - 1) // per_page if total_sessions > 0 else 1
+            offset = (page - 1) * per_page
+            paginated_sessions = all_sessions[offset:offset + per_page]
+
+            # Calculate pagination info
             has_prev = page > 1
-            has_next = (page * per_page) < total_sessions
+            has_next = offset + per_page < total_sessions
+            pages = (total_sessions + per_page - 1) // per_page if total_sessions > 0 else 0
             prev_num = page - 1 if has_prev else None
             next_num = page + 1 if has_next else None
 
-            # Apply pagination to flattened session list
-            start_idx = (page - 1) * per_page
-            end_idx = start_idx + per_page
-            paginated_sessions = all_sessions[start_idx:end_idx]
-
-            # Step 5: Replace response data with session-level pagination
+            # Step 6: Replace response data with session-level pagination
             response_data['user_sessions'] = {
                 'items': paginated_sessions,
                 'pagination': {

@@ -43,7 +43,7 @@ async function loadSessionExportSessions() {
     }
 
     if (data && data.user_sessions) {
-      // Capture backend pagination metadata (by SESSIONS now, not users)
+      // Capture backend pagination metadata (sessions paginated by facial analysis completion)
       const backendPagination = data.user_sessions.pagination || {};
       sessionExportPaginationMeta = {
         page: backendPagination.page || 1,
@@ -298,11 +298,11 @@ function updateSessionExportPagination() {
 
   containerEl.classList.remove("hidden");
 
-  // Calculate display range based on backend total (users), not local sessions count
+  // Calculate display range based on backend total sessions
   const itemsOnCurrentPage = filteredSessionExportSessions.length;
   const start = (currentPage - 1) * sessionExportPaginationMeta.per_page + 1;
   const end = Math.min(start + itemsOnCurrentPage - 1, total);
-  infoEl.textContent = `Showing ${start} to ${end} of ${total} users (${filteredSessionExportSessions.length} sessions)`;
+  infoEl.textContent = `Showing ${start} to ${end} of ${total} sessions`;
 
   let controls = "";
 

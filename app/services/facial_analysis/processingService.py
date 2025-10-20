@@ -156,7 +156,6 @@ class FacialAnalysisProcessingService:
                 analysis_record = db.query(SessionFacialAnalysis).filter_by(id=analysis_id).first()
                 if not analysis_record:
                     # Record was deleted or lost - log and continue
-                    print(f"[WARNING] SessionFacialAnalysis record not found for id={analysis_id}")
                     return result
 
                 if result.success:
@@ -183,7 +182,6 @@ class FacialAnalysisProcessingService:
                 analysis_record = db.query(SessionFacialAnalysis).filter_by(id=analysis_id).first()
                 if not analysis_record:
                     # Record was deleted or lost - log and return error
-                    print(f"[WARNING] SessionFacialAnalysis record not found for id={analysis_id} during exception handling")
                     return ProcessingResult(success=False, message=f'Processing error: {str(e)}')
 
                 analysis_record.status = 'failed'
@@ -220,15 +218,12 @@ class FacialAnalysisProcessingService:
 
             # Extract image data with timing - MATCH EXPORT SERVICE METHOD
             image_data: List[ImageDataForProcessing] = []
-            # print(f"[DEBUG] Found {len(captures)} captures for session_id={session_id}, assessment_id={assessment_id}")
 
             for capture in captures:
                 # Skip if no filenames (match export service logic)
                 if not capture.filenames:
-                    print(f"[DEBUG] Skipping capture {capture.id} - no filenames")
                     continue
 
-                # print(f"[DEBUG] Processing capture: type={capture.capture_type}, filenames={capture.filenames}")
 
                 # Iterate through filenames array (match export service)
                 for filename in capture.filenames:
@@ -260,10 +255,7 @@ class FacialAnalysisProcessingService:
                         timestamp=timestamp or capture.created_at.isoformat()
                     )
                     image_data.append(img_data)
-                    # print(f"[DEBUG] Added image: {filename}")
 
-            print(f"[DEBUG] Total images collected: {len(image_data)}")
-            print(f"[DEBUG] media_save_path: {media_save_path}")
 
             if not image_data:
                 return ProcessingResult(success=False, message='No valid image data found')
@@ -283,17 +275,30 @@ class FacialAnalysisProcessingService:
         # PHASE 1: Memoize input metadata in memory (sequential mapping)
         # NOTE: Only caching FILENAMES & PATHS, NOT image data (images stay on disk)
         # This allows processing 1000s of images without RAM issues (e.g., 40GB+ image sets)
-        print(f"[INFO] Phase 1: Memoizing {len(image_data)} image metadata (filenames, paths, timing)...")
         image_cache = {}  # Map index → filename/path/timing metadata (lightweight)
+
+        # Get storage path from camera settings (same as where images are saved)
+        from ...services.camera.cameraStorageService import CameraStorageService
+        storage_path = CameraStorageService.get_storage_path_for_session(session_id)
+        if not storage_path:
+            storage_path = media_save_path or ''
+
         for idx, img_data in enumerate(image_data):
+            # Build full image path (same way it was saved)
+            # Images are saved to storage_path (absolute path from camera settings)
+            image_path = os.path.join(storage_path, img_data.filename)
+
+            # Ensure path is absolute - if relative, prepend media_save_path
+            if not os.path.isabs(image_path) and media_save_path:
+                image_path = os.path.join(media_save_path, image_path)
+
             image_cache[idx] = {
                 'index': idx,
-                'filename': img_data.filename,  # Just the filename string
-                'timing': img_data.timing,      # Just timing data (small)
-                'timestamp': img_data.timestamp,  # Just timestamp string
-                'image_path': os.path.join(media_save_path or '', img_data.filename)  # Just the path string
+                'filename': img_data.filename,
+                'timing': img_data.timing,
+                'timestamp': img_data.timestamp,
+                'image_path': image_path
             }
-        print(f"[INFO] Cached {len(image_cache)} image metadata (~{len(image_cache) * 0.5}KB estimated)")
 
         # Open JSONL file for streaming writes
         results_for_summary: List[FacialAnalysisImageResult] = []
@@ -320,7 +325,6 @@ class FacialAnalysisProcessingService:
 
             # Process images in parallel using ThreadPoolExecutor
             # 4 workers match the gRPC server workers
-            print(f"[INFO] Starting parallel processing with 4 workers for {len(image_data)} images")
 
             def process_single_image(idx):
                 """Process a single image using cached metadata"""
@@ -344,11 +348,9 @@ class FacialAnalysisProcessingService:
                 # Check if image exists
                 if not os.path.exists(image_path):
                     result_entry['error'] = f'Image not found: {image_path}'
-                    print(f"[ERROR] Image {idx + 1}/{len(image_data)} not found: {filename}")
                     return result_entry
 
                 # Call gRPC service for inference (parallel!)
-                print(f"[INFO] Processing image {idx + 1}/{len(image_data)}: {filename}")
                 try:
                     inference_result = client.analyze_image(image_path, device=device)
                     result_entry['inference_result'] = inference_result
@@ -360,12 +362,10 @@ class FacialAnalysisProcessingService:
                     return result_entry
                 except Exception as e:
                     result_entry['error'] = str(e)
-                    print(f"[ERROR] Exception processing image {idx + 1}: {filename} - {str(e)}")
                     return result_entry
 
             # PHASE 2: Process images in parallel using cached metadata
             # Submit all images to thread pool for parallel processing
-            print(f"[INFO] Phase 2: Processing {len(image_cache)} images in parallel with 4 workers...")
             results_by_index = {}  # Store results keyed by original image index
             import time
             phase2_start = time.time()
@@ -384,27 +384,17 @@ class FacialAnalysisProcessingService:
                         idx = result_entry['index']
                         results_by_index[idx] = result_entry
                         completed_count += 1
-                        if completed_count % 100 == 0:  # Log every 100 images
-                            print(f"[INFO] Completed {completed_count}/{len(image_cache)} images")
                     except Exception as e:
-                        import traceback
-                        error_trace = traceback.format_exc()
-                        print(f"[ERROR] Thread exception: {str(e)}")
-                        print(f"[TRACEBACK] {error_trace}")
                         # Continue processing even if one thread fails
                         continue
 
                 phase2_time = time.time() - phase2_start
-                print(f"[INFO] All {completed_count} threads completed in {phase2_time:.1f}s. Checking for missing results...")
-                if missing_indices := [i for i in range(len(image_cache)) if i not in results_by_index]:
-                    print(f"[WARNING] {len(missing_indices)} images missing results: {missing_indices[:10]}{'...' if len(missing_indices) > 10 else ''}")
+                missing_indices = [i for i in range(len(image_cache)) if i not in results_by_index]
 
             # PHASE 3: Write results to JSONL in SEQUENTIAL order (reorder by original mapping)
-            print(f"[INFO] Phase 3: Reordering and writing results to JSONL in sequential order...")
             missing_indices = []
             for idx in range(len(image_data)):
                 if idx not in results_by_index:
-                    print(f"[WARNING] Image {idx + 1} missing from results (no thread result)")
                     missing_indices.append(idx)
                     continue
 
@@ -422,8 +412,6 @@ class FacialAnalysisProcessingService:
                         failed += 1
 
                     error_message = result_entry['error']
-                    print(f"[ERROR] Image {total_processed}/{len(image_data)} failed: {filename}")
-                    print(f"[ERROR] Error message: {error_message}")
 
                     failure_detail = {
                         'filename': filename,
@@ -550,7 +538,6 @@ class FacialAnalysisProcessingService:
         3. Batch write to DB
         4. Sequential JSONL output
         """
-        print(f"[INFO] Starting ASYNC batch processing for {assessment_type}")
 
         # This is the new async method - use asyncio.run() to execute
         # For now, returning a placeholder until full implementation

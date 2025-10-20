@@ -315,12 +315,68 @@ def cancel_process_all():
         })
         db.commit()
 
-        print(f"[CANCEL] Cancelled {queued_count} queued tasks by {current_user.email}")
-
     return {
         "success": True,
         "message": f"Cancelled {queued_count} queued tasks. Currently processing tasks will complete."
     }, 200
+
+
+@facial_analysis_bp.route('/delete-all', methods=['DELETE'])
+@login_required
+@admin_required
+@api_response
+def delete_all_facial_analysis_results():
+    """
+    Delete ALL facial analysis results and JSONL files.
+
+    This will delete all SessionFacialAnalysis records and their corresponding JSONL files.
+    """
+    from ...model.assessment.facial_analysis import SessionFacialAnalysis
+    import os
+
+    with get_session() as db:
+        # Get all analysis records
+        all_records = db.query(SessionFacialAnalysis).all()
+
+        if not all_records:
+            return {
+                "success": False,
+                "message": "No facial analysis records found to delete"
+            }, 400
+
+        deleted_count = 0
+        jsonl_deleted_count = 0
+        errors = []
+
+        # Delete JSONL files and database records
+        for record in all_records:
+            try:
+                # Delete JSONL file if it exists
+                if record.jsonl_file_path:
+                    jsonl_path = os.path.join(current_app.media_save, record.jsonl_file_path)
+                    if os.path.exists(jsonl_path):
+                        os.remove(jsonl_path)
+                        jsonl_deleted_count += 1
+
+                # Delete database record
+                db.delete(record)
+                deleted_count += 1
+            except Exception as e:
+                errors.append(f"Error deleting {record.id}: {str(e)}")
+
+        db.commit()
+
+        message = f"Deleted {deleted_count} analysis records and {jsonl_deleted_count} JSONL files."
+        if errors:
+            message += f" Errors: {len(errors)}"
+
+        return {
+            "success": True,
+            "message": message,
+            "deleted_records": deleted_count,
+            "deleted_files": jsonl_deleted_count,
+            "errors": errors if errors else None
+        }, 200
 
 
 @facial_analysis_bp.route('/process-all/status', methods=['GET'])

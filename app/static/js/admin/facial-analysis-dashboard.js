@@ -163,6 +163,7 @@ function initializeFacialAnalysisControls() {
   const searchInput = document.getElementById('fa-searchInput');
   const statusFilter = document.getElementById('fa-statusFilter');
   const processAllButton = document.getElementById('fa-process-all-btn');
+  const deleteAllButton = document.getElementById('fa-delete-all-btn');
 
   if (searchInput) {
     searchInput.addEventListener('input', function(e) {
@@ -187,6 +188,11 @@ function initializeFacialAnalysisControls() {
   if (processAllButton && !processAllButton.dataset.listenerAttached) {
     processAllButton.addEventListener('click', processAllFacialAnalysisSessions);
     processAllButton.dataset.listenerAttached = 'true';
+  }
+
+  if (deleteAllButton && !deleteAllButton.dataset.listenerAttached) {
+    deleteAllButton.addEventListener('click', deleteAllFacialAnalysisResults);
+    deleteAllButton.dataset.listenerAttached = 'true';
   }
 }
 
@@ -666,6 +672,42 @@ async function pollProcessAllProgress(button, originalHtml) {
       console.error('Error polling progress:', error);
     }
   }, 10000); // Poll every 10 seconds
+}
+
+async function deleteAllFacialAnalysisResults() {
+  if (!confirm('Delete ALL facial analysis results and JSONL files?\n\nThis action cannot be undone!')) {
+    return;
+  }
+
+  const button = document.getElementById('fa-delete-all-btn');
+  if (!button) return;
+
+  const originalHtml = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = `<span>Deleting...</span>`;
+
+  try {
+    const response = await fetch('/admin/facial-analysis/delete-all', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    const result = await response.json();
+    const data = result.status === 'OLKORECT' ? result.data : result;
+
+    if (data.success) {
+      alert('✅ ' + data.message);
+    } else {
+      alert('⚠️ ' + (data.message || 'Failed to delete results.'));
+    }
+
+    loadFacialAnalysisSessions();
+  } catch (error) {
+    alert('Error: ' + error.message);
+  } finally {
+    button.disabled = false;
+    button.innerHTML = originalHtml;
+  }
 }
 
 // Update facial analysis pagination

@@ -11,6 +11,15 @@ let currentSessionExportSortBy = "user_id";
 let currentSessionExportSortOrder = "asc";
 let sessionExportSearchDebounceTimer = null;
 let selectedSessionExportSessions = new Set();
+// Backend pagination metadata
+let sessionExportPaginationMeta = {
+  page: 1,
+  pages: 1,
+  per_page: 15,
+  total: 0,
+  has_prev: false,
+  has_next: false
+};
 
 // Load session export sessions with pagination and search
 async function loadSessionExportSessions() {
@@ -23,20 +32,34 @@ async function loadSessionExportSessions() {
 
     const response = await fetch(url);
     const result = await response.json();
-    console.log('[SESSION-EXPORTS] API URL:', url);
-    console.log('[SESSION-EXPORTS] Full response tab:', result?.data?.tab || result?.tab);
-    let data = result.status === 'OLKORECT' ? result.data : result;
-    // The response is double-wrapped: outer wrapper has 'data' and 'status', inner has the actual data
+
+    // Response structure: { status: 'OLKORECT', data: { status: 'success', data: { status: 'success', user_sessions: {...} } } }
+    let data = result;
+    if (result.data) {
+      data = result.data;
+    }
     if (data.data) {
       data = data.data;
     }
 
-    if (data && data.status === 'success' && data.user_sessions) {
+    if (data && data.user_sessions) {
+      // CRITICAL: Capture backend pagination metadata (by users, not by sessions)
+      const backendPagination = data.user_sessions.pagination || {};
+      sessionExportPaginationMeta = {
+        page: backendPagination.page || 1,
+        pages: backendPagination.pages || 1,
+        per_page: backendPagination.per_page || currentSessionExportPerPage,
+        total: backendPagination.total || 0,
+        has_prev: backendPagination.has_prev || false,
+        has_next: backendPagination.has_next || false
+      };
+
       // Extract session export data from user sessions
+      // ONLY include sessions that are COMPLETED (have session_id and facial_analysis data)
       allSessionExportSessions = [];
 
       for (const item of data.user_sessions.items) {
-        // Process Session 1
+        // Process Session 1 - ONLY if completed (has session1_id and facial_analysis)
         if (item.session1_id && item.session1_facial_analysis) {
           allSessionExportSessions.push({
             id: item.session1_id,
@@ -49,7 +72,7 @@ async function loadSessionExportSessions() {
           });
         }
 
-        // Process Session 2
+        // Process Session 2 - ONLY if completed (has session2_id and facial_analysis)
         if (item.session2_id && item.session2_facial_analysis) {
           allSessionExportSessions.push({
             id: item.session2_id,
@@ -64,15 +87,16 @@ async function loadSessionExportSessions() {
       }
 
       filteredSessionExportSessions = allSessionExportSessions;
-      currentSessionExportPage = 1;  // Reset to page 1 when data reloads
+      // Don't reset to page 1 here - pagination is server-side
       renderSessionExportSessions();
-      // Calculate pagination based on FILTERED sessions, not API pagination
+      // Use backend pagination metadata for pagination display
       updateSessionExportPagination();
       updateSessionExportCount();
     } else {
       console.error('[SESSION-EXPORTS] Failed to load:', {
         status: data?.status,
         hasUserSessions: !!data?.user_sessions,
+        userSessionsKeys: Object.keys(data || {}),
         message: data?.message,
         fullData: data
       });
@@ -97,7 +121,7 @@ function initializeSessionExportControls() {
       }
       sessionExportSearchDebounceTimer = setTimeout(() => {
         currentSessionExportSearchQuery = e.target.value.trim().toLowerCase();
-        currentSessionExportPage = 1;
+        currentSessionExportPage = 1;  // Reset to page 1 when search query changes
         loadSessionExportSessions();
       }, 300);
     });
@@ -282,9 +306,10 @@ function updateSessionExportPagination() {
 
   if (!containerEl || !infoEl || !controlsEl) return;
 
-  // Calculate pagination based on FILTERED sessions only
-  const total = filteredSessionExportSessions.length;
-  const totalPages = Math.ceil(total / currentSessionExportPerPage);
+  // Use backend pagination metadata (by users, not sessions)
+  const total = sessionExportPaginationMeta.total;
+  const totalPages = sessionExportPaginationMeta.pages;
+  const currentPage = sessionExportPaginationMeta.page;
 
   if (total === 0) {
     containerEl.classList.add("hidden");
@@ -293,28 +318,35 @@ function updateSessionExportPagination() {
 
   containerEl.classList.remove("hidden");
 
-  const start = (currentSessionExportPage - 1) * currentSessionExportPerPage + 1;
-  const end = Math.min(start + currentSessionExportPerPage - 1, total);
-  infoEl.textContent = `Showing ${start} to ${end} of ${total} results`;
+  // Calculate display range based on backend total (users), not local sessions count
+  const itemsOnCurrentPage = filteredSessionExportSessions.length;
+  const start = (currentPage - 1) * sessionExportPaginationMeta.per_page + 1;
+  const end = Math.min(start + itemsOnCurrentPage - 1, total);
+  infoEl.textContent = `Showing ${start} to ${end} of ${total} users (${filteredSessionExportSessions.length} sessions)`;
 
   let controls = "";
 
-  if (currentSessionExportPage > 1) {
-    controls += `<button onclick="changeSessionExportPage(${currentSessionExportPage - 1})" class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">Previous</button>`;
+  if (sessionExportPaginationMeta.has_prev) {
+    controls += `<button onclick="changeSessionExportPage(${currentPage - 1})" class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">Previous</button>`;
   } else {
     controls += `<button disabled class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-gray-50 text-sm font-medium text-gray-300 cursor-not-allowed">Previous</button>`;
   }
 
-  for (let i = 1; i <= totalPages; i++) {
-    if (i === currentSessionExportPage) {
+  // Show limited range of page buttons (e.g., current page ±2)
+  const pagesToShow = Math.min(5, totalPages);  // Show max 5 page buttons
+  const startPage = Math.max(1, currentPage - Math.floor(pagesToShow / 2));
+  const endPage = Math.min(totalPages, startPage + pagesToShow - 1);
+
+  for (let i = startPage; i <= endPage; i++) {
+    if (i === currentPage) {
       controls += `<button onclick="changeSessionExportPage(${i})" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-indigo-50 text-sm font-medium text-indigo-600">${i}</button>`;
     } else {
       controls += `<button onclick="changeSessionExportPage(${i})" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">${i}</button>`;
     }
   }
 
-  if (currentSessionExportPage < totalPages) {
-    controls += `<button onclick="changeSessionExportPage(${currentSessionExportPage + 1})" class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">Next</button>`;
+  if (sessionExportPaginationMeta.has_next) {
+    controls += `<button onclick="changeSessionExportPage(${currentPage + 1})" class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">Next</button>`;
   } else {
     controls += `<button disabled class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-gray-50 text-sm font-medium text-gray-300 cursor-not-allowed">Next</button>`;
   }

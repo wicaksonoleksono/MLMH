@@ -104,14 +104,14 @@ async function updateFacialAnalysisStats() {
 
     const stats = data.stats;
 
-    // Update stat cards
+    // Update stat cards (unique sessions, not individual tasks)
     const totalEl = document.getElementById('fa-stat-total');
-    const pendingEl = document.getElementById('fa-stat-pending');
+    const queuedEl = document.getElementById('fa-stat-queued');
     const processingEl = document.getElementById('fa-stat-processing');
     const completedEl = document.getElementById('fa-stat-completed');
 
     if (totalEl) totalEl.textContent = data.total || 0;
-    if (pendingEl) pendingEl.textContent = stats.queued || 0;
+    if (queuedEl) queuedEl.textContent = stats.queued || 0;
     if (processingEl) processingEl.textContent = stats.processing || 0;
     if (completedEl) completedEl.textContent = stats.completed || 0;
 

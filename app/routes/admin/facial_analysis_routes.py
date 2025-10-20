@@ -385,21 +385,79 @@ def delete_all_facial_analysis_results():
 @api_response
 def get_process_all_status():
     """
-    Get real-time progress stats for all queued facial analysis tasks
+    Get real-time progress stats for all facial analysis sessions.
 
-    Returns counts of sessions by status: queued, processing, completed, failed
+    Matches the admin_routes.py query logic:
+    - Total: Count unique (user_id, session_number) pairs where status = COMPLETED
+    - Queued/Processing/Completed/Failed: Count by facial analysis status
     """
     from ...model.assessment.facial_analysis import SessionFacialAnalysis
-    from sqlalchemy import func
+    from ...model.assessment.sessions import AssessmentSession
+    from sqlalchemy import func, and_
 
     with get_session() as db:
-        # Get counts grouped by status
-        status_counts = db.query(
-            SessionFacialAnalysis.status,
-            func.count(SessionFacialAnalysis.id).label('count')
-        ).group_by(SessionFacialAnalysis.status).all()
+        # Get TOTAL ELIGIBLE sessions using same query as admin_routes.py
+        # Get the LATEST session for each (user_id, session_number) pair where status is COMPLETED
+        subquery = db.query(
+            AssessmentSession.user_id,
+            AssessmentSession.session_number,
+            func.max(AssessmentSession.created_at).label('latest_created_at')
+        ).filter(
+            AssessmentSession.status == 'COMPLETED'
+        ).group_by(
+            AssessmentSession.user_id,
+            AssessmentSession.session_number
+        ).subquery()
 
-        # Build result dict
+        # Get all completed sessions (latest for each user+session_number)
+        completed_sessions = db.query(AssessmentSession).join(
+            subquery,
+            and_(
+                AssessmentSession.user_id == subquery.c.user_id,
+                AssessmentSession.session_number == subquery.c.session_number,
+                AssessmentSession.created_at == subquery.c.latest_created_at
+            )
+        ).all()
+
+        # Get unique session IDs from completed sessions
+        total_eligible = len(completed_sessions)
+        eligible_session_ids = [s.id for s in completed_sessions]
+
+        # Get facial analysis records for eligible sessions
+        fa_records = db.query(SessionFacialAnalysis).filter(
+            SessionFacialAnalysis.session_id.in_(eligible_session_ids)
+        ).all() if eligible_session_ids else []
+
+        # Track unique sessions and their status
+        session_statuses = {}  # session_id -> list of statuses
+
+        for record in fa_records:
+            if record.session_id not in session_statuses:
+                session_statuses[record.session_id] = []
+            session_statuses[record.session_id].append(record.status)
+
+        # Determine overall session status based on all its tasks
+        session_final_status = {}
+        for session_id, statuses in session_statuses.items():
+            # Session status logic:
+            # - If ANY task is 'failed' → session is 'failed'
+            # - If ALL tasks are 'completed' → session is 'completed'
+            # - If ANY task is 'processing' → session is 'processing'
+            # - If ANY task is 'queued' → session is 'queued'
+            # - Otherwise → 'not_started'
+
+            if 'failed' in statuses:
+                session_final_status[session_id] = 'failed'
+            elif all(s == 'completed' for s in statuses):
+                session_final_status[session_id] = 'completed'
+            elif 'processing' in statuses:
+                session_final_status[session_id] = 'processing'
+            elif 'queued' in statuses:
+                session_final_status[session_id] = 'queued'
+            else:
+                session_final_status[session_id] = 'not_started'
+
+        # Count unique sessions by final status
         stats = {
             'queued': 0,
             'processing': 0,
@@ -408,12 +466,18 @@ def get_process_all_status():
             'not_started': 0
         }
 
-        for status, count in status_counts:
-            if status in stats:
-                stats[status] = count
+        for session_id, final_status in session_final_status.items():
+            if final_status in stats:
+                stats[final_status] += 1
+
+        # Count sessions without any facial analysis records as 'not_started'
+        sessions_with_records = set(session_statuses.keys())
+        for eligible_session_id in eligible_session_ids:
+            if eligible_session_id not in sessions_with_records:
+                stats['not_started'] += 1
 
         # Calculate totals
-        total = sum(stats.values())
+        total = total_eligible  # Total completed sessions
         in_progress = stats['queued'] + stats['processing']
         is_running = in_progress > 0
 

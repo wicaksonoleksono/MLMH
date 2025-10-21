@@ -81,7 +81,8 @@ function initializeSessionExportControls() {
   const sortBy = document.getElementById('facialExportSortBy');
   const sortOrder = document.getElementById('facialExportSortOrder');
   const perPage = document.getElementById('facial-export-per-page');
-  const bulkButton = document.getElementById('bulk-download-facial-analysis');
+  const downloadPageButton = document.getElementById('download-current-page');
+  const downloadAllButton = document.getElementById('download-all-sessions');
 
   if (searchInput) {
     searchInput.addEventListener('input', function(e) {
@@ -120,8 +121,12 @@ function initializeSessionExportControls() {
     });
   }
 
-  if (bulkButton) {
-    bulkButton.addEventListener('click', downloadBulkSessions);
+  if (downloadPageButton) {
+    downloadPageButton.addEventListener('click', downloadCurrentPage);
+  }
+
+  if (downloadAllButton) {
+    downloadAllButton.addEventListener('click', downloadAllSessions);
   }
 }
 
@@ -325,21 +330,29 @@ function updateSessionExportCount() {
   }
 }
 
-// Update bulk download button
+// Update download buttons
 function updateBulkDownloadButton() {
-  const bulkButton = document.getElementById('bulk-download-facial-analysis');
-  if (bulkButton) {
-    // Enable if there are any downloadable sessions visible
+  const downloadPageButton = document.getElementById('download-current-page');
+  const downloadAllButton = document.getElementById('download-all-sessions');
+
+  // Enable "Download Page" button if current page has downloadable sessions
+  if (downloadPageButton) {
     const hasDownloadable = filteredSessionExportSessions.some(user =>
       user.session1_can_download || user.session2_can_download
     );
-    bulkButton.disabled = !hasDownloadable;
+    downloadPageButton.disabled = !hasDownloadable;
+  }
+
+  // Enable "Download All" button if there are any users with downloadable sessions across all pages
+  if (downloadAllButton) {
+    const totalUsers = sessionExportPaginationMeta.total;
+    downloadAllButton.disabled = totalUsers === 0;
   }
 }
 
-// Download bulk sessions - downloads ALL downloadable sessions from ALL pages
-async function downloadBulkSessions() {
-  // Collect all downloadable session IDs from current view
+// Download sessions from current page only
+async function downloadCurrentPage() {
+  // Collect all downloadable session IDs from current page
   const sessionIds = [];
 
   filteredSessionExportSessions.forEach(user => {
@@ -360,6 +373,64 @@ async function downloadBulkSessions() {
   const confirmed = confirm(`Download ${sessionIds.length} session(s) from the current page?`);
   if (!confirmed) return;
 
+  await performBulkDownload(sessionIds, `page_${currentSessionExportPage}`);
+}
+
+// Download ALL sessions from ALL pages (matching current search/filter)
+async function downloadAllSessions() {
+  // Fetch all session IDs matching current query without pagination
+  try {
+    let url = `/admin/ajax-dashboard-data?tab=session-exports&page=all`;
+    if (currentSessionExportSearchQuery) {
+      url += `&q=${encodeURIComponent(currentSessionExportSearchQuery)}`;
+    }
+    url += `&sort_by=${currentSessionExportSortBy}&sort_order=${currentSessionExportSortOrder}`;
+
+    const response = await fetch(url);
+    const result = await response.json();
+
+    // Unwrap response structure
+    let data = result;
+    if (result.data) {
+      data = result.data;
+    }
+    if (data.data) {
+      data = data.data;
+    }
+
+    if (!data || !data.user_sessions || !data.user_sessions.items) {
+      alert('Failed to fetch all sessions.');
+      return;
+    }
+
+    // Collect all downloadable session IDs
+    const sessionIds = [];
+    data.user_sessions.items.forEach(user => {
+      if (user.session1_can_download && user.session1_id) {
+        sessionIds.push(user.session1_id);
+      }
+      if (user.session2_can_download && user.session2_id) {
+        sessionIds.push(user.session2_id);
+      }
+    });
+
+    if (sessionIds.length === 0) {
+      alert('No downloadable sessions found.');
+      return;
+    }
+
+    // Confirm before downloading
+    const confirmed = confirm(`Download ALL ${sessionIds.length} session(s) matching current filters?\n\nThis may take a while for large datasets.`);
+    if (!confirmed) return;
+
+    await performBulkDownload(sessionIds, 'all');
+  } catch (error) {
+    alert(`Error fetching all sessions: ${error.message}`);
+  }
+}
+
+// Shared function to perform bulk download
+async function performBulkDownload(sessionIds, suffix) {
   try {
     const response = await fetch('/admin/facial-analysis/export/bulk', {
       method: 'POST',
@@ -372,7 +443,7 @@ async function downloadBulkSessions() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `bulk_sessions_export_${new Date().getTime()}.zip`;
+      a.download = `bulk_sessions_${suffix}_${new Date().getTime()}.zip`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);

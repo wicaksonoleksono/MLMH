@@ -78,7 +78,12 @@ def dashboard_ajax_data():
 
     # Get pagination, search, and sort parameters
     tab = request.args.get('tab', 'user-sessions').strip()
-    page = request.args.get('page', 1, type=int)
+    page_param = request.args.get('page', '1').strip()
+    # Support 'page=all' for downloading all sessions
+    if page_param == 'all':
+        page = 'all'
+    else:
+        page = int(page_param) if page_param.isdigit() else 1
     per_page = request.args.get('per_page', 15, type=int)
     search_query = request.args.get('q', '').strip()
     sort_by = request.args.get('sort_by', 'user_id')
@@ -396,30 +401,49 @@ def dashboard_ajax_data():
 
             # Step 6: Paginate by USERS (each user shows 2 rows - session 1 and session 2)
             total_users = len(user_sessions)
-            offset = (page - 1) * per_page
-            paginated_users = user_sessions[offset:offset + per_page]
 
-            # Calculate pagination info
-            has_prev = page > 1
-            has_next = offset + per_page < total_users
-            pages = (total_users + per_page - 1) // per_page if total_users > 0 else 0
-            prev_num = page - 1 if has_prev else None
-            next_num = page + 1 if has_next else None
-
-            # Step 7: Replace response data with user-grouped pagination
-            response_data['user_sessions'] = {
-                'items': paginated_users,
-                'pagination': {
-                    'page': page,
-                    'pages': pages,
-                    'per_page': per_page,
-                    'total': total_users,
-                    'has_prev': has_prev,
-                    'has_next': has_next,
-                    'prev_num': prev_num,
-                    'next_num': next_num
+            # If page='all', return all users without pagination
+            if page == 'all':
+                paginated_users = user_sessions
+                response_data['user_sessions'] = {
+                    'items': paginated_users,
+                    'pagination': {
+                        'page': 1,
+                        'pages': 1,
+                        'per_page': total_users,
+                        'total': total_users,
+                        'has_prev': False,
+                        'has_next': False,
+                        'prev_num': None,
+                        'next_num': None
+                    }
                 }
-            }
+            else:
+                # Regular pagination
+                offset = (page - 1) * per_page
+                paginated_users = user_sessions[offset:offset + per_page]
+
+                # Calculate pagination info
+                has_prev = page > 1
+                has_next = offset + per_page < total_users
+                pages = (total_users + per_page - 1) // per_page if total_users > 0 else 0
+                prev_num = page - 1 if has_prev else None
+                next_num = page + 1 if has_next else None
+
+                # Step 7: Replace response data with user-grouped pagination
+                response_data['user_sessions'] = {
+                    'items': paginated_users,
+                    'pagination': {
+                        'page': page,
+                        'pages': pages,
+                        'per_page': per_page,
+                        'total': total_users,
+                        'has_prev': has_prev,
+                        'has_next': has_next,
+                        'prev_num': prev_num,
+                        'next_num': next_num
+                    }
+                }
 
     return {
         'status': 'success',

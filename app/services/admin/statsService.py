@@ -110,10 +110,15 @@ class StatsService:
                 
                 # Get total count for pagination
                 total_users = base_query.count()
-                
+
                 # Apply pagination
-                offset = (page - 1) * per_page
-                users_on_page = base_query.offset(offset).limit(per_page).all()
+                if page == 'all':
+                    # Return all users without pagination
+                    users_on_page = base_query.all()
+                    offset = 0
+                else:
+                    offset = (page - 1) * per_page
+                    users_on_page = base_query.offset(offset).limit(per_page).all()
                 
                 # Pre-fetch all related data in bulk to avoid N+1 queries
                 user_ids = [user.id for user in users_on_page]
@@ -209,20 +214,32 @@ class StatsService:
                     })
                 
                 # Calculate pagination info
-                has_prev = page > 1
-                has_next = offset + per_page < total_users
-                pages = (total_users + per_page - 1) // per_page  # Ceiling division
-                prev_num = page - 1 if has_prev else None
-                next_num = page + 1 if has_next else None
-                
+                if page == 'all':
+                    # No pagination - all results on one page
+                    has_prev = False
+                    has_next = False
+                    pages = 1
+                    prev_num = None
+                    next_num = None
+                    current_page = 1
+                    items_per_page = total_users
+                else:
+                    has_prev = page > 1
+                    has_next = offset + per_page < total_users
+                    pages = (total_users + per_page - 1) // per_page  # Ceiling division
+                    prev_num = page - 1 if has_prev else None
+                    next_num = page + 1 if has_next else None
+                    current_page = page
+                    items_per_page = per_page
+
                 # Create pagination object manually
                 from collections import namedtuple
                 PageObj = namedtuple('PageObj', ['items', 'page', 'pages', 'per_page', 'total', 'has_prev', 'has_next', 'prev_num', 'next_num'])
                 page_obj = PageObj(
                     items=preview_data,
-                    page=page,
+                    page=current_page,
                     pages=pages,
-                    per_page=per_page,
+                    per_page=items_per_page,
                     total=total_users,
                     has_prev=has_prev,
                     has_next=has_next,

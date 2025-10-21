@@ -1102,22 +1102,116 @@ def bulk_export_facial_analysis():
     """
     Bulk export facial analysis results as ZIP file.
 
-    Request body:
-    {
-        "session_ids": ["session_id_1", "session_id_2", ...]
-    }
+    Two modes:
+    1. POST with JSON body containing session_ids array (for current page)
+    2. POST with query params (for all matching sessions)
+       - query: search query
+       - sort_by: sort field
+       - sort_order: asc/desc
+       - export_all: true (flag to export all matching sessions)
     """
     from flask import request
     from ...services.admin.exportService import ExportService
+    from ...db import get_session
+    from ...model.assessment.sessions import AssessmentSession
+    from ...model.assessment.facial_analysis import SessionFacialAnalysis
+    from ...model.shared.users import User
+    from sqlalchemy import func, and_
 
     try:
-        data = request.get_json()
-        session_ids = data.get('session_ids', [])
+        # Check if this is an "export all" request via query params
+        export_all = request.args.get('export_all', 'false').lower() == 'true'
 
-        if not session_ids or not isinstance(session_ids, list):
-            return {
-                "error": "Invalid session_ids. Must be a non-empty array."
-            }, 400
+        if export_all:
+            # Mode 2: Query sessions based on filters
+            search_query = request.args.get('q', '').strip()
+            sort_by = request.args.get('sort_by', 'user_id')
+            sort_order = request.args.get('sort_order', 'asc')
+
+            with get_session() as db:
+                # Get ALL COMPLETED sessions (same logic as session-exports tab)
+                subquery = db.query(
+                    AssessmentSession.user_id,
+                    AssessmentSession.session_number,
+                    func.max(AssessmentSession.created_at).label('latest_created_at')
+                ).filter(
+                    AssessmentSession.status == 'COMPLETED'
+                ).group_by(
+                    AssessmentSession.user_id,
+                    AssessmentSession.session_number
+                ).subquery()
+
+                # Build base query with search filter applied early
+                base_query = db.query(AssessmentSession).join(
+                    subquery,
+                    and_(
+                        AssessmentSession.user_id == subquery.c.user_id,
+                        AssessmentSession.session_number == subquery.c.session_number,
+                        AssessmentSession.created_at == subquery.c.latest_created_at
+                    )
+                ).join(User)
+
+                # Apply search filter if provided
+                if search_query:
+                    base_query = base_query.filter(User.uname.ilike(f'%{search_query}%'))
+
+                # Apply sorting based on parameters
+                sort_column = User.id  # Default
+                if sort_by == 'username':
+                    sort_column = User.uname
+                elif sort_by == 'created_at':
+                    sort_column = User.created_at
+                elif sort_by == 'user_id':
+                    sort_column = User.id
+
+                # Apply sort order
+                if sort_order == 'desc':
+                    base_query = base_query.order_by(sort_column.desc(), AssessmentSession.session_number)
+                else:
+                    base_query = base_query.order_by(sort_column.asc(), AssessmentSession.session_number)
+
+                completed_sessions = base_query.all()
+
+                # Get facial analysis for all sessions
+                session_ids_all = [s.id for s in completed_sessions]
+                facial_analysis_map = {}
+                if session_ids_all:
+                    analyses = db.query(SessionFacialAnalysis).filter(
+                        SessionFacialAnalysis.session_id.in_(session_ids_all)
+                    ).all()
+                    for analysis in analyses:
+                        if analysis.session_id not in facial_analysis_map:
+                            facial_analysis_map[analysis.session_id] = {}
+                        facial_analysis_map[analysis.session_id][analysis.assessment_type] = analysis
+
+                # Filter to only sessions where BOTH PHQ and LLM are completed
+                session_ids = []
+                for session in completed_sessions:
+                    analyses = facial_analysis_map.get(session.id, {})
+                    phq_analysis = analyses.get('PHQ')
+                    llm_analysis = analyses.get('LLM')
+
+                    phq_status = phq_analysis.status if phq_analysis else 'not_started'
+                    llm_status = llm_analysis.status if llm_analysis else 'not_started'
+                    can_download = (phq_status == 'completed' and llm_status == 'completed')
+
+                    if can_download:
+                        session_ids.append(session.id)
+
+                if not session_ids:
+                    return {
+                        "error": "No downloadable sessions found matching the filters."
+                    }, 400
+
+        else:
+            # Mode 1: Use session_ids from request body (current page export)
+            data = request.get_json()
+            session_ids = data.get('session_ids', [])
+
+            if not session_ids or not isinstance(session_ids, list):
+                return {
+                    "error": "Invalid session_ids. Must be a non-empty array."
+                }, 400
 
         # Bulk export facial analysis
         zip_buffer = ExportService.export_bulk_facial_analysis(session_ids)

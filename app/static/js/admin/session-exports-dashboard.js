@@ -2,8 +2,7 @@
 // Session Exports tab functionality for admin dashboard
 
 // Global state for session exports
-let allSessionExportSessions = [];
-let filteredSessionExportSessions = [];
+let filteredSessionExportSessions = [];  // Stores current page's sessions from backend
 let currentSessionExportPage = 1;
 let currentSessionExportPerPage = 15;
 let currentSessionExportSearchQuery = "";
@@ -54,19 +53,9 @@ async function loadSessionExportSessions() {
         has_next: backendPagination.has_next || false
       };
 
-      // Extract session export data from sessions (now flattened at session level, not user level)
-      // Items are already individual sessions with facial_analysis data included
-      allSessionExportSessions = data.user_sessions.items.map(item => ({
-        id: item.id,
-        user_id: item.user_id,
-        username: item.username,
-        session_number: item.session_number,
-        phq_status: item.phq_status,
-        llm_status: item.llm_status,
-        can_download: item.can_download
-      }));
-
-      filteredSessionExportSessions = allSessionExportSessions;
+      // Backend sends user objects with session1 and session2 (coupled view)
+      // Store directly - no transformation needed
+      filteredSessionExportSessions = data.user_sessions.items;
       // Don't reset to page 1 here - pagination is server-side
       renderSessionExportSessions();
       // Use backend pagination metadata for pagination display
@@ -145,9 +134,6 @@ function renderSessionExportSessions() {
 
   headerEl.innerHTML = `
     <tr>
-      <th class="px-6 py-3 text-left">
-        <input type="checkbox" id="select-all-sessions" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-      </th>
       <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User ID</th>
       <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Username</th>
       <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Session</th>
@@ -157,14 +143,11 @@ function renderSessionExportSessions() {
     </tr>
   `;
 
-  const start = (currentSessionExportPage - 1) * currentSessionExportPerPage;
-  const end = start + currentSessionExportPerPage;
-  const paginatedSessions = filteredSessionExportSessions.slice(start, end);
-
-  if (paginatedSessions.length === 0) {
+  // Backend sends user objects (coupled view) - each user has session1 and session2
+  if (filteredSessionExportSessions.length === 0) {
     bodyEl.innerHTML = `
       <tr>
-        <td colspan="7" class="px-6 py-12 text-center text-sm text-gray-500">
+        <td colspan="6" class="px-6 py-12 text-center text-sm text-gray-500">
           <div class="flex flex-col items-center justify-center">
             <svg class="w-12 h-12 text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
@@ -178,68 +161,56 @@ function renderSessionExportSessions() {
   }
 
   let rowsHtml = '';
-  paginatedSessions.forEach((session) => {
-    const canDownload = session.can_download;
-    const isChecked = selectedSessionExportSessions.has(session.id);
-
+  filteredSessionExportSessions.forEach((userSession) => {
+    // Session 1 Row (Username shown on first row with rowspan)
     rowsHtml += `
       <tr class="border-b border-gray-100 hover:bg-blue-50 transition-colors duration-150">
-        <td class="px-6 py-4">
-          ${canDownload ? `<input type="checkbox" class="session-export-checkbox rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" data-session-id="${session.id}" ${isChecked ? 'checked' : ''}>` : ''}
-        </td>
-        <td class="py-4 px-6 font-medium text-gray-900">${session.user_id}</td>
-        <td class="py-4 px-6 font-medium text-gray-900">${session.username}</td>
-        <td class="py-4 px-6 text-gray-900">
-          <div class="flex items-center">
-            <div class="w-3 h-3 rounded-full ${session.session_number === 1 ? 'bg-blue-500' : 'bg-purple-500'} mr-2"></div>
-            <span class="font-medium">Session ${session.session_number}</span>
+        <td class="py-4 px-6 font-medium text-gray-900" rowspan="2">${userSession.user_id}</td>
+        <td class="py-4 px-6 font-medium text-gray-900 text-center bg-gray-50" rowspan="2">
+          <div class="flex flex-col items-center justify-center space-y-1">
+            <span class="text-sm font-semibold text-gray-800">${userSession.username}</span>
+            <span class="text-xs text-gray-500 px-2 py-1 bg-white rounded border border-gray-200">2 Sessions</span>
           </div>
         </td>
-        <td class="py-4 px-6">${getSessionExportStatusBadge(session.phq_status)}</td>
-        <td class="py-4 px-6">${getSessionExportStatusBadge(session.llm_status)}</td>
+        <td class="py-4 px-6 text-gray-900">
+          <div class="flex items-center">
+            <div class="w-3 h-3 rounded-full bg-blue-500 mr-2"></div>
+            <span class="font-medium">Session 1</span>
+          </div>
+        </td>
+        <td class="py-4 px-6">${getSessionExportStatusBadge(userSession.session1_phq_status)}</td>
+        <td class="py-4 px-6">${getSessionExportStatusBadge(userSession.session1_llm_status)}</td>
         <td class="py-4 px-6">
-          ${getSessionExportActionButtons(session)}
+          ${getSessionExportActionButtons(userSession.session1_id, userSession.session1_can_download, userSession.session1_phq_status, userSession.session1_llm_status)}
+        </td>
+      </tr>
+
+      <!-- Session 2 Row (No username repeat - rowspan covers it) -->
+      <tr class="border-b-2 border-gray-200 hover:bg-purple-50 transition-colors duration-150">
+        <td class="py-4 px-6 text-gray-900">
+          <div class="flex items-center">
+            <div class="w-3 h-3 rounded-full bg-purple-500 mr-2"></div>
+            <span class="font-medium">Session 2</span>
+          </div>
+        </td>
+        <td class="py-4 px-6">${getSessionExportStatusBadge(userSession.session2_phq_status)}</td>
+        <td class="py-4 px-6">${getSessionExportStatusBadge(userSession.session2_llm_status)}</td>
+        <td class="py-4 px-6">
+          ${getSessionExportActionButtons(userSession.session2_id, userSession.session2_can_download, userSession.session2_phq_status, userSession.session2_llm_status)}
         </td>
       </tr>
     `;
   });
 
   bodyEl.innerHTML = rowsHtml;
-
-  // Add event listener for select all checkbox
-  const selectAllCheckbox = document.getElementById('select-all-sessions');
-  if (selectAllCheckbox) {
-    selectAllCheckbox.addEventListener('change', function() {
-      const checkboxes = document.querySelectorAll('.session-export-checkbox');
-      checkboxes.forEach(cb => {
-        cb.checked = this.checked;
-        const sessionId = cb.dataset.sessionId;
-        if (this.checked) {
-          selectedSessionExportSessions.add(sessionId);
-        } else {
-          selectedSessionExportSessions.delete(sessionId);
-        }
-      });
-      updateBulkDownloadButton();
-    });
-  }
-
-  // Add event listeners for individual checkboxes
-  document.querySelectorAll('.session-export-checkbox').forEach(checkbox => {
-    checkbox.addEventListener('change', function() {
-      const sessionId = this.dataset.sessionId;
-      if (this.checked) {
-        selectedSessionExportSessions.add(sessionId);
-      } else {
-        selectedSessionExportSessions.delete(sessionId);
-      }
-      updateBulkDownloadButton();
-    });
-  });
 }
 
 // Get session export status badge
 function getSessionExportStatusBadge(status) {
+  if (!status) {
+    return `<span class="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-400">-</span>`;
+  }
+
   const colors = {
     'completed': 'bg-green-100 text-green-800',
     'processing': 'bg-yellow-100 text-yellow-800',
@@ -255,10 +226,14 @@ function getSessionExportStatusBadge(status) {
 }
 
 // Get session export action buttons
-function getSessionExportActionButtons(session) {
-  if (session.can_download) {
+function getSessionExportActionButtons(sessionId, canDownload, phqStatus, llmStatus) {
+  if (!sessionId) {
+    return `<span class="text-xs text-gray-400 italic">Not Started</span>`;
+  }
+
+  if (canDownload) {
     return `
-      <a href="/admin/export/facial-analysis/session/${session.id}"
+      <a href="/admin/export/facial-analysis/session/${sessionId}"
          class="inline-flex items-center justify-center px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 transition-colors duration-200 shadow-sm">
         <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
@@ -298,11 +273,11 @@ function updateSessionExportPagination() {
 
   containerEl.classList.remove("hidden");
 
-  // Calculate display range based on backend total sessions
+  // Calculate display range based on backend total users
   const itemsOnCurrentPage = filteredSessionExportSessions.length;
   const start = (currentPage - 1) * sessionExportPaginationMeta.per_page + 1;
   const end = Math.min(start + itemsOnCurrentPage - 1, total);
-  infoEl.textContent = `Showing ${start} to ${end} of ${total} sessions`;
+  infoEl.textContent = `Showing ${start} to ${end} of ${total} users`;
 
   let controls = "";
 
@@ -344,8 +319,9 @@ function changeSessionExportPage(page) {
 function updateSessionExportCount() {
   const countEl = document.getElementById("facial-export-count");
   if (countEl) {
-    const readyCount = allSessionExportSessions.filter(s => s.can_download).length;
-    countEl.textContent = `${readyCount} sessions ready`;
+    // Total users with at least one downloadable session
+    const readyCount = sessionExportPaginationMeta.total;
+    countEl.textContent = `${readyCount} users with downloadable sessions`;
   }
 }
 

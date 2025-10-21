@@ -343,56 +343,77 @@ def dashboard_ajax_data():
                         facial_analysis_map[analysis.session_id] = {}
                     facial_analysis_map[analysis.session_id][analysis.assessment_type] = analysis
 
-            # Step 3: Build flat list of individual sessions with facial analysis data
-            # ONLY include sessions where BOTH PHQ and LLM are completed
-            all_sessions = []
+            # Step 3: Group sessions by user and check facial analysis completion
+            # Build user objects with session1 and session2 (coupled view)
+            sessions_by_user = {}
             for session in completed_sessions:
+                if session.user_id not in sessions_by_user:
+                    sessions_by_user[session.user_id] = {
+                        'user_id': session.user_id,
+                        'username': session.user.uname,
+                        'session1_id': None,
+                        'session1_phq_status': None,
+                        'session1_llm_status': None,
+                        'session1_can_download': False,
+                        'session2_id': None,
+                        'session2_phq_status': None,
+                        'session2_llm_status': None,
+                        'session2_can_download': False
+                    }
+
                 analyses = facial_analysis_map.get(session.id, {})
                 phq_analysis = analyses.get('PHQ')
                 llm_analysis = analyses.get('LLM')
 
                 phq_status = phq_analysis.status if phq_analysis else 'not_started'
                 llm_status = llm_analysis.status if llm_analysis else 'not_started'
+                can_download = (phq_status == 'completed' and llm_status == 'completed')
 
-                # CONSTRAINT: Only include if BOTH are completed
-                if phq_status == 'completed' and llm_status == 'completed':
-                    all_sessions.append({
-                        'id': session.id,
-                        'user_id': session.user_id,
-                        'username': session.user.uname,
-                        'session_number': session.session_number,
-                        'phq_status': phq_status,
-                        'llm_status': llm_status,
-                        'can_download': True  # Always true if we reach here
-                    })
+                if session.session_number == 1:
+                    sessions_by_user[session.user_id]['session1_id'] = session.id
+                    sessions_by_user[session.user_id]['session1_phq_status'] = phq_status
+                    sessions_by_user[session.user_id]['session1_llm_status'] = llm_status
+                    sessions_by_user[session.user_id]['session1_can_download'] = can_download
+                elif session.session_number == 2:
+                    sessions_by_user[session.user_id]['session2_id'] = session.id
+                    sessions_by_user[session.user_id]['session2_phq_status'] = phq_status
+                    sessions_by_user[session.user_id]['session2_llm_status'] = llm_status
+                    sessions_by_user[session.user_id]['session2_can_download'] = can_download
 
-            # Step 4: Apply search filter if provided
+            # Step 4: Filter to only users with at least one downloadable session
+            # CONSTRAINT: Only include if BOTH PHQ and LLM are completed for at least one session
+            user_sessions = [
+                user_data for user_data in sessions_by_user.values()
+                if user_data['session1_can_download'] or user_data['session2_can_download']
+            ]
+
+            # Step 5: Apply search filter if provided
             if search_query:
-                all_sessions = [
-                    s for s in all_sessions
-                    if search_query.lower() in s['username'].lower()
+                user_sessions = [
+                    u for u in user_sessions
+                    if search_query.lower() in u['username'].lower()
                 ]
 
-            # Step 5: Paginate filtered sessions
-            total_sessions = len(all_sessions)
+            # Step 6: Paginate by USERS (each user shows 2 rows - session 1 and session 2)
+            total_users = len(user_sessions)
             offset = (page - 1) * per_page
-            paginated_sessions = all_sessions[offset:offset + per_page]
+            paginated_users = user_sessions[offset:offset + per_page]
 
             # Calculate pagination info
             has_prev = page > 1
-            has_next = offset + per_page < total_sessions
-            pages = (total_sessions + per_page - 1) // per_page if total_sessions > 0 else 0
+            has_next = offset + per_page < total_users
+            pages = (total_users + per_page - 1) // per_page if total_users > 0 else 0
             prev_num = page - 1 if has_prev else None
             next_num = page + 1 if has_next else None
 
-            # Step 6: Replace response data with session-level pagination
+            # Step 7: Replace response data with user-grouped pagination
             response_data['user_sessions'] = {
-                'items': paginated_sessions,
+                'items': paginated_users,
                 'pagination': {
                     'page': page,
                     'pages': pages,
                     'per_page': per_page,
-                    'total': total_sessions,
+                    'total': total_users,
                     'has_prev': has_prev,
                     'has_next': has_next,
                     'prev_num': prev_num,

@@ -782,7 +782,9 @@ Note: This export contains sensitive mental health data. Handle with appropriate
 
     @staticmethod
     def export_bulk_facial_analysis(session_ids: List[str]) -> BytesIO:
-        """Export multiple sessions with facial analysis organized by session number"""
+        """Export multiple sessions with facial analysis - flat structure with JSONL files"""
+        from ...model.assessment.facial_analysis import SessionFacialAnalysis
+
         zip_buffer = BytesIO()
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 
@@ -793,59 +795,127 @@ Note: This export contains sensitive mental health data. Handle with appropriate
 
             for session_id in session_ids:
                 try:
-                    session_zip = ExportService.export_session_with_facial_analysis(session_id)
-
-                    # Get session info for the summary
                     with get_session() as db:
                         session = db.query(AssessmentSession).filter_by(id=session_id).first()
-                        if session and session.user:
-                            username = session.user.uname
-                            user_id = session.user_id
-                            session_number = session.session_number
-                            clean_username = "".join(c for c in username if c.isalnum() or c in (' ', '-', '_')).rstrip()
-                            clean_username = clean_username.replace(' ', '_')
-                            filename = f'user_{user_id}_{clean_username}_session{session_number}_{session_id}_facial_analysis.zip'
+                        if not session:
+                            raise ValueError(f"Session {session_id} not found")
 
-                            # Organize by session number into folders
-                            if session_number == 1:
-                                folder_path = f'session_1/{filename}'
-                                session1_count += 1
-                            elif session_number == 2:
-                                folder_path = f'session_2/{filename}'
-                                session2_count += 1
-                            else:
-                                folder_path = f'unknown_session/{filename}'
+                        # Get facial analysis records
+                        phq_analysis = db.query(SessionFacialAnalysis).filter_by(
+                            session_id=session_id,
+                            assessment_type='PHQ'
+                        ).first()
+                        llm_analysis = db.query(SessionFacialAnalysis).filter_by(
+                            session_id=session_id,
+                            assessment_type='LLM'
+                        ).first()
 
-                            session_info_list.append({
-                                'user_id': user_id,
-                                'username': username,
-                                'session_id': session_id,
-                                'session_number': session_number,
-                                'filename': filename,
-                                'folder_path': folder_path
-                            })
-                        else:
-                            filename = f'session_{session_id}_facial_analysis_{timestamp}.zip'
-                            folder_path = f'unknown_user/{filename}'
-                            session_info_list.append({
-                                'user_id': 'Unknown',
-                                'username': 'Unknown',
-                                'session_id': session_id,
-                                'session_number': 'Unknown',
-                                'filename': filename,
-                                'folder_path': folder_path
-                            })
+                        # Check if both are completed
+                        if not (phq_analysis and phq_analysis.status == 'completed' and
+                                llm_analysis and llm_analysis.status == 'completed'):
+                            raise ValueError("Both PHQ and LLM facial analysis must be completed")
 
-                    zip_file.writestr(folder_path, session_zip.getvalue())
+                        # Build folder name
+                        username = session.user.uname if session.user else 'unknown'
+                        user_id = session.user_id
+                        session_number = session.session_number
+                        is_first = session.is_first  # 'phq' or 'llm'
+
+                        clean_username = "".join(c for c in username if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                        clean_username = clean_username.replace(' ', '_')
+
+                        folder_name = f'user_{user_id}_{clean_username}_session{session_number}'
+
+                        # Count sessions
+                        if session_number == 1:
+                            session1_count += 1
+                        elif session_number == 2:
+                            session2_count += 1
+
+                        # 1. Session info
+                        session_info = ExportService._get_session_info(session)
+                        zip_file.writestr(f'{folder_name}/session_info.json', session_info.model_dump_json(indent=2))
+
+                        # 2. PHQ responses
+                        if session.phq_completed_at:
+                            phq_data = ExportService._get_phq_data(session_id)
+                            zip_file.writestr(f'{folder_name}/phq_responses.json', phq_data.model_dump_json(indent=2))
+
+                        # 3. LLM conversation
+                        if session.llm_completed_at:
+                            llm_data = ExportService._get_llm_data(session_id)
+                            zip_file.writestr(f'{folder_name}/llm_conversation.json', llm_data.model_dump_json(indent=2))
+
+                        # 4. Add JSONL files (flat, no nested folders)
+                        upload_path = current_app.media_save
+
+                        # Add PHQ JSONL
+                        phq_jsonl_path = os.path.join(upload_path, phq_analysis.jsonl_file_path)
+                        if os.path.exists(phq_jsonl_path):
+                            with open(phq_jsonl_path, 'r') as f:
+                                zip_file.writestr(f'{folder_name}/phq_analysis.jsonl', f.read())
+
+                        # Add LLM JSONL
+                        llm_jsonl_path = os.path.join(upload_path, llm_analysis.jsonl_file_path)
+                        if os.path.exists(llm_jsonl_path):
+                            with open(llm_jsonl_path, 'r') as f:
+                                zip_file.writestr(f'{folder_name}/llm_analysis.jsonl', f.read())
+
+                        # 5. Add facial analysis metadata
+                        facial_metadata = {
+                            'phq_analysis': {
+                                'status': phq_analysis.status,
+                                'total_images_processed': phq_analysis.total_images_processed,
+                                'images_with_faces_detected': phq_analysis.images_with_faces_detected,
+                                'images_failed': phq_analysis.images_failed,
+                                'processing_time_seconds': phq_analysis.processing_time_seconds,
+                                'avg_time_per_image_ms': phq_analysis.avg_time_per_image_ms,
+                                'summary_stats': phq_analysis.summary_stats,
+                                'started_at': phq_analysis.started_at.isoformat() if phq_analysis.started_at else None,
+                                'completed_at': phq_analysis.completed_at.isoformat() if phq_analysis.completed_at else None
+                            },
+                            'llm_analysis': {
+                                'status': llm_analysis.status,
+                                'total_images_processed': llm_analysis.total_images_processed,
+                                'images_with_faces_detected': llm_analysis.images_with_faces_detected,
+                                'images_failed': llm_analysis.images_failed,
+                                'processing_time_seconds': llm_analysis.processing_time_seconds,
+                                'avg_time_per_image_ms': llm_analysis.avg_time_per_image_ms,
+                                'summary_stats': llm_analysis.summary_stats,
+                                'started_at': llm_analysis.started_at.isoformat() if llm_analysis.started_at else None,
+                                'completed_at': llm_analysis.completed_at.isoformat() if llm_analysis.completed_at else None
+                            }
+                        }
+                        import json
+                        zip_file.writestr(f'{folder_name}/metadata.json', json.dumps(facial_metadata, indent=2))
+
+                        # 6. Generate summary
+                        phq_model = phq_data if session.phq_completed_at else None
+                        summary = ExportService._generate_facial_analysis_summary(
+                            session, phq_analysis, llm_analysis, phq_model
+                        )
+                        zip_file.writestr(f'{folder_name}/summary.txt', summary)
+
+                        session_info_list.append({
+                            'user_id': user_id,
+                            'username': username,
+                            'session_id': session_id,
+                            'session_number': session_number,
+                            'is_first': is_first,
+                            'folder_name': folder_name
+                        })
+
                 except Exception as e:
                     # Add error log for failed exports
-                    error_msg = f"Failed to export facial analysis for session {session_id}: {str(e)}"
+                    error_msg = f"Failed to export facial analysis for session {session_id}: {str(e)}\n"
+                    import traceback
+                    error_msg += traceback.format_exc()
                     zip_file.writestr(f'ERROR_session_{session_id}.txt', error_msg)
 
             # Add bulk summary
             summary = f"""Bulk Facial Analysis Export Summary
 ====================================
-Exported: {len(session_ids)} sessions with facial analysis
+Exported: {len(session_info_list)} sessions successfully (out of {len(session_ids)} requested)
 Generated: {datetime.now().isoformat()}
 
 Session 1: {session1_count} sessions
@@ -854,7 +924,7 @@ Session 2: {session2_count} sessions
 Session Details:
 """
             for info in session_info_list:
-                summary += f"- User {info['user_id']} ({info['username']}) - Session {info['session_number']} - File: {info['folder_path']}\n"
+                summary += f"- User {info['user_id']} ({info['username']}) - Session {info['session_number']} - Assessment Order: {info['is_first'].upper()} first - Folder: {info['folder_name']}/\n"
 
             zip_file.writestr('bulk_summary.txt', summary)
 

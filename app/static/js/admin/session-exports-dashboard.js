@@ -9,7 +9,6 @@ let currentSessionExportSearchQuery = "";
 let currentSessionExportSortBy = "user_id";
 let currentSessionExportSortOrder = "asc";
 let sessionExportSearchDebounceTimer = null;
-let selectedSessionExportSessions = new Set();
 // Backend pagination metadata
 let sessionExportPaginationMeta = {
   page: 1,
@@ -61,6 +60,7 @@ async function loadSessionExportSessions() {
       // Use backend pagination metadata for pagination display
       updateSessionExportPagination();
       updateSessionExportCount();
+      updateBulkDownloadButton();
     } else {
       console.error('[SESSION-EXPORTS] Failed to load:', {
         status: data?.status,
@@ -329,18 +329,36 @@ function updateSessionExportCount() {
 function updateBulkDownloadButton() {
   const bulkButton = document.getElementById('bulk-download-facial-analysis');
   if (bulkButton) {
-    bulkButton.disabled = selectedSessionExportSessions.size === 0;
+    // Enable if there are any downloadable sessions visible
+    const hasDownloadable = filteredSessionExportSessions.some(user =>
+      user.session1_can_download || user.session2_can_download
+    );
+    bulkButton.disabled = !hasDownloadable;
   }
 }
 
-// Download bulk sessions
+// Download bulk sessions - downloads ALL downloadable sessions from ALL pages
 async function downloadBulkSessions() {
-  if (selectedSessionExportSessions.size === 0) {
-    alert('Please select at least one session to download.');
+  // Collect all downloadable session IDs from current view
+  const sessionIds = [];
+
+  filteredSessionExportSessions.forEach(user => {
+    if (user.session1_can_download && user.session1_id) {
+      sessionIds.push(user.session1_id);
+    }
+    if (user.session2_can_download && user.session2_id) {
+      sessionIds.push(user.session2_id);
+    }
+  });
+
+  if (sessionIds.length === 0) {
+    alert('No downloadable sessions found on this page.');
     return;
   }
 
-  const sessionIds = Array.from(selectedSessionExportSessions);
+  // Confirm before downloading
+  const confirmed = confirm(`Download ${sessionIds.length} session(s) from the current page?`);
+  if (!confirmed) return;
 
   try {
     const response = await fetch('/admin/facial-analysis/export/bulk', {
@@ -360,9 +378,7 @@ async function downloadBulkSessions() {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
 
-      selectedSessionExportSessions.clear();
-      renderSessionExportSessions();
-      updateBulkDownloadButton();
+      alert(`Successfully downloaded ${sessionIds.length} session(s)!`);
     } else {
       const error = await response.json();
       alert(`Download failed: ${error.error || 'Unknown error'}`);

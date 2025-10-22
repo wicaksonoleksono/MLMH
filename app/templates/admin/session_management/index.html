@@ -96,20 +96,31 @@
         <div class="flex items-center justify-between">
           <div class="flex items-center space-x-4">
             <h4 class="text-sm font-medium text-gray-900">Batch Actions:</h4>
-            <button 
-              id="send-batch-reminders-btn" 
-              onclick="handleBatchSend()" 
+            <button
+              id="send-batch-reminders-btn"
+              onclick="handleBatchSend()"
               class="px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               disabled
             >
               Send Selected Reminders
             </button>
-            <button 
-              id="send-all-reminders-btn" 
-              onclick="handleSendAll()" 
+            <button
+              id="send-all-reminders-btn"
+              onclick="handleSendAll()"
               class="px-3 py-2 text-sm bg-green-600 text-white rounded-md hover:bg-green-700"
             >
               Send All Reminders
+            </button>
+            <!-- Send to ALL Eligible Button (only shows for eligible tab) -->
+            <button
+              id="send-all-eligible-btn"
+              onclick="sendToAllEligible()"
+              class="hidden px-4 py-2 text-sm bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-lg hover:from-emerald-700 hover:to-emerald-800 font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg class="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+              </svg>
+              Kirim Token ke Semua yang Memenuhi Syarat
             </button>
           </div>
           <div class="text-xs text-gray-500">

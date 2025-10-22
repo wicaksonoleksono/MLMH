@@ -4,7 +4,19 @@
     <h3 class="text-lg font-medium text-gray-900">
       Pengguna yang Memenuhi Syarat untuk Sesi 2
     </h3>
-    <div class="flex items-center space-x-2">
+    <div class="flex items-center space-x-3">
+      <!-- Send to All Eligible Button -->
+      <button
+        id="send-all-eligible-btn"
+        onclick="sendToAllEligible()"
+        class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white text-sm font-medium rounded-lg hover:from-green-700 hover:to-green-800 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+        </svg>
+        Kirim Token ke Semua yang Memenuhi Syarat
+      </button>
+
       <span class="text-sm text-gray-500">{{ all_users_page.total }} total users</span>
       <label class="text-sm text-gray-600">Per page:</label>
       <select onchange="changePerPage(this.value)" class="text-sm border border-gray-300 rounded px-2 py-1">
@@ -246,6 +258,75 @@
     urlParams.set('per_page', perPage);
     urlParams.set('page', 1); // Reset to first page
     window.location.search = urlParams.toString();
+  }
+
+  // Send token to all eligible users
+  async function sendToAllEligible() {
+    const button = document.getElementById('send-all-eligible-btn');
+
+    // Confirmation dialog
+    const confirmed = confirm(
+      'Apakah Anda yakin ingin mengirim token ke SEMUA pengguna yang memenuhi syarat?\n\n' +
+      'Hanya pengguna dengan status "Memenuhi Syarat" yang akan menerima token.\n' +
+      'Pengguna yang sudah memiliki Sesi 2 TIDAK akan menerima token.'
+    );
+
+    if (!confirmed) return;
+
+    // Disable button and show loading
+    button.disabled = true;
+    const originalHTML = button.innerHTML;
+    button.innerHTML = `
+      <svg class="animate-spin h-4 w-4 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
+      Mengirim...
+    `;
+
+    try {
+      const response = await fetch('/admin/session-management/send-to-all-eligible', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.status === 'success') {
+        let message = data.message + '\n\n';
+        message += `✓ Berhasil: ${data.sent_count}\n`;
+
+        if (data.failed_count > 0) {
+          message += `✗ Gagal: ${data.failed_count}\n`;
+
+          if (data.failed_users && data.failed_users.length > 0) {
+            message += '\nPengguna yang gagal:\n';
+            data.failed_users.slice(0, 5).forEach(user => {
+              message += `- ${user.username} (${user.reason})\n`;
+            });
+            if (data.failed_users.length > 5) {
+              message += `... dan ${data.failed_users.length - 5} lainnya\n`;
+            }
+          }
+        }
+
+        alert(message);
+
+        // Reload page to update the list
+        window.location.reload();
+      } else {
+        alert('Error: ' + (data.message || 'Gagal mengirim token'));
+      }
+    } catch (error) {
+      console.error('Error sending to all eligible:', error);
+      alert('Terjadi kesalahan saat mengirim token: ' + error.message);
+    } finally {
+      // Restore button
+      button.disabled = false;
+      button.innerHTML = originalHTML;
+    }
   }
 </script>
 {% endblock %}

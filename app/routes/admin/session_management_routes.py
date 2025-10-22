@@ -193,7 +193,7 @@ def send_all_pending_notifications():
     try:
         # Send pending notifications
         sent_count = Session2NotificationService.send_pending_notifications()
-        
+
         return jsonify({
             'status': 'success',
             'message': f'Berhasil mengirim {sent_count} notifikasi tertunda'
@@ -202,6 +202,86 @@ def send_all_pending_notifications():
         return jsonify({
             'status': 'error',
             'message': str(e)
+        }), 500
+
+
+@session_management_bp.route('/send-to-all-eligible', methods=['POST'])
+@login_required
+@admin_required
+def send_to_all_eligible_users():
+    """Send Session 2 tokens to ALL eligible users (Memenuhi Syarat only)"""
+    try:
+        # Get all users with eligibility status (no pagination - returns pagination object)
+        all_users_data = Session2NotificationService.get_all_users_with_eligibility()
+
+        # Check if it's a pagination object with .items attribute or a plain list
+        if hasattr(all_users_data, 'items'):
+            all_users = all_users_data.items
+        else:
+            all_users = all_users_data
+
+        # Filter to only "Memenuhi Syarat" users
+        # is_eligible = True means: has_email + no_session_2 + days >= 14
+        eligible_users = [
+            user for user in all_users
+            if user.get('is_eligible') and user.get('status') == 'Memenuhi Syarat'
+        ]
+
+        if not eligible_users:
+            return jsonify({
+                'status': 'error',
+                'message': 'Tidak ada pengguna yang memenuhi syarat untuk menerima token'
+            }), 400
+
+        # Send notifications to all eligible users
+        sent_count = 0
+        failed_count = 0
+        failed_users = []
+
+        for user in eligible_users:
+            try:
+                # Use force_new_token=True to invalidate old tokens and create fresh ones with correct BASE_URL
+                success = Session2NotificationService.send_session2_notification(
+                    user['user_id'],
+                    force_new_token=True
+                )
+                if success:
+                    sent_count += 1
+                else:
+                    failed_count += 1
+                    failed_users.append({
+                        'user_id': user['user_id'],
+                        'username': user['username'],
+                        'reason': 'Send failed'
+                    })
+            except Exception as e:
+                failed_count += 1
+                failed_users.append({
+                    'user_id': user['user_id'],
+                    'username': user['username'],
+                    'reason': str(e)
+                })
+
+        response = {
+            'status': 'success',
+            'message': f'Berhasil mengirim token ke {sent_count} dari {len(eligible_users)} pengguna yang memenuhi syarat',
+            'sent_count': sent_count,
+            'failed_count': failed_count,
+            'total_eligible': len(eligible_users)
+        }
+
+        if failed_users:
+            response['failed_users'] = failed_users
+
+        return jsonify(response)
+
+    except Exception as e:
+        current_app.logger.error(f"Error sending to all eligible users: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': f'Gagal mengirim token: {str(e)}'
         }), 500
 
 

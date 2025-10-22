@@ -74,9 +74,26 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // Show/hide batch actions for initial tab
   const batchActions = document.getElementById("batch-actions");
+  const sendAllEligibleBtn = document.getElementById("send-all-eligible-btn");
+  const sendAllRemindersBtn = document.getElementById("send-all-reminders-btn");
+  const sendBatchBtn = document.getElementById("send-batch-reminders-btn");
+
   if (batchActions) {
     if (currentTab === "unstarted" || currentTab === "eligible") {
       batchActions.classList.remove("hidden");
+
+      // Show/hide appropriate buttons based on initial tab
+      if (currentTab === "eligible") {
+        // Show all 3 buttons on eligible tab
+        if (sendAllEligibleBtn) sendAllEligibleBtn.classList.remove("hidden");
+        if (sendAllRemindersBtn) sendAllRemindersBtn.classList.remove("hidden");
+        if (sendBatchBtn) sendBatchBtn.classList.remove("hidden");
+      } else {
+        // Hide eligible button on other tabs
+        if (sendAllEligibleBtn) sendAllEligibleBtn.classList.add("hidden");
+        if (sendAllRemindersBtn) sendAllRemindersBtn.classList.remove("hidden");
+        if (sendBatchBtn) sendBatchBtn.classList.remove("hidden");
+      }
     } else {
       batchActions.classList.add("hidden");
     }
@@ -203,9 +220,26 @@ function switchTab(tabName) {
 
   // Show/hide batch actions for unstarted and eligible tabs
   const batchActions = document.getElementById("batch-actions");
+  const sendAllEligibleBtn = document.getElementById("send-all-eligible-btn");
+  const sendAllRemindersBtn = document.getElementById("send-all-reminders-btn");
+  const sendBatchBtn = document.getElementById("send-batch-reminders-btn");
+
   if (batchActions) {
     if (tabName === "unstarted" || tabName === "eligible") {
       batchActions.classList.remove("hidden");
+
+      // Show/hide appropriate buttons based on tab
+      if (tabName === "eligible") {
+        // Show all 3 buttons on eligible tab
+        if (sendAllEligibleBtn) sendAllEligibleBtn.classList.remove("hidden");
+        if (sendAllRemindersBtn) sendAllRemindersBtn.classList.remove("hidden");
+        if (sendBatchBtn) sendBatchBtn.classList.remove("hidden");
+      } else {
+        // Hide eligible button on other tabs
+        if (sendAllEligibleBtn) sendAllEligibleBtn.classList.add("hidden");
+        if (sendAllRemindersBtn) sendAllRemindersBtn.classList.remove("hidden");
+        if (sendBatchBtn) sendBatchBtn.classList.remove("hidden");
+      }
     } else {
       batchActions.classList.add("hidden");
     }
@@ -1208,3 +1242,74 @@ function applySortFilter() {
 }
 
 // Note: toggleSelectAll for unstarted users is defined separately above (line ~421)
+
+// Send tokens to all eligible users (Memenuhi Syarat only)
+async function sendToAllEligible() {
+  const button = document.getElementById('send-all-eligible-btn');
+
+  // Confirmation dialog
+  const confirmed = confirm(
+    'Apakah Anda yakin ingin mengirim token ke SEMUA pengguna yang memenuhi syarat?\n\n' +
+    'Hanya pengguna dengan status "Memenuhi Syarat" yang akan menerima token.\n' +
+    'Pengguna yang sudah memiliki Sesi 2 TIDAK akan menerima token.\n\n' +
+    'Token lama akan DIHAPUS dan diganti dengan token baru.'
+  );
+
+  if (!confirmed) return;
+
+  // Disable button and show loading
+  button.disabled = true;
+  const originalHTML = button.innerHTML;
+  button.innerHTML = `
+    <svg class="animate-spin h-4 w-4 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>
+    Mengirim...
+  `;
+
+  try {
+    const response = await fetch('/admin/session-management/send-to-all-eligible', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.status === 'success') {
+      let message = data.message + '\n\n';
+      message += `✓ Berhasil: ${data.sent_count}\n`;
+      message += `Total memenuhi syarat: ${data.total_eligible}\n`;
+
+      if (data.failed_count > 0) {
+        message += `✗ Gagal: ${data.failed_count}\n`;
+
+        if (data.failed_users && data.failed_users.length > 0) {
+          message += '\nPengguna yang gagal:\n';
+          data.failed_users.slice(0, 5).forEach(user => {
+            message += `- ${user.username} (${user.reason})\n`;
+          });
+          if (data.failed_users.length > 5) {
+            message += `... dan ${data.failed_users.length - 5} lainnya\n`;
+          }
+        }
+      }
+
+      alert(message);
+
+      // Reload table to refresh data
+      loadTableDataOnly(currentTab);
+    } else {
+      alert('Error: ' + (data.message || 'Gagal mengirim token'));
+    }
+  } catch (error) {
+    console.error('Error sending to all eligible:', error);
+    alert('Terjadi kesalahan saat mengirim token: ' + error.message);
+  } finally {
+    // Restore button
+    button.disabled = false;
+    button.innerHTML = originalHTML;
+  }
+}

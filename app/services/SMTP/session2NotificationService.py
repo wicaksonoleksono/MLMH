@@ -332,10 +332,14 @@ class Session2NotificationService:
         return created_count
     
     @staticmethod
-    def send_session2_notification(user_id: int) -> bool:
+    def send_session2_notification(user_id: int, force_new_token: bool = False) -> bool:
         """
         Send Session 2 notification to specific user using real data
         This can be used for both automatic and manual sending
+
+        Args:
+            user_id: User ID to send notification to
+            force_new_token: If True, invalidate old tokens and create a fresh one
         """
         with get_session() as db:
             # Get user data
@@ -370,11 +374,25 @@ class Session2NotificationService:
                     AutoLoginToken.expires_at > datetime.now(timezone.utc)
                 )
             ).first()
-            
-            # Generate auto-login URL for Session 2 - NO FALLBACKS
+
+            # If force_new_token=True, DELETE all existing tokens from database
+            if force_new_token and existing_token:
+                print(f"User {user_id}: Force regenerating token - DELETING old tokens from database")
+                # Delete all existing tokens (both used and unused) for this user's session2
+                deleted_count = db.query(AutoLoginToken).filter(
+                    and_(
+                        AutoLoginToken.user_id == user_id,
+                        AutoLoginToken.purpose == 'auto_login_session2'
+                    )
+                ).delete()
+                db.commit()
+                print(f"User {user_id}: Deleted {deleted_count} old token(s) from database")
+                existing_token = None  # Force creation of new token
+
+            # Generate auto-login URL for Session 2
             from flask import current_app
             with current_app.app_context():
-                if existing_token:
+                if existing_token and not force_new_token:
                     print(f"User {user_id} has valid Session 2 token. Reusing existing token for email.")
                     # Regenerate JWT with same JTI to reuse the database record
                     import jwt
@@ -393,7 +411,8 @@ class Session2NotificationService:
                     jwt_token = jwt.encode(payload, secret, algorithm='HS256')
                     auto_login_url = f"{Config.BASE_URL.rstrip('/')}/auth/auto-login?token={jwt_token}"
                 else:
-                    # Generate new token as usual
+                    # Generate new token (will use current BASE_URL from config)
+                    print(f"User {user_id}: Generating fresh token with current BASE_URL: {Config.BASE_URL}")
                     auto_login_url = AutoLoginService.generate_session2_auto_login_url(user_id)
                 session_2_url = Config.BASE_URL
             

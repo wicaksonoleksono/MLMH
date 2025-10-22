@@ -714,7 +714,7 @@ function updateEligibleUsersTable(headerEl, bodyEl, users) {
       <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
         <div class="flex items-center space-x-2">
           <input type="checkbox" id="select-all-eligible" onchange="toggleSelectAllEligible(this)" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-          <span>Pilih Semua Pada Halaman</span>
+          <span>Pilih Semua yang Memenuhi Syarat Pada Halaman</span>
         </div>
       </th>
       <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Username</th>
@@ -740,7 +740,7 @@ function updateEligibleUsersTable(headerEl, bodyEl, users) {
       <td class="px-6 py-4 whitespace-nowrap">
         <input type="checkbox" name="eligible-user-select" value="${
           user.user_id
-        }" onchange="handleEligibleUserSelection()" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+        }" data-status="${user.status || ''}" onchange="handleEligibleUserSelection()" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${
         user.username || ""
@@ -1080,13 +1080,20 @@ function handleSendAll() {
 
 // ============= ELIGIBLE USERS BATCH FUNCTIONS =============
 
-// Toggle select all for eligible users
+// Toggle select all for eligible users - ONLY selects "Memenuhi Syarat" users
 function toggleSelectAllEligible(checkbox) {
   const userCheckboxes = document.querySelectorAll(
     'input[name="eligible-user-select"]'
   );
   userCheckboxes.forEach((cb) => {
-    cb.checked = checkbox.checked;
+    // Only select/deselect users with "Memenuhi Syarat" status
+    const status = cb.getAttribute('data-status');
+    if (status === 'Memenuhi Syarat') {
+      cb.checked = checkbox.checked;
+    } else {
+      // Uncheck users that don't meet criteria
+      cb.checked = false;
+    }
   });
   handleEligibleUserSelection();
 }
@@ -1112,7 +1119,8 @@ async function sendBatchSession2Notifications() {
 
   if (
     !confirm(
-      `Send Session 2 notifications to ${userIds.length} selected users?`
+      `Send Session 2 notifications to ${userIds.length} selected users?\n\n` +
+      `Token lama akan DIHAPUS dan diganti dengan token baru.`
     )
   ) {
     return;
@@ -1252,7 +1260,9 @@ async function sendToAllEligible() {
     'Apakah Anda yakin ingin mengirim token ke SEMUA pengguna yang memenuhi syarat?\n\n' +
     'Hanya pengguna dengan status "Memenuhi Syarat" yang akan menerima token.\n' +
     'Pengguna yang sudah memiliki Sesi 2 TIDAK akan menerima token.\n\n' +
-    'Token lama akan DIHAPUS dan diganti dengan token baru.'
+    'Token lama akan DIHAPUS dan diganti dengan token baru.\n\n' +
+    '⚠️ PROSES INI BISA MEMAKAN WAKTU BEBERAPA MENIT karena pengiriman dibatasi untuk menghindari spam filter.\n' +
+    'Jangan tutup halaman ini!'
   );
 
   if (!confirmed) return;

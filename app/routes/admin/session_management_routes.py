@@ -134,31 +134,35 @@ def api_get_eligible_users():
 @login_required
 @admin_required
 def send_session2_notification():
-    """Send Session 2 notification to a specific user"""
+    """Send Session 2 notification to a specific user - DELETES old tokens and creates new ones"""
     try:
         data = request.get_json()
         user_id = data.get('user_id')
-        
+
         if not user_id:
             return jsonify({
                 'status': 'error',
                 'message': 'User ID is required'
             }), 400
-        
-        # Send notification immediately
-        success = Session2NotificationService.send_session2_notification(user_id)
-        
+
+        # Send notification immediately with force_new_token=True
+        # This will DELETE old tokens from database and create fresh ones with correct BASE_URL
+        success = Session2NotificationService.send_session2_notification(
+            user_id,
+            force_new_token=True
+        )
+
         if success:
             return jsonify({
                 'status': 'success',
-                'message': 'Notification sent successfully'
+                'message': 'Notification sent successfully (old tokens deleted, new token created)'
             })
         else:
             return jsonify({
                 'status': 'error',
                 'message': 'Failed to send notification'
             }), 500
-            
+
     except Exception as e:
         return jsonify({
             'status': 'error',
@@ -209,8 +213,11 @@ def send_all_pending_notifications():
 @login_required
 @admin_required
 def send_to_all_eligible_users():
-    """Send Session 2 tokens to ALL eligible users (Memenuhi Syarat only)"""
+    """Send Session 2 tokens to ALL eligible users (Memenuhi Syarat only) - BATCHED with delays"""
     try:
+        import time
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         # Get all users with eligibility status (no pagination - returns pagination object)
         all_users_data = Session2NotificationService.get_all_users_with_eligibility()
 
@@ -233,34 +240,83 @@ def send_to_all_eligible_users():
                 'message': 'Tidak ada pengguna yang memenuhi syarat untuk menerima token'
             }), 400
 
-        # Send notifications to all eligible users
-        sent_count = 0
-        failed_count = 0
-        failed_users = []
+        # Gmail SMTP rate limits: ~20 emails/hour max, 3-4 seconds between sends
+        BATCH_SIZE = 10  # Send 10 emails per batch
+        DELAY_BETWEEN_EMAILS = 3  # 3 seconds between each email (safe for Gmail)
+        DELAY_BETWEEN_BATCHES = 30  # 30 seconds between batches (extra safety)
 
-        for user in eligible_users:
+        # Helper function to send notification to a single user with delay
+        def send_to_user(user, index):
             try:
+                # Add delay based on index to spread out sends
+                time.sleep(index * DELAY_BETWEEN_EMAILS)
+
                 # Use force_new_token=True to invalidate old tokens and create fresh ones with correct BASE_URL
                 success = Session2NotificationService.send_session2_notification(
                     user['user_id'],
                     force_new_token=True
                 )
                 if success:
-                    sent_count += 1
+                    current_app.logger.info(f"✓ Sent token to {user['username']} (ID: {user['user_id']})")
+                    return {'success': True, 'user': user}
                 else:
-                    failed_count += 1
-                    failed_users.append({
-                        'user_id': user['user_id'],
-                        'username': user['username'],
+                    return {
+                        'success': False,
+                        'user': user,
                         'reason': 'Send failed'
-                    })
+                    }
             except Exception as e:
-                failed_count += 1
-                failed_users.append({
-                    'user_id': user['user_id'],
-                    'username': user['username'],
+                current_app.logger.error(f"✗ Failed to send to {user['username']}: {str(e)}")
+                return {
+                    'success': False,
+                    'user': user,
                     'reason': str(e)
-                })
+                }
+
+        # Send notifications in BATCHES to avoid Gmail rate limits
+        sent_count = 0
+        failed_count = 0
+        failed_users = []
+
+        # Split eligible users into batches
+        total_batches = (len(eligible_users) + BATCH_SIZE - 1) // BATCH_SIZE
+        current_app.logger.info(f"Sending to {len(eligible_users)} users in {total_batches} batches of {BATCH_SIZE}")
+
+        for batch_num in range(total_batches):
+            start_idx = batch_num * BATCH_SIZE
+            end_idx = min(start_idx + BATCH_SIZE, len(eligible_users))
+            batch_users = eligible_users[start_idx:end_idx]
+
+            current_app.logger.info(f"Processing batch {batch_num + 1}/{total_batches} ({len(batch_users)} users)")
+
+            # Process batch with limited concurrency (max 3 parallel to be safe)
+            max_workers = min(3, len(batch_users))
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit all tasks in this batch with staggered delays
+                future_to_user = {
+                    executor.submit(send_to_user, user, idx): user
+                    for idx, user in enumerate(batch_users)
+                }
+
+                # Collect results as they complete
+                for future in as_completed(future_to_user):
+                    result = future.result()
+
+                    if result['success']:
+                        sent_count += 1
+                    else:
+                        failed_count += 1
+                        failed_users.append({
+                            'user_id': result['user']['user_id'],
+                            'username': result['user']['username'],
+                            'reason': result['reason']
+                        })
+
+            # Delay between batches (except after last batch)
+            if batch_num < total_batches - 1:
+                current_app.logger.info(f"Waiting {DELAY_BETWEEN_BATCHES}s before next batch...")
+                time.sleep(DELAY_BETWEEN_BATCHES)
 
         response = {
             'status': 'success',

@@ -1778,6 +1778,93 @@ def register_commands(app):
             traceback.print_exc()
             raise
 
+    @app.cli.command("get-prize")
+    def get_prize():
+        """
+        Get list of users who completed BOTH Session 1 AND Session 2 (prize winners).
+
+        Automatically exports to CSV file in current directory.
+        Includes: email, phone, gender, age, education, faculty, etc.
+        """
+        click.echo("[OLKORECT] Querying users who completed both Session 1 and Session 2...")
+
+        try:
+            from sqlalchemy import exists, and_
+            import csv
+            import io
+            from datetime import datetime
+
+            with get_session() as db:
+                # Subquery for Session 1 completed
+                has_session1 = exists().where(
+                    and_(
+                        AssessmentSession.user_id == User.id,
+                        AssessmentSession.session_number == 1,
+                        AssessmentSession.is_completed == True
+                    )
+                )
+
+                # Subquery for Session 2 completed
+                has_session2 = exists().where(
+                    and_(
+                        AssessmentSession.user_id == User.id,
+                        AssessmentSession.session_number == 2,
+                        AssessmentSession.is_completed == True
+                    )
+                )
+
+                # Query users who have both sessions completed
+                prize_winners = db.query(User).filter(
+                    and_(has_session1, has_session2)
+                ).order_by(User.id).all()
+
+                if not prize_winners:
+                    click.echo("❌ No users found who completed both sessions")
+                    return
+
+                click.echo(f"✓ Found {len(prize_winners)} user(s) who completed both sessions!\n")
+
+                # Prepare data
+                winner_data = []
+                for user in prize_winners:
+                    winner_data.append({
+                        'id': user.id,
+                        'username': user.uname,
+                        'email': user.email or 'N/A',
+                        'phone': user.phone or 'N/A',
+                        'gender': user.gender or 'N/A',
+                        'age': user.age or 'N/A',
+                        'educational_level': user.educational_level or 'N/A',
+                        'faculty': user.faculty or 'N/A',
+                        'cultural_background': user.cultural_background or 'N/A',
+                        'created_at': user.created_at.strftime('%Y-%m-%d %H:%M') if user.created_at else 'N/A'
+                    })
+
+                # Generate CSV content
+                csv_output = io.StringIO()
+                fieldnames = ['id', 'username', 'email', 'phone', 'gender', 'age', 'educational_level', 'faculty', 'cultural_background', 'created_at']
+                writer = csv.DictWriter(csv_output, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(winner_data)
+                csv_content = csv_output.getvalue()
+
+                # Auto-generate filename with timestamp
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = f"prize_winners_{timestamp}.csv"
+
+                # Save to current directory
+                with open(filename, 'w', encoding='utf-8') as f:
+                    f.write(csv_content)
+
+                click.echo(f"✓ CSV file saved to: {filename}")
+                click.echo(f"✓ Total winners: {len(winner_data)}")
+
+        except Exception as e:
+            click.echo(f"[SNAFU] Error querying prize winners: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            raise
+
     @app.cli.command("fix-foreign-key-cascade")
     @click.confirmation_option(prompt="This will modify ALL foreign keys to add CASCADE DELETE. Are you sure?")
     def fix_foreign_key_cascade():

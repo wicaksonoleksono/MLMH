@@ -41,9 +41,11 @@ class PasswordResetService:
                 
                 # Create magic link URL
                 from flask import request, url_for, current_app
-                
-                # Use BASE_URL from config for consistent URL generation
-                base_url = current_app.config.get('BASE_URL', 'http://localhost:5000')
+
+                # Use BASE_URL from config - NO FALLBACK to ensure proper configuration
+                base_url = current_app.config.get('BASE_URL')
+                if not base_url:
+                    raise ValueError("BASE_URL not configured in environment variables")
                 reset_url = f"{base_url.rstrip('/')}/auth/reset-password?token={reset_token}"
                 
                 # Generate auto-login URL for after password reset
